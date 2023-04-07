@@ -1,0 +1,1097 @@
+from __future__ import annotations
+
+import enum
+
+from cohdl._core._intrinsic import (
+    _intrinsic,
+    _intrinsic_replacement,
+    _intrinsic_property,
+)
+from cohdl._core import _intrinsic_operations as intr_op
+from cohdl._core._intrinsic_operations import AssignMode
+
+from cohdl._core._primitive_type import is_primitive, is_primitive_type
+from cohdl._core._integer import Integer
+from cohdl._core._boolean import _Boolean
+
+#
+#
+#
+
+
+class RefSpec:
+    def is_constant(self) -> bool:
+        pass
+
+    def simplify(self):
+        # combine all constant values
+        pass
+
+
+class Offset(RefSpec):
+    def __init__(self, offset, base_offset: list | None):
+        self.offset = offset
+        self.base_offset = base_offset if base_offset is not None else []
+
+    def simplify(self):
+        base_offset = []
+        const_sum = 0
+
+        for off in self.base_offset:
+            if not isinstance(off, TypeQualifier):
+                assert isinstance(off, int)
+                const_sum += off
+            else:
+                base_offset.append(off)
+
+        if not isinstance(self.offset, TypeQualifier):
+            assert isinstance(self.offset, int)
+            self.offset += const_sum
+            self.base_offset = base_offset
+        else:
+            if const_sum != 0:
+                self.base_offset = [const_sum, *base_offset]
+            else:
+                self.base_offset = base_offset
+
+    def is_constant(self) -> bool:
+        return not isinstance(self.offset, TypeQualifier) and not any(
+            isinstance(base, TypeQualifier) for base in self.base_offset
+        )
+
+
+class Slice(RefSpec):
+    def __init__(self, start, stop, base_offset: list | None) -> None:
+        self.start = start
+        self.stop = stop
+        self.base_offset = base_offset if base_offset is not None else []
+
+    def simplify(self):
+        base_offset = []
+        const_sum = 0
+
+        for off in self.base_offset:
+            if not isinstance(off, TypeQualifier):
+                assert isinstance(off, int)
+                const_sum += off
+            else:
+                base_offset.append(off)
+
+        assert isinstance(self.start, int)
+        assert isinstance(self.stop, int)
+
+        self.start += const_sum
+        self.stop += const_sum
+        self.base_offset = base_offset
+
+    def is_constant(self) -> bool:
+        return (
+            not isinstance(self.start, TypeQualifier)
+            and not isinstance(self.stop, TypeQualifier)
+            and not any(isinstance(base, TypeQualifier) for base in self.base_offset)
+        )
+
+
+#
+#
+#
+
+
+class Attribute:
+    name: str
+    attr_type: type
+
+    def __init__(self, value):
+        assert isinstance(value, self.attr_type)
+        self.value = value
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        cls.name = kwargs.get("name", cls.__name__)
+        cls.attr_type = kwargs["type"]
+
+
+#
+#
+#
+
+
+def _decay(val):
+    if isinstance(val, TypeQualifier):
+        return val._value
+    return val
+
+
+class _TypeQualifier(type):
+    _Wrapped: type
+    _SubTypes: dict[type, type]
+    _Qualifier: _TypeQualifier
+
+    @_intrinsic
+    def __getitem__(cls, Wrapped: type | tuple):
+        # direction only used for ports
+
+        if isinstance(Wrapped, tuple):
+            WrappedType, direction = Wrapped
+        else:
+            WrappedType = Wrapped
+            direction = None
+
+        if WrappedType is bool:
+            WrappedType = _Boolean
+        elif WrappedType is int:
+            WrappedType = Integer
+        else:
+            assert is_primitive_type(WrappedType)
+
+        type_spec = (WrappedType, direction)
+
+        if type_spec in cls._SubTypes:
+            return cls._SubTypes[type_spec]
+
+        if cls is Port:
+            assert isinstance(direction, Port.Direction)
+            new_type = type(
+                cls.__name__, (cls,), {"_Wrapped": WrappedType, "_direction": direction}
+            )
+        else:
+            assert direction is None
+            new_type = type(cls.__name__, (cls,), {"_Wrapped": WrappedType})
+
+        cls._SubTypes[type_spec] = new_type
+        return new_type
+
+    @_intrinsic
+    def __str__(cls):
+        if not hasattr(cls, "_Wrapped"):
+            return f"{cls.__name__}"
+
+        if not hasattr(cls, "_direction"):
+            return f"{cls.__name__}[{cls._Wrapped}]"
+        return f"{cls.__name__}[{cls._Wrapped}, {cls._direction}]"
+
+    @_intrinsic
+    def __repr__(cls):
+        return cls.__str__()
+
+    @property
+    def type(cls):
+        return cls._Wrapped
+
+    @property
+    def qualifier(cls):
+        return cls._Qualifier
+
+    #
+    #
+    #
+
+
+class TypeQualifier(metaclass=_TypeQualifier):
+    @property
+    def type(cls):
+        return cls._Wrapped
+
+    @property
+    def qualifier(self):
+        return self._Qualifier
+
+    @_intrinsic
+    def decay(val):
+        if isinstance(val, TypeQualifier):
+            return val._value
+        return val
+
+    @property
+    def width(self):
+        return self._Wrapped.width
+
+    _intrinsic(width.fget)
+
+    #
+    #
+    #
+
+    @_intrinsic
+    def __new__(
+        cls,
+        value=None,
+        *,
+        name: str | None = None,
+        attributes: dict | None = None,
+        _root: TypeQualifier | None = None,
+        _ref_spec: list[RefSpec] | None = None,
+    ):
+        if not hasattr(cls, "_Wrapped"):
+            value = _decay(value)
+            assert is_primitive(value)
+            cls = cls[type(value)]
+
+        return object.__new__(cls)
+
+    @_intrinsic
+    def __init__(
+        self,
+        value=None,
+        *,
+        name: str | None = None,
+        attributes: dict | None = None,
+        _root: TypeQualifier | None = None,
+        _ref_spec: list[RefSpec] | None = None,
+    ):
+        if _root is not None:
+            assert _root.qualifier is self.qualifier
+            assert type(value) is self.type
+            self._value = value
+        else:
+            value = TypeQualifier.decay(value)
+            self._value = type(self)._Wrapped(value)
+
+        self._name = name
+        self._default = (
+            None
+            if (value is None) or (isinstance(self, Temporary))
+            else type(self)._Wrapped(value)
+        )
+        self._attributes = [] if attributes is None else attributes
+
+        self._root = self if _root is None else _root
+        self._ref_spec = [] if _ref_spec is None else _ref_spec
+
+    @_intrinsic
+    def name(self):
+        return self._name
+
+    @_intrinsic
+    def set_name(self, name: str):
+        self._name = name
+
+    @_intrinsic
+    def has_default(self):
+        return self._default is not None
+
+    @_intrinsic
+    def default(self):
+        return self._default
+
+    @_intrinsic
+    def __hash__(self):
+        # Generate a unique hash for each TypeQualifier
+        # so qualified types can be used as dictionary keys.
+        return id(self)
+
+    @_intrinsic
+    def __str__(self):
+        return f"{type(self)}({self._value})"
+
+    @_intrinsic
+    def __len__(self):
+        return self._value.__len__()
+
+    @_intrinsic
+    def __iter__(self):
+        if len(self._ref_spec) != 0 and isinstance(self._ref_spec[-1], Slice):
+            offset = self._ref_spec[-1].stop
+            prev = self._ref_spec[:-1]
+        else:
+            offset = 0
+            prev = self._ref_spec
+
+        for nr, elem in enumerate(self._value):
+            yield self.qualifier[type(elem)](
+                elem, _ref_spec=[*prev, Offset(offset + nr, [])], _root=self._root
+            )
+
+    @_intrinsic
+    def get(self):
+        return self._value
+
+    @_intrinsic
+    def __getitem__(self, arg):
+        ref_spec = self._ref_spec
+
+        if len(ref_spec) != 0 and isinstance(ref_spec[-1], Slice):
+            last_ref = ref_spec[-1]
+            prev = ref_spec[:-1]
+            base_offset = [*last_ref.base_offset, last_ref.stop]
+        else:
+            prev = ref_spec
+            base_offset = []
+
+        if isinstance(arg, tuple):
+            raise NotImplementedError()
+        elif isinstance(arg, slice):
+            assert arg.step is None
+
+            if isinstance(arg.start, int):
+                assert isinstance(arg.stop, int)
+
+                result = self._value[arg.start : arg.stop]
+
+                return self.qualifier[type(result)](
+                    result,
+                    _root=self._root,
+                    _ref_spec=[*prev, Slice(arg.start, arg.stop, base_offset)],
+                )
+            else:
+                raise NotImplemented()
+        else:
+            if isinstance(arg, int):
+                result = self._value[arg]
+                return self.qualifier[type(result)](
+                    result,
+                    _root=self._root,
+                    _ref_spec=[*prev, Offset(arg, base_offset)],
+                )
+            elif isinstance(arg, TypeQualifier):
+                result = self._value[0]
+
+                return self.qualifier[type(result)](
+                    result,
+                    _root=self._root,
+                    _ref_spec=[*prev, Offset(arg, base_offset)],
+                )
+            else:
+                raise NotImplemented()
+
+    def lsb(self, count=None, rest=None):
+        val_width = self._value.width
+        if count is not None:
+            if rest is not None:
+                assert count + rest == val_width
+            return self[count - 1 : 0]
+        elif rest is not None:
+            vec_count = val_width - rest
+            return self[vec_count - 1 : 0]
+        else:
+            return self[0]
+
+    def msb(self, count=None, rest=None):
+        val_width = self._value.width
+        if count is not None:
+            if rest is not None:
+                assert count + rest == val_width
+            return self[val_width - 1 : val_width - count]
+        elif rest is not None:
+            vec_count = val_width - rest
+            return self[val_width - 1 : val_width - vec_count]
+        else:
+            return self[val_width - 1]
+
+    def right(self, count=None, rest=None):
+        val_width = self._value.width
+        if count is not None:
+            if rest is not None:
+                assert count + rest == val_width
+            return self[count - 1 : 0]
+        elif rest is not None:
+            vec_count = val_width - rest
+            return self[vec_count - 1 : 0]
+        else:
+            return self[0]
+
+    def left(self, count=None, rest=None):
+        val_width = self._value.width
+        if count is not None:
+            if rest is not None:
+                assert count + rest == val_width
+            return self[val_width - 1 : val_width - count]
+        elif rest is not None:
+            vec_count = val_width - rest
+            return self[val_width - 1 : val_width - vec_count]
+        else:
+            return self[val_width - 1]
+
+    @_intrinsic
+    def _assign_(self, value, assign_mode: AssignMode):
+        if assign_mode is AssignMode.NEXT:
+            assert isinstance(
+                self, Signal
+            ), "only Signal objects can use next assignment"
+            self <<= value
+        elif assign_mode is AssignMode.PUSH:
+            assert isinstance(
+                self, Signal
+            ), "only Signal objects can use push assignment"
+            self ^= value
+        elif assign_mode is AssignMode.VALUE:
+            assert isinstance(
+                self, Variable
+            ), "only Variable objects can use value assignment"
+            self @= value
+        else:
+            raise AssertionError(f"invalid assign_mode {assign_mode}")
+
+    #
+    #
+    #
+
+    @_intrinsic
+    def __bool__(self):
+        return bool(self._value)
+
+    @_intrinsic
+    def __and__(self, other):
+        result = self._value & _decay(other)
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rand__(self, other):
+        result = _decay(other).__and__(self._value)
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __or__(self, other):
+        result = self._value.__or__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __ror__(self, other):
+        result = _decay(other).__or__(self._value)
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __xor__(self, other):
+        result = self._value.__xor__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rxor__(self, other):
+        result = _decay(other).__xor__(self._value)
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __matmul__(self, other):
+        result = self._value.__matmul__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rmatmul__(self, other):
+        result = _decay(other).__rmatmul__(self._value)
+        return Temporary[type(result)](result)
+
+    #
+    # numeric operators
+    #
+
+    @_intrinsic
+    def __add__(self, other):
+        result = self._value.__add__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __radd__(self, other):
+        result = self._value.__radd__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __sub__(self, other):
+        result = self._value.__sub__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rsub__(self, other):
+        result = self._value.__rsub__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __mul__(self, other):
+        result = self._value.__mul__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rmul__(self, other):
+        result = self._value.__rmul__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __floordiv__(self, other):
+        result = self._value.__floordiv__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rfloordiv__(self, other):
+        result = self._value.__rfloordiv__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __mod__(self, other):
+        result = self._value.__mod__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rmod__(self, other):
+        result = self._value.__rmod__(_decay(other))
+        return Temporary[type(result)](result)
+
+    #
+    # compare
+    #
+
+    @_intrinsic
+    def __eq__(self, other):
+        result = self._value.__eq__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __ne__(self, other):
+        result = self._value.__ne__(_decay(other))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __lt__(self, other):
+        result = self._value.__lt__(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    @_intrinsic
+    def __gt__(self, other):
+        result = self._value.__gt__(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    @_intrinsic
+    def __le__(self, other):
+        result = self._value.__le__(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    @_intrinsic
+    def __ge__(self, other):
+        result = self._value.__ge__(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    #
+    # unary operators
+    #
+
+    @_intrinsic
+    def __inv__(self):
+        result = self._value.__inv__()
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __neg__(self):
+        result = self._value.__neg__()
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __pos__(self):
+        result = self._value.__pos__()
+        return Temporary[type(result)](result)
+
+    #
+    #
+    # replacements
+    #
+    #
+
+    @_intrinsic_replacement(__init__)
+    def _init_replacement(
+        self,
+        value=None,
+        *,
+        name: str | None = None,
+        attributes: dict | None = None,
+        _root: TypeQualifier | None = None,
+        _ref_spec: list[RefSpec] | None = None,
+    ):
+        assert _root is None
+        assert _ref_spec is None
+        self.__init__(value, name=name, attributes=attributes)
+
+        # set default to None, because locally defined
+        # Signals/Variables cannot be used before they are constructed
+        # and thus initialized
+        # The value is still passed to __init__ to ensure, that
+        # the types are compatible
+        self._default = None
+
+        if value is None or is_primitive(value) and value._is_uninitialized():
+            return intr_op._IntrinsicDeclaration(self, None)
+        else:
+            if isinstance(value, TypeQualifier):
+                return intr_op._IntrinsicDeclaration(self, value)
+            else:
+                return intr_op._IntrinsicDeclaration(self, self.type(value))
+
+    @_intrinsic_replacement(__bool__)
+    def _bool_replacement(self):
+        return intr_op._IntrinsicUnaryOp(
+            intr_op.UnaryOperator.BOOL, Temporary[bool](self.__bool__()), self
+        )
+
+    @_intrinsic_replacement(__or__)
+    def _or_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.BIT_OR, self.__or__(other), self, other
+        )
+
+    @_intrinsic_replacement(__ror__)
+    def _ror_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.BIT_OR, self.__ror__(other), other, self
+        )
+
+    @_intrinsic_replacement(__and__)
+    def _and_replacement_(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.BIT_AND, self.__and__(other), self, other
+        )
+
+    @_intrinsic_replacement(__rand__)
+    def _rand_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.BIT_AND, self.__rand__(other), other, self
+        )
+
+    @_intrinsic_replacement(__xor__)
+    def _and_replacement_(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.BIT_XOR, self.__xor__(other), self, other
+        )
+
+    @_intrinsic_replacement(__rxor__)
+    def _rand_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.BIT_XOR, self.__rxor__(other), other, self
+        )
+
+    @_intrinsic_replacement(__matmul__)
+    def _matmul_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.CONCAT, self.__matmul__(other), self, other
+        )
+
+    @_intrinsic_replacement(__rmatmul__)
+    def _rmatmul_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.CONCAT, self.__rmatmul__(other), other, self
+        )
+
+    @_intrinsic_replacement(__getitem__)
+    def __getitem_replacement(self, arg):
+        if isinstance(arg, tuple):
+            raise NotImplementedError()
+        elif isinstance(arg, slice):
+            assert arg.step is None
+
+            if isinstance(arg.start, int):
+                assert isinstance(arg.stop, int)
+                return intr_op._IntrinsicConstElemAccess(self.__getitem__(arg))
+            else:
+                raise NotImplemented()
+        else:
+            if isinstance(arg, int):
+                return intr_op._IntrinsicConstElemAccess(self.__getitem__(arg))
+            elif isinstance(arg, TypeQualifier):
+                index = arg
+                index_temp = Temporary[index.type]()
+                result = self.__getitem__(index_temp)
+                return intr_op._IntrinsicElemAccess(result, index, index_temp)
+            else:
+                raise NotImplemented()
+
+    @_intrinsic_replacement(_assign_, assignment_spec=(0, 1))
+    def _assign_replacement(self, value, assign_mode: AssignMode):
+        if assign_mode is AssignMode.NEXT:
+            assert isinstance(
+                self, Signal
+            ), "only Signal objects can use next assignment"
+            return self._next_setter_replacement(value)
+        elif assign_mode is AssignMode.PUSH:
+            assert isinstance(
+                self, Signal
+            ), "only Signal objects can use push assignment"
+            return self._push_setter_replacement(value)
+        elif assign_mode is AssignMode.VALUE:
+            assert isinstance(
+                self, Variable
+            ), "only Variable objects can use value assignment"
+            return self._value_setter_replacement(value)
+
+        raise AssertionError(f"invalid assign_mode {assign_mode}")
+
+    #
+    # numeric
+    #
+
+    @_intrinsic_replacement(__add__)
+    def _add_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.ADD, self.__add__(other), self, other
+        )
+
+    @_intrinsic_replacement(__radd__)
+    def _radd_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.ADD, self.__radd__(other), other, self
+        )
+
+    @_intrinsic_replacement(__sub__)
+    def _sub_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.SUB, self.__sub__(other), self, other
+        )
+
+    @_intrinsic_replacement(__rsub__)
+    def _rsub_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.SUB, self.__rsub__(other), other, self
+        )
+
+    @_intrinsic_replacement(__mul__)
+    def _mul_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.MUL, self.__mul__(other), self, other
+        )
+
+    @_intrinsic_replacement(__rmul__)
+    def _rmul_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.MUL, self.__rmul__(other), other, self
+        )
+
+    @_intrinsic_replacement(__floordiv__)
+    def _floordiv_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.FLOOR_DIV, self.__floordiv__(other), self, other
+        )
+
+    @_intrinsic_replacement(__rfloordiv__)
+    def _rfloordiv_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.FLOOR_DIV, self.__rfloordiv__(other), other, self
+        )
+
+    @_intrinsic_replacement(__mod__)
+    def _mod_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.MOD, self.__mod__(other), self, other
+        )
+
+    @_intrinsic_replacement(__rmod__)
+    def _rmod_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.MOD, self.__rmod__(other), other, self
+        )
+
+    #
+    # compare
+    #
+
+    @_intrinsic_replacement(__eq__)
+    def _eq_replacement(self, other):
+        result = self.__eq__(other)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicComparison(
+                intr_op.ComparisonOperator.EQ, result, self, other
+            )
+        )
+
+    @_intrinsic_replacement(__ne__)
+    def _ne_replacement(self, other):
+        result = self.__ne__(other)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicComparison(
+                intr_op.ComparisonOperator.NE, result, self, other
+            )
+        )
+
+    @_intrinsic_replacement(__lt__)
+    def _lt_replacement(self, other):
+        result = self.__lt__(other)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicComparison(
+                intr_op.ComparisonOperator.LT, result, self, other
+            )
+        )
+
+    @_intrinsic_replacement(__gt__)
+    def _gt_replacement(self, other):
+        result = self.__gt__(other)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicComparison(
+                intr_op.ComparisonOperator.GT, result, self, other
+            )
+        )
+
+    @_intrinsic_replacement(__le__)
+    def _le_replacement(self, other):
+        result = self.__le__(other)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicComparison(
+                intr_op.ComparisonOperator.LE, result, self, other
+            )
+        )
+
+    @_intrinsic_replacement(__ge__)
+    def _ge_replacement(self, other):
+        result = self.__ge__(other)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicComparison(
+                intr_op.ComparisonOperator.GE, result, self, other
+            )
+        )
+
+    #
+    # unary operators
+    #
+
+    @_intrinsic_replacement(__inv__)
+    def _inv_replacement(self):
+        result = self.__inv__()
+        return intr_op._IntrinsicUnaryOp(intr_op.UnaryOperator.INV, result, self)
+
+    @_intrinsic_replacement(__neg__)
+    def _neg_replacement(self):
+        result = self.__neg__()
+        return intr_op._IntrinsicUnaryOp(intr_op.UnaryOperator.NEG, result, self)
+
+    @_intrinsic_replacement(__pos__)
+    def _pos_replacement(self):
+        result = self.__pos__()
+        return intr_op._IntrinsicUnaryOp(intr_op.UnaryOperator.POS, result, self)
+
+    #
+    # casts
+    #
+
+    @property
+    def unsigned(self):
+        cast = self._value.unsigned
+        return type(self)._Qualifier[type(cast)](
+            cast, _ref_spec=self._ref_spec, _root=self._root
+        )
+
+    @unsigned.setter
+    def unsigned(self, value):
+        self._value.unsigned = _decay(value)
+
+    _intrinsic(unsigned.fget)
+    _intrinsic(unsigned.fset)
+
+    @property
+    def signed(self):
+        cast = self._value.signed
+        return type(self)._Qualifier[type(cast)](
+            cast, _ref_spec=self._ref_spec, _root=self._root
+        )
+
+    @signed.setter
+    def signed(self, value):
+        self._value.signed = _decay(value)
+
+    _intrinsic(signed.fget)
+    _intrinsic(signed.fset)
+
+    @property
+    def bitvector(self):
+        cast = self._value.bitvector
+        return type(self)._Qualifier[type(cast)](
+            cast, _ref_spec=self._ref_spec, _root=self._root
+        )
+
+    @bitvector.setter
+    def bitvector(self, value):
+        self._value.bitvector = _decay(value)
+
+    _intrinsic(bitvector.fget)
+    _intrinsic(bitvector.fset)
+
+
+class Signal(TypeQualifier):
+    _SubTypes = {}
+
+    #
+    # next assignment
+    #
+
+    @property
+    def next(self):
+        raise AssertionError("Signal.next can only be written")
+
+    @next.setter
+    def next(self, value):
+        self._value._assign(_decay(value))
+
+    _intrinsic(next.fget)
+    _intrinsic(next.fset)
+
+    @_intrinsic_replacement(next.fset, assignment_spec=(0, 1))
+    def _next_setter_replacement(self, value):
+        # assign value to check wheather operation is allowed
+        inp_value = _decay(value)
+        self._value._assign(inp_value)
+        if is_primitive(inp_value):
+            return intr_op._IntrinsicAssignment(self, value, AssignMode.NEXT)
+        return intr_op._IntrinsicAssignment(self, self._value.copy(), AssignMode.NEXT)
+
+    @_intrinsic
+    def __ilshift__(self, value):
+        self.next = value
+        return self
+
+    _intrinsic_replacement(__ilshift__, assignment_spec=(0, 1))(
+        _next_setter_replacement
+    )
+
+    #
+    # push assignment
+    #
+
+    @property
+    def push(self):
+        raise AssertionError("Signal.push can only be written")
+
+    @push.setter
+    def push(self, value):
+        assert self._default is not None, "pushed signals require default values"
+        self._value._assign(_decay(value))
+
+    _intrinsic(push.fget)
+    _intrinsic(push.fset)
+
+    @_intrinsic_replacement(push.fset, assignment_spec=(0, 1))
+    def _push_setter_replacement(self, value):
+        # assign value to check wheather operation is allowed
+        assert self._default is not None, "pushed signals require default values"
+        inp_value = _decay(value)
+        self._value._assign(inp_value)
+        if is_primitive(inp_value):
+            return intr_op._IntrinsicAssignment(self, value, AssignMode.PUSH)
+        return intr_op._IntrinsicAssignment(self, self._value.copy(), AssignMode.PUSH)
+
+    @_intrinsic
+    def __ixor__(self, value):
+        self.push = value
+        return self
+
+    _intrinsic_replacement(__ixor__, assignment_spec=(0, 1))(_push_setter_replacement)
+
+
+class Port(Signal):
+    _SubTypes = {}
+    _direction: Direction
+
+    class Direction(enum.Enum):
+        INPUT = enum.auto()
+        OUTPUT = enum.auto()
+        INOUT = enum.auto()
+
+        @_intrinsic
+        def __str__(self):
+            match self:
+                case Port.Direction.INPUT:
+                    return "INPUT"
+                case Port.Direction.OUTPUT:
+                    return "OUTPUT"
+                case Port.Direction.INOUT:
+                    return "INOUT"
+
+        @_intrinsic
+        def is_input(self):
+            return self is Port.Direction.INPUT
+
+        @_intrinsic
+        def is_output(self):
+            return self is Port.Direction.OUTPUT
+
+        @_intrinsic
+        def is_inout(self):
+            return self is Port.Direction.INOUT
+
+    @classmethod
+    @_intrinsic
+    def is_input(cls):
+        return cls._direction is Port.Direction.INPUT
+
+    @classmethod
+    @_intrinsic
+    def is_output(cls):
+        return cls._direction is Port.Direction.OUTPUT
+
+    @classmethod
+    @_intrinsic
+    def is_inout(cls):
+        return cls._direction is Port.Direction.INOUT
+
+    @staticmethod
+    def input(Wrapped, *, name: str | None = None) -> Port:
+        return Port[Wrapped, Port.Direction.INPUT](name=name)
+
+    @staticmethod
+    def output(Wrapped, *, default=None, name: str | None = None) -> Port:
+        return Port[Wrapped, Port.Direction.OUTPUT](default, name=name)
+
+    @staticmethod
+    def inout(Wrapped, *, default=None, name: str | None = None) -> Port:
+        return Port[Wrapped, Port.Direction.INOUT](default, name=name)
+
+    @classmethod
+    @_intrinsic
+    def direction(cls):
+        return cls._direction
+
+
+class Variable(TypeQualifier):
+    _SubTypes = {}
+
+    #
+    # value assignment
+    #
+
+    @property
+    def value(self):
+        raise AssertionError("Variable.value can only be written")
+
+    @value.setter
+    def value(self, value):
+        self._value._assign(_decay(value))
+
+    _intrinsic_property(value)
+
+    @_intrinsic_replacement(value.fset, assignment_spec=(0, 1))
+    def _value_setter_replacement(self, value):
+        # assign value to check wheather operation is allowed
+        inp_value = _decay(value)
+        self._value._assign(inp_value)
+        if is_primitive(inp_value):
+            return intr_op._IntrinsicAssignment(self, value, AssignMode.VALUE)
+        return intr_op._IntrinsicAssignment(self, self._value.copy(), AssignMode.VALUE)
+
+    @_intrinsic
+    def __imatmul__(self, value):
+        self.next = value
+        return self
+
+    _intrinsic_replacement(__imatmul__, assignment_spec=(0, 1))(
+        _value_setter_replacement
+    )
+
+
+class Temporary(TypeQualifier):
+    _SubTypes = {}
+
+
+class Generic:
+    ...
+
+
+Signal._Qualifier = Signal
+Variable._Qualifier = Variable
+Temporary._Qualifier = Temporary

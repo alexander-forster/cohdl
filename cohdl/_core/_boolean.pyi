@@ -1,0 +1,26 @@
+from __future__ import annotations
+from ._primitive_type import _PrimitiveType
+
+class _BooleanLiteral:
+    def __bool__(self) -> bool: ...
+    def __await__(self): ...
+
+class _Boolean(_PrimitiveType):
+    @property
+    def type(self):
+        return _Boolean
+    def copy(self) -> _Boolean: ...
+    def __bool__(self) -> bool: ...
+    def __await__(self): ...
+
+true = _BooleanLiteral(True)
+false = _BooleanLiteral(False)
+boolean = _Boolean
+
+class _NullFullType:
+    def __bool__(self) -> bool: ...
+    def __inv__(self) -> _NullFullType: ...
+    def __invert__(self) -> _NullFullType: ...
+
+Null = _NullFullType()
+Full = _NullFullType()

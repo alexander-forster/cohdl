@@ -1,0 +1,9 @@
+
+.*
+!.env
+!.gitignore
+test_build
+test_sim
+__pycache__
+*.egg-info
+playground

@@ -1,0 +1,233 @@
+from ._intrinsic import _intrinsic, _intrinsic_replacement
+
+from typing import TYPE_CHECKING
+
+
+#
+#
+# intrinsic builtins
+#
+#
+
+_intrinsic(type)
+_intrinsic(id)
+_intrinsic(isinstance)
+_intrinsic(issubclass)
+_intrinsic(getattr)
+_intrinsic(hasattr)
+
+_intrinsic(setattr)
+
+
+@_intrinsic_replacement(setattr)
+def setattr_replacement(__obj, __name, __value):
+    assert hasattr(__obj, "_cohdl_init_active")
+    setattr(__obj, __name, __value)
+
+
+_intrinsic(min)
+_intrinsic(max)
+
+
+@_intrinsic_replacement(min, special_case=False)
+def min_replacement(*args):
+    if len(args) == 1:
+        args = args[0]
+
+    assert all(isinstance(arg, (int, float, str)) for arg in args)
+    return min(args)
+
+
+@_intrinsic_replacement(max, special_case=False)
+def max_replacement(*args):
+    if len(args) == 1:
+        args = args[0]
+
+    assert all(isinstance(arg, (int, float, str)) for arg in args)
+    return max(args)
+
+
+#
+# int methods
+#
+
+_intrinsic(int.__neg__)
+_intrinsic(int.__pos__)
+_intrinsic(int.__add__)
+_intrinsic(int.__sub__)
+_intrinsic(int.__mul__)
+_intrinsic(int.__truediv__)
+_intrinsic(int.__floordiv__)
+_intrinsic(int.__mod__)
+_intrinsic(int.__eq__)
+_intrinsic(int.__ne__)
+_intrinsic(int.__lt__)
+_intrinsic(int.__gt__)
+_intrinsic(int.__le__)
+_intrinsic(int.__ge__)
+_intrinsic(int.__bool__)
+_intrinsic(int.__and__)
+_intrinsic(int.__or__)
+_intrinsic(int.__xor__)
+_intrinsic(int.__pow__)
+
+#
+# bool methods
+#
+
+_intrinsic(bool.__eq__)
+_intrinsic(bool.__ne__)
+_intrinsic(bool.__bool__)
+_intrinsic(bool.__and__)
+_intrinsic(bool.__or__)
+_intrinsic(bool.__xor__)
+
+#
+# dict methods
+#
+
+_intrinsic(dict.items)
+_intrinsic(dict.keys)
+_intrinsic(dict.values)
+_intrinsic(dict.get)
+
+#
+# tuple methods
+#
+
+_intrinsic(tuple.__getitem__)
+
+#
+# list methods
+#
+
+_intrinsic(list.__getitem__)
+
+#
+# str methods
+#
+
+_intrinsic(str.__eq__)
+_intrinsic(str.__len__)
+
+#
+# object methods
+#
+
+_intrinsic(object.__new__)
+_intrinsic(type(object).__new__)
+_intrinsic(object.__eq__)
+_intrinsic(object.__ne__)
+
+
+#
+# range
+#
+
+_intrinsic(range)
+
+
+#
+#
+#
+
+_intrinsic(zip)
+_intrinsic(enumerate)
+_intrinsic(len)
+
+# allows static print during synthesis
+_intrinsic(print)
+
+#
+# all
+#
+
+_intrinsic(all)
+
+
+@_intrinsic_replacement(all)
+def all_replacemet(iterable, /):
+    return _All(iterable)
+
+
+class _All:
+    def __init__(self, iterable):
+        self.iterable = iterable
+
+
+#
+# any
+#
+
+_intrinsic(any)
+
+
+@_intrinsic_replacement(any)
+def any_replacement(iterable, /):
+    return _Any(iterable)
+
+
+class _Any:
+    def __init__(self, iterable):
+        self.iterable = iterable
+
+
+#
+# bool
+#
+
+_intrinsic(bool)
+
+
+@_intrinsic_replacement(bool)
+def bool_replacement(value, /):
+    return _Bool(value)
+
+
+class _Bool:
+    def __init__(self, value):
+        self.value = value
+
+
+#
+# always
+#
+
+
+def always(expr, /):
+    """
+    should never be called, always is handled by parser
+    """
+
+    if TYPE_CHECKING:
+        return expr
+
+    raise AssertionError("always called outside synthesizable context")
+
+
+#
+# evaluated
+#
+
+
+@_intrinsic
+def evaluated():
+    return False
+
+
+@_intrinsic_replacement(evaluated, special_case=False)
+def evaluated_replacement():
+    return True
+
+
+#
+# static assert
+#
+
+
+@_intrinsic
+def static_assert(cond: bool, msg: str | None = None):
+    if msg is None:
+        assert cond
+    else:
+        assert cond, msg

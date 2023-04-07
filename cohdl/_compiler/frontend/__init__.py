@@ -1,0 +1,1 @@
+from ._frontend import generate_internal_representation
