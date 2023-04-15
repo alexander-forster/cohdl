@@ -5,7 +5,7 @@ CoHDL is a hardware description language embedded in Python. It translates a sub
 ---
 ## features
 
-At its core CoHDLs language model is very similar to VHDLs. Designs are made up of signals and variables built from types like `Bit` and `BitVector`. There are concurrent contexts, for expressions that would appear in the architecture scope of VHDL entities and sequential contexts equivalent to VHDL processes.
+At its core CoHDLs language model is very similar to VHDL. Designs are made up of signals and variables built from types like `Bit` and `BitVector`. There are concurrent contexts, for expressions that would appear in the architecture scope of VHDL entities and sequential contexts equivalent to VHDL processes.
 
 Code that uses only basic features also found in VHDL (if-statements, signal/variable assignments, arithmetic operators and so on) essentially looks like VHDL written in Python syntax. On top of that CoHDL supplies many additional features
 
