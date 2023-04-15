@@ -50,7 +50,7 @@ The following is an incomplete list of Python constructs supported in synthesiza
 
 Since CoHDL is embedded in Python, it is possible to run arbitrary code before and after the compilation. This can be used to load configuration files or run external programs like simulators or synthesis tools on the generated VHDL.
 
-For a working example of this checkout [cohdl_xil](https://github.com/alexander-forster/cohdl_xil). It generates Makefile projects for for CoHDL designs targeting Xilinx FPGAs.
+For a working example of this checkout [cohdl_xil](https://github.com/alexander-forster/cohdl_xil). It generates Makefile projects for CoHDL designs targeting Xilinx FPGAs.
 
 ---
 ## getting started
