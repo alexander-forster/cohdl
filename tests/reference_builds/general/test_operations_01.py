@@ -126,6 +126,3 @@ async def testbench_simple(dut: simple):
 class Unittest(unittest.TestCase):
     def test_concurrent(self):
         cocotb_util.run_cocotb_tests(simple, __file__, self.__module__)
-
-
-std.VhdlCompiler.to_string(simple)

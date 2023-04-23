@@ -157,12 +157,26 @@ class ConstraindValue:
         assert self.width == other.width
         return ConstraindValue(self.width, self.value ^ other.value)
 
+    def __lshift__(self, shift):
+        return ConstraindValue(
+            self.width, (self.value << shift) & ((1 << self.width) - 1)
+        )
+
+    def __rshift__(self, shift):
+        return ConstraindValue(self.width, self.value >> shift)
+
+    def signed_rshift(self, shift):
+        val = (self.signed() >> shift) & ((1 << self.width) - 1)
+        return ConstraindValue(self.width, val)
+
     def resize(self, width):
         resized_value = ((1 << width) - 1) & self.value
         return ConstraindValue(width, resized_value)
 
     def signed(self):
-        return self.value - (2**self.width)
+        if self.value >= 2 ** (self.width - 1):
+            return self.value - (2**self.width)
+        return self.value
 
     def __eq__(self, other):
         if isinstance(other, int):
@@ -227,6 +241,11 @@ class ConstraindValue:
             width = self.width + other.bit_length()
             value = self.value * other
         return ConstraindValue(width, value)
+
+    def __matmul__(self, other):
+        assert isinstance(other, ConstraindValue)
+        val = (self.value << other.width) | other.value
+        return ConstraindValue(self.width + other.width, val)
 
 
 class TestValue:

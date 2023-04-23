@@ -29,6 +29,9 @@ class BinaryOperator(enum.Enum):
 
     CONCAT = enum.auto()
 
+    LSHIFT = enum.auto()
+    RSHIFT = enum.auto()
+
 
 class ComparisonOperator(enum.Enum):
     EQ = enum.auto()
