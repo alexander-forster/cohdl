@@ -200,14 +200,14 @@ class Bit(_PrimitiveType, metaclass=_MetaBit):
         if isinstance(other, Bit):
             return self._val is other._val
         else:
-            return self._val is other
+            return self._val is BitState.construct(other)
 
     @_intrinsic
     def __ne__(self, other: Bit | BitState) -> bool:
         if isinstance(other, Bit):
             return self._val is not other._val
         else:
-            return self._val is not other
+            return self._val is not BitState.construct(other)
 
     @_intrinsic
     def __len__(self):

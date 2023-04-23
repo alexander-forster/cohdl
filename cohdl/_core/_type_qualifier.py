@@ -523,6 +523,16 @@ class TypeQualifier(metaclass=_TypeQualifier):
         result = self._value.__rmod__(_decay(other))
         return Temporary[type(result)](result)
 
+    @_intrinsic
+    def __lshift__(self, rhs):
+        result = self._value.__lshift__(_decay(rhs))
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rshift__(self, rhs):
+        result = self._value.__rshift__(_decay(rhs))
+        return Temporary[type(result)](result)
+
     #
     # compare
     #
@@ -770,6 +780,18 @@ class TypeQualifier(metaclass=_TypeQualifier):
     def _rmod_replacement(self, other):
         return intr_op._IntrinsicBinOp(
             intr_op.BinaryOperator.MOD, self.__rmod__(other), other, self
+        )
+
+    @_intrinsic_replacement(__lshift__)
+    def _lshift_replacement(self, rhs):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.LSHIFT, self.__lshift__(rhs), self, rhs
+        )
+
+    @_intrinsic_replacement(__rshift__)
+    def _rshift_replacement(self, rhs):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.RSHIFT, self.__rshift__(rhs), self, rhs
         )
 
     #

@@ -10,6 +10,7 @@ from cohdl._core._bit_vector import BitVector
 from cohdl._core._unsigned import Unsigned
 from cohdl._core._signed import Signed
 from cohdl._core._intrinsic_operations import AssignMode
+from cohdl._core._integer import Integer
 
 T = typing.TypeVar("T", Bit, BitVector)
 U = typing.TypeVar("U", Bit, BitVector)
@@ -106,6 +107,14 @@ class TypeQualifier(typing.Generic[T]):
     def __rfloordiv__(self, other) -> Temporary[T]: ...
     def __mod__(self, other) -> Temporary[T]: ...
     def __rmod__(self, other) -> Temporary[T]: ...
+
+    #
+    # shift operators
+    #
+
+    def __lshift__(self, rhs: Unsigned | int | Integer) -> Temporary[T]: ...
+    def __rshift__(self, rhs: Unsigned | int | Integer) -> Temporary[T]: ...
+
     #
     # compare
     #

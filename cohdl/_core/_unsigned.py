@@ -240,6 +240,18 @@ class Unsigned(BitVector):
         return Unsigned[result_width](lhs % rhs)
 
     @_intrinsic
+    def __lshift__(self, rhs: Unsigned | int | Integer) -> Unsigned:
+        i = self.to_int()
+        s = int(rhs)
+        val = (self.to_int() << int(rhs)) & ((1 << self.width) - 1)
+        return Unsigned[self.width](val)
+
+    @_intrinsic
+    def __rshift__(self, rhs: Unsigned | int | Integer) -> Unsigned:
+        val = self.to_int() >> int(rhs)
+        return Unsigned[self.width](val)
+
+    @_intrinsic
     def __neg__(self) -> Unsigned:
         return ~self + 1
 
@@ -311,4 +323,4 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __str__(self):
-        return f"{self._bit_str()}"
+        return f"{self.to_int()}u"

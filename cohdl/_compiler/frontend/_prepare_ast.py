@@ -822,6 +822,10 @@ class PrepareAst:
                 return overloaded_operator("__xor__", "__rxor__")
             if isinstance(op, ast.MatMult):
                 return overloaded_operator("__matmul__", "__rmatmul__")
+            if isinstance(op, ast.LShift):
+                return overloaded_operator("__lshift__", "__rlshift__")
+            if isinstance(op, ast.RShift):
+                return overloaded_operator("__rshift__", "__rrshift__")
             if isinstance(op, ast.Mult):
                 return overloaded_operator("__mul__", "__rmul__")
             if isinstance(op, ast.FloorDiv):

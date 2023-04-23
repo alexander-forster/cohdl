@@ -88,13 +88,12 @@ class CodeBlock(Statement):
 
 class Value(Expression):
     def __init__(self, value):
-        self._value = value
         super().__init__(value)
 
     def write(self, scope: VhdlScope, target_hint=None, constrain=False):
         if target_hint is None:
-            return scope.format_value(self._value, constrain=constrain)
-        return scope.format_value(self._value, target_hint, constrain)
+            return scope.format_value(self.result, constrain=constrain)
+        return scope.format_value(self.result, target_hint, constrain)
 
 
 class Constant(Value):
@@ -104,9 +103,9 @@ class Constant(Value):
 class Literal(Constant):
     def write(self, scope: VhdlScope, target_hint=None) -> str:
         if target_hint is None:
-            return scope.format_literal(self._value)
+            return scope.format_literal(self.result)
         return scope.format_cast(
-            target_hint, self._value, scope.format_literal(self._value)
+            target_hint, self.result, scope.format_literal(self.result)
         )
 
 
@@ -117,7 +116,7 @@ class Target(Value):
     """
 
     def write(self, scope: VhdlScope):
-        return scope.format_target(self._value)
+        return scope.format_target(self.result)
 
 
 class Source(Value):
@@ -138,8 +137,6 @@ class Boolean(Expression):
         self._arg = arg
 
     def write(self, scope: VhdlScope):
-        result = self._arg.result
-
         arg_str = self._arg.write(scope)
 
         return scope.format_cast(self.result, self._arg.result, arg_str)
@@ -261,6 +258,31 @@ class BinOp(Expression):
         self._rhs = rhs
 
     def write(self, scope: VhdlScope):
+        if self._op is BinOp.Operator.LSHIFT:
+            # cast rhs to integer
+            shift = scope.format_cast(
+                Integer(), self._rhs.result, self._rhs.write(scope)
+            )
+            return f"shift_left({self._lhs.write(scope)}, {shift})"
+
+        if self._op is BinOp.Operator.RSHIFT:
+            # cast rhs to integer
+            shift = scope.format_cast(
+                Integer(), self._rhs.result, self._rhs.write(scope)
+            )
+            return f"shift_right({self._lhs.write(scope)}, {shift})"
+
+        # cohdl treats Signed and Unsigned as subclasses of BitVector
+        # and allows all BitVector operations for them.
+        # This includes concatenation. Since VHDL is not so permissive
+        # we have to explicitly cast the values to BitVector here.
+        if self._op is BinOp.Operator.CONCAT:
+            if isinstance(TypeQualifier.decay(self._lhs.result), BitVector):
+                self._lhs.result = self._lhs.result.bitvector
+
+            if isinstance(TypeQualifier.decay(self._rhs.result), BitVector):
+                self._rhs.result = self._rhs.result.bitvector
+
         op = BinOp.operator_string[self._op]
         return f"({self._lhs.write(scope)}) {op} ({self._rhs.write(scope)})"
 
@@ -377,11 +399,11 @@ class SelectWith(Statement):
                 IndentBlock(
                     [
                         *[
-                            f"{branch[1].write(scope, self._target._value)} when {branch[0].write(scope, self._arg._value)}{sep}"
+                            f"{branch[1].write(scope, self._target.result)} when {branch[0].write(scope, self._arg.result)}{sep}"
                             for branch, sep in zip(self._branches, separators)
                         ],
                         *[
-                            f"{default.write(scope, self._target._value)} when others;"
+                            f"{default.write(scope, self._target.result)} when others;"
                             for default in [self._default]
                             if default is not None
                         ],

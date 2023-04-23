@@ -5,6 +5,8 @@ import unittest
 import cohdl
 from cohdl import std, Bit, BitVector, Port, Unsigned, Signal
 
+from cohdl.std.bitfield import bitfield, Field
+
 import cohdl_testutil
 from cohdl_testutil import cocotb_util
 
@@ -12,10 +14,7 @@ import random
 import cocotb
 
 
-Field = std.Field
-
-
-@std.bitfield
+@bitfield
 class TestRegister:
     a: Field[0]
     b: Field[1]

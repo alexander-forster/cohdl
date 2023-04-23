@@ -257,6 +257,21 @@ class Signed(BitVector):
         return Signed[result_width](lhs % rhs)
 
     @_intrinsic
+    def __lshift__(self, rhs) -> Signed:
+        width = self.width
+        val = (self.to_int() << int(rhs)) & ((1 << width) - 1)
+
+        if val & (1 << (width - 1)):
+            val = val - (1 << (width))
+
+        return Signed[self.width](val)
+
+    @_intrinsic
+    def __rshift__(self, rhs) -> Signed:
+        val = self.to_int() >> int(rhs)
+        return Signed[self.width](val)
+
+    @_intrinsic
     def __neg__(self) -> Signed:
         return ~self + 1
 
