@@ -190,7 +190,7 @@ class Clock:
         elif self._edge is ClockEdge.FALLING:
             return cohdl.falling_edge(self._signal)
         elif self._edge is ClockEdge.BOTH:
-            return cohdl.rising_edge(self._signal) or cohdl.falling_edge(self._signal)
+            return cohdl.rising_edge(self._signal) | cohdl.falling_edge(self._signal)
         else:
             raise AssertionError("invalid clock edge")
 
