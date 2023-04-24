@@ -1436,10 +1436,13 @@ class Sequential(Context):
         name: str,
         code: CodeBlock,
         always_expr: Concurrent | None,
-        sensitivity: _SensitivitySpec,
+        sensitivity: _SensitivitySpec | None,
         attributes: dict,
         source_location: SourceLocation,
     ):
+        if sensitivity is None:
+            sensitivity = _SensitivityAll()
+
         assert isinstance(sensitivity, _SensitivitySpec)
         super().__init__(name, code, attributes, source_location)
         self._always_expr = always_expr

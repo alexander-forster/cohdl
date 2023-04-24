@@ -148,7 +148,7 @@ class Event(Expression):
     def __init__(self, value: Source, event_type: Event.Type):
         self._value = value
         self._event_type = event_type
-        super().__init__(bool)
+        super().__init__(_Boolean(True))
 
     def write(self, scope: VhdlScope):
         Type = Event.Type
@@ -1077,8 +1077,8 @@ class VhdlScope:
             if issubclass(value_type, _NullFullType):
                 return self.format_literal(target_type(value))
 
-        elif issubclass(target_type, _Boolean):
-            if issubclass(value_type, _Boolean):
+        elif issubclass(target_type, (_Boolean, bool)):
+            if issubclass(value_type, (_Boolean, bool)):
                 return value_str
             if issubclass(value_type, Bit):
                 return f"{value_str} = '1'"

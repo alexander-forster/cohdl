@@ -2,6 +2,7 @@
 .*
 !.env
 !.gitignore
+build
 test_build
 test_sim
 __pycache__

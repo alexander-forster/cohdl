@@ -24,6 +24,8 @@ from cohdl._core._intrinsic import (
     _SensitivityAll,
     _ResetContext,
     _ResetPushed,
+    _BitSignalEvent,
+    _BitSignalEventGroup,
 )
 
 from cohdl._core._primitive_type import is_primitive
@@ -137,6 +139,9 @@ class PrepareAst:
                 arg.type, cohdl.enum.Enum
             ), "arg may not be used in boolean contexts"
             return out.Boolean(out.Value(arg, bound))
+
+        if isinstance(arg, (_BitSignalEvent, _BitSignalEventGroup)):
+            return out.Value(arg, bound)
 
         if isinstance(arg, _MergedBranch):
             assert False, "TODO"
@@ -764,6 +769,10 @@ class PrepareAst:
             for result in bool_resuls:
                 if isinstance(result, bool):
                     const_vars.append(result)
+                elif isinstance(result, (_BitSignalEvent, _BitSignalEventGroup)):
+                    raise AssertionError(
+                        "rising/falling edge not allowed as argument of logical and/or use binary operators instead"
+                    )
                 else:
                     runtime_vars.append(result)
 
