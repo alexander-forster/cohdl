@@ -7,6 +7,11 @@ from cohdl._core._type_qualifier import TypeQualifier, Signal, Variable, Tempora
 from cohdl._core._primitive_type import is_primitive
 
 from cohdl._core._intrinsic import _BitSignalEvent, _BitSignalEventGroup
+from cohdl._core._bit import Bit
+from cohdl._core._boolean import _Boolean, _BooleanLiteral, _NullFullType
+from cohdl._core._bit_vector import BitVector
+from cohdl._core._signed import Signed
+from cohdl._core._unsigned import Unsigned
 
 
 class _Redirect:
@@ -34,7 +39,6 @@ class _ValueBranchHook:
         return len(self.redirects) != 0
 
     def print(self):
-
         for red in self.redirects:
             red.print()
 
@@ -62,6 +66,78 @@ class _ValueBranch:
         self.hook.add_redirect(_Redirect(target, source_obj))
 
 
+def _try_join(options):
+    result_type = None
+
+    # find most constrained primitive type compatible with all options
+    for option in options:
+        option = TypeQualifier.decay(option)
+        option_type = type(option)
+
+        if result_type is None:
+            if is_primitive(option):
+                result_type = type(option)
+            elif isinstance(option, bool):
+                result_type = _Boolean
+        else:
+            if issubclass(result_type, Bit):
+                if option_type not in (
+                    Bit,
+                    bool,
+                    _Boolean,
+                    _BooleanLiteral,
+                    _NullFullType,
+                ):
+                    # incompatible branches, return early
+                    return None
+            elif issubclass(result_type, _Boolean):
+                if option_type is Bit:
+                    result_type = Bit
+                elif option_type not in (
+                    bool,
+                    _Boolean,
+                    _BooleanLiteral,
+                    _NullFullType,
+                ):
+                    # incompatible branches, return early
+                    return None
+            elif issubclass(result_type, BitVector) and issubclass(
+                option_type, BitVector
+            ):
+                if issubclass(result_type, Signed) and issubclass(option_type, Signed):
+                    result_type = (
+                        result_type
+                        if result_type.width >= option_type.width
+                        else option_type
+                    )
+                elif issubclass(result_type, Unsigned) and issubclass(
+                    option_type, Unsigned
+                ):
+                    result_type = (
+                        result_type
+                        if result_type.width >= option_type.width
+                        else option_type
+                    )
+                else:
+                    if result_type.width != option_type.width:
+                        # incompatible branches, return early
+                        return None
+
+                    result_type = BitVector[result_type.width]
+
+    if result_type is None:
+        return None
+
+    for option in options:
+        option = TypeQualifier.decay(option)
+        try:
+            result_type(option)
+        except Exception:
+            return None
+
+    return result_type
+
+
 class _MergedBranch:
     def __new__(cls, branches: list[_ValueBranch]):
         if len(branches) == 0:
@@ -76,18 +152,17 @@ class _MergedBranch:
         if all(first.obj is branch.obj for branch in rest):
             return first_obj
 
-        for branch in branches:
-            raw_obj = TypeQualifier.decay(branch.obj)
-            if is_primitive(raw_obj):
-                temp = Temporary[type(raw_obj)]()
+        result_type = _try_join([branch.obj for branch in branches])
 
-                for b in branches:
-                    b._redirect(temp)
+        if result_type is not None:
+            result = Temporary[result_type]()
 
-                return temp
+            for branch in branches:
+                branch._redirect(result)
 
-        obj = object.__new__(cls)
-        return obj
+            return result
+
+        return object.__new__(cls)
 
     def __init__(self, branches: list[_ValueBranch]):
         # avoid double initialization if __new__ returns an existing

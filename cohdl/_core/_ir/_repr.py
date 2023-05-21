@@ -595,10 +595,9 @@ class _SignalAlias(Statement):
     This allows signals to be used in the same state they are initialized.
     """
 
-    def __init__(self, signal: Signal, replacement: Temporary, source):
+    def __init__(self, signal: Signal, replacement: Temporary):
         self.signal = signal
         self.replacement = replacement
-        self.source = source
 
     def visit_objects(self, operation: Callable):
         ...
@@ -913,7 +912,7 @@ class _State(Statement):
         def collect_alias(node):
             if isinstance(node, _SignalAlias):
                 alias_map[node.signal] = node.replacement
-                return VariableAssignment(node.replacement, node.source)
+                return Nop()
             return node
 
         self._code.visit(collect_alias)
@@ -1055,6 +1054,8 @@ class StatemachineContext:
         ctx = StatemachineContext._singleton
         StatemachineContext._singleton = None
 
+        ctx._fix_signal_alias()
+
         if len(ctx._states) == 0:
             return CodeBlock([], None)
         elif len(ctx._states) == 1:
@@ -1077,7 +1078,7 @@ class StatemachineContext:
 
             def check(obj, access: AccessFlags):
                 if isinstance(obj, Temporary):
-                    if obj not in used_temporaries:
+                    if obj._root not in used_temporaries:
                         # the first access to a temporary within a
                         # state must be a write access
                         # since writes to temporaries are only possible during
@@ -1086,8 +1087,8 @@ class StatemachineContext:
                         # state it is valid in
                         assert (
                             access is AccessFlags.WRITE
-                        ), "Temporary objects my not be shared between states"
-                        used_temporaries[obj] = True
+                        ), f"Temporary objects my not be shared between states"
+                        used_temporaries[obj._root] = True
                 return obj
 
             state.visit_objects(check)
@@ -1127,7 +1128,6 @@ class StatemachineContext:
 class Statemachine(Statement):
     def __init__(self, ctx: StatemachineContext):
         super().__init__()
-        ctx._fix_signal_alias()
 
         self._ctx = ctx
 

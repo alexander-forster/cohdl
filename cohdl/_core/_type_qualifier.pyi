@@ -148,6 +148,15 @@ class TypeQualifier(typing.Generic[T]):
     @bitvector.setter
     def bitvector(self, value: TypeQualifier[BitVector] | BitVector | str): ...
 
+    #
+    # helper methods
+    #
+
+    def resize(
+        self, target_width: int | None = None, *, zeros: int = 0
+    ) -> Temporary[T]: ...
+    def copy(self) -> Temporary[T]: ...
+
 class Signal(typing.Generic[T], TypeQualifier[T]):
     #
     #

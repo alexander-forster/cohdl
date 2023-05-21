@@ -269,9 +269,12 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
         if not isinstance(other, BitVector):
             return NotImplemented
 
-        assert self._width == other._width
+        Self = type(self)
+        Other = type(other)
 
-        return BitVector[self._width](
+        assert Self is Other, f"type mismatch in binary or ({Self} != {Other})"
+
+        return Self(
             Span.from_zip_iter(self._value, other._value, modifyer=lambda a, b: a | b)
         )
 
@@ -280,9 +283,12 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
         if not isinstance(other, BitVector):
             return NotImplemented
 
-        assert self._width == other._width
+        Self = type(self)
+        Other = type(other)
 
-        return BitVector[self._width](
+        assert Self is Other, f"type mismatch in binary and ({Self} != {Other})"
+
+        return Self(
             Span.from_zip_iter(self._value, other._value, modifyer=lambda a, b: a & b)
         )
 
@@ -291,9 +297,12 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
         if not isinstance(other, BitVector):
             return NotImplemented
 
-        assert self._width == other._width
+        Self = type(self)
+        Other = type(other)
 
-        return BitVector[self._width](
+        assert Self is Other, f"type mismatch in binary xor ({Self} != {Other})"
+
+        return Self(
             Span.from_zip_iter(self._value, other._value, modifyer=lambda a, b: a ^ b)
         )
 

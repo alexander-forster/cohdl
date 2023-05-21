@@ -11,7 +11,6 @@ from cohdl_testutil.cocotb_mock import MockBase
 
 
 class test_assignment_03(cohdl.Entity):
-
     from_bitvector = Port.input(Bit)
     from_unsigned = Port.input(Bit)
     from_signed = Port.input(Bit)
@@ -202,7 +201,6 @@ async def testbench_local_declaration_03(dut: test_assignment_03):
             short_short = short.as_int() << 4 | short.as_int()
 
             for long in long_gen.random(16):
-
                 if from_bitvector or from_unsigned or from_signed:
                     checks = [
                         (dut.out_bitvector_full_full, short),
@@ -275,3 +273,6 @@ class Unittest(unittest.TestCase):
         cocotb_util.run_cocotb_tests(
             test_assignment_03, __file__, self.__module__, no_build=False
         )
+
+
+print(std.VhdlCompiler.to_string(test_assignment_03))

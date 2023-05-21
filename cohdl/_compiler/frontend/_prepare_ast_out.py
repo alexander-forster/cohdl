@@ -214,11 +214,10 @@ class SignalAlias(Statement):
     all ready during this initial state.
     """
 
-    def __init__(self, signal, replacement, source, bound_statements: list[Statement]):
+    def __init__(self, signal, replacement, bound_statements: list[Statement]):
         super().__init__(bound_statements=bound_statements)
         self._signal = signal
         self._replacement = replacement
-        self._source = source
 
     def dump(self):
         return "SignalAlias"

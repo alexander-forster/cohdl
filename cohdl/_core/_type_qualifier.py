@@ -12,7 +12,10 @@ from cohdl._core._intrinsic_operations import AssignMode
 
 from cohdl._core._primitive_type import is_primitive, is_primitive_type
 from cohdl._core._integer import Integer
-from cohdl._core._boolean import _Boolean
+from cohdl._core._boolean import _Boolean, Null
+from cohdl._core._bit_vector import BitVector
+from cohdl._core._signed import Signed
+from cohdl._core._unsigned import Unsigned
 
 #
 #
@@ -401,6 +404,34 @@ class TypeQualifier(metaclass=_TypeQualifier):
         else:
             return self[val_width - 1]
 
+    def resize(self, target_width: int | None = None, *, zeros: int = 0):
+        type = self.type
+        padded_width = self.width + zeros
+
+        if target_width is None:
+            result_width = padded_width
+        else:
+            result_width = target_width
+
+        assert padded_width <= result_width
+
+        if zeros == 0:
+            padded = self
+        else:
+            padded = self @ BitVector[zeros](Null)
+
+        if issubclass(type, Signed):
+            return Temporary[Signed[result_width]](padded.signed)
+        elif issubclass(type, Unsigned):
+            return Temporary[Unsigned[result_width]](padded.unsigned)
+        else:
+            raise AssertionError(
+                "resize is only defined for Signed and Unsigned arguments"
+            )
+
+    def copy(self):
+        return Temporary(self)
+
     @_intrinsic
     def _assign_(self, value, assign_mode: AssignMode):
         if assign_mode is AssignMode.NEXT:
@@ -604,22 +635,14 @@ class TypeQualifier(metaclass=_TypeQualifier):
     ):
         assert _root is None
         assert _ref_spec is None
-        self.__init__(value, name=name, attributes=attributes)
-
         # set default to None, because locally defined
         # Signals/Variables cannot be used before they are constructed
         # and thus initialized
-        # The value is still passed to __init__ to ensure, that
-        # the types are compatible
-        self._default = None
+        self.__init__(None, name=name, attributes=attributes)
 
         if value is None or is_primitive(value) and value._is_uninitialized():
             return intr_op._IntrinsicDeclaration(self, None)
-        else:
-            if isinstance(value, TypeQualifier):
-                return intr_op._IntrinsicDeclaration(self, value)
-            else:
-                return intr_op._IntrinsicDeclaration(self, self.type(value))
+        return intr_op._IntrinsicDeclaration(self, value)
 
     @_intrinsic_replacement(__bool__)
     def _bool_replacement(self):

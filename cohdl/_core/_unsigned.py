@@ -318,6 +318,15 @@ class Unsigned(BitVector):
         return bool(self.to_int() >= rhs)
 
     @_intrinsic
+    def resize(self, target_width: int | None, *, zeros: int = 0):
+        if target_width is None:
+            target_width = self.width + zeros
+
+        assert self.width + zeros <= target_width
+        val = self.to_int() * 2**zeros
+        return Unsigned[target_width](val)
+
+    @_intrinsic
     def __repr__(self):
         return f"Unsigned[{self.width-1}:0]({self._bit_str()})"
 

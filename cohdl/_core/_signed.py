@@ -200,6 +200,9 @@ class Signed(BitVector):
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
 
+        if isinstance(rhs, int):
+            rhs = Signed.from_int(rhs)
+
         if not isinstance(rhs, Signed):
             return NotImplemented
 
@@ -340,6 +343,15 @@ class Signed(BitVector):
             rhs = rhs.to_int()
 
         return bool(self.to_int() >= rhs)
+
+    @_intrinsic
+    def resize(self, target_width: int | None = None, *, zeros: int = 0):
+        if target_width is None:
+            target_width = self.width + zeros
+
+        assert self.width + zeros <= target_width
+        val = self.to_int() * 2**zeros
+        return Signed[target_width](val)
 
     @_intrinsic
     def __repr__(self):

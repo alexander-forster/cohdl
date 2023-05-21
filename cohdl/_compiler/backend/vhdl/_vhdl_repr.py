@@ -322,13 +322,7 @@ class SignalAssignment(Statement):
     def write(self, scope: VhdlScope) -> str:
         target = self._target.write(scope)
         source = self._source.write(scope)
-
-        lhs = scope.format_vhdl_rhs(
-            self._target.result,
-            scope.format_cast(self._target.result, self._source.result, source),
-        )
-
-        return f"{target} <= {lhs};"
+        return f"{target} <= {scope.format_cast(self._target.result, self._source.result, source)};"
 
 
 class VariableAssignment(Statement):
@@ -1009,10 +1003,14 @@ class VhdlScope:
             vhdl_type = BitVector[value_type.width]
 
         if issubclass(vhdl_type, Unsigned):
+            if issubclass(value_type, Signed):
+                return f"signed(std_logic_vector({value_str}))"
             if issubclass(value_type, BitVector):
                 return f"std_logic_vector({value_str})"
 
         if issubclass(vhdl_type, Signed):
+            if issubclass(value_type, Unsigned):
+                return f"unsigned(std_logic_vector({value_str}))"
             if issubclass(value_type, BitVector):
                 return f"std_logic_vector({value_str})"
 
@@ -1026,31 +1024,6 @@ class VhdlScope:
 
         raise AssertionError(f"assignment not supported {vhdl_type} -> {value.type}")
 
-    def format_vhdl_rhs(self, lhs, value_str):
-        assert isinstance(lhs, TypeQualifier)
-
-        if lhs._root is lhs:
-            return value_str
-
-        # the caller of this function casts the rhs value
-        # passed as value_str to the lhs.type
-        rhs_type = lhs.type
-
-        if not issubclass(rhs_type, BitVector):
-            return value_str
-
-        if issubclass(lhs._root.type, Array):
-            root_type = lhs._root.type.elemtype
-        else:
-            root_type = lhs._root.type
-
-        if root_type.width != rhs_type.width:
-            lhs_type = BitVector[rhs_type.width]
-        else:
-            lhs_type = root_type
-
-        return self.format_cast(lhs_type(), rhs_type(), value_str)
-
     def format_cast(self, target, value, value_str):
         """
         wrap value_str that corresponds to value in a cast function
@@ -1060,14 +1033,22 @@ class VhdlScope:
         target_type = type(TypeQualifier.decay(target))
         value_type = type(TypeQualifier.decay(value))
 
-        if (
-            isinstance(target, TypeQualifier)
-            and target._ref_spec is not None
-            and issubclass(target_type, BitVector)
-        ):
-            vhdl_target_type = type(TypeQualifier.decay(target._root))
-        else:
-            vhdl_target_type = target_type
+        vhdl_target_type = target_type
+
+        if isinstance(target, TypeQualifier):
+            if issubclass(target_type, BitVector):
+                vhdl_target_type = type(TypeQualifier.decay(target._root))
+
+                if target._ref_spec is not None:
+                    if issubclass(vhdl_target_type, Array):
+                        vhdl_target_type = vhdl_target_type.elemtype[target_type.width]
+                    else:
+                        if issubclass(vhdl_target_type, Signed):
+                            vhdl_target_type = Signed[target_type.width]
+                        elif issubclass(vhdl_target_type, Unsigned):
+                            vhdl_target_type = Unsigned[target_type.width]
+                        else:
+                            vhdl_target_type = BitVector[target_type.width]
 
         if issubclass(target_type, Bit):
             if issubclass(value_type, Bit):
@@ -1090,95 +1071,223 @@ class VhdlScope:
             if issubclass(value_type, Integer):
                 return f"({value_str} /= 0)"
 
-        elif issubclass(target_type, Unsigned):
-            if issubclass(value_type, Unsigned):
-                if target_type.width == value_type.width:
-                    return value_str
-                elif target_type.width > value_type.width:
-                    return f"resize({value_str}, {target_type.width})"
-                raise AssertionError(
-                    f"cannot assign Unsigned to target with smaller width"
-                )
-            if issubclass(value_type, BitVector):
-                assert target_type.width == value_type.width
-
-                # if value is a BitVector literal
-                # an explicit type conversion is required
-                if isinstance(value, BitVector):
-                    value_str = f"std_logic_vector'({value_str})"
-
-                return f"unsigned({value_str})"
-            if issubclass(value_type, _NullFullType):
-                return self.format_literal(target_type(value))
-            if issubclass(value_type, Integer):
-                return f"to_unsigned({value_str}, {target_type.width})"
-
-        elif issubclass(target_type, Signed):
-            if issubclass(value_type, Signed):
-                if target_type.width == value_type.width:
-                    return value_str
-                elif target_type.width > value_type.width:
-                    return f"resize({value_str}, {target_type.width})"
-                raise AssertionError(
-                    f"cannot assign Signed to target with smaller width"
-                )
-            if issubclass(value_type, Unsigned):
-                assert target_type.width > value_type.width
-                return f"signed(std_logic_vector(resize({value_str}, {target_type.width})))"
-            if issubclass(value_type, BitVector):
-                assert target_type.width == value_type.width
-
-                # if value is a BitVector literal
-                # an explicit type conversion is required
-                if isinstance(value, BitVector):
-                    value_str = f"std_logic_vector'({value_str})"
-
-                return f"signed({value_str})"
-            if issubclass(value_type, _NullFullType):
-                return self.format_literal(target_type(value))
-            if issubclass(value_type, Integer):
-                return f"to_signed({value_str}, {target_type.width})"
-
         elif issubclass(target_type, BitVector):
+            print(f">>>> {target_type}")
+
             if issubclass(value_type, _NullFullType):
-                return self.format_literal(target_type(value))
+                return self.format_literal(vhdl_target_type(value))
 
-            if issubclass(value_type, Unsigned):
-                assert target_type.width == value_type.width
+            if issubclass(value_type, Integer):
+                if issubclass(target_type, Unsigned):
+                    value_str = f"to_unsigned({value_str}, {target_type.width})"
 
-                if issubclass(vhdl_target_type, Unsigned):
-                    return value_str
-                if issubclass(vhdl_target_type, Signed):
-                    return f"signed(std_logic_vector({value_str}))"
+                    if issubclass(vhdl_target_type, Unsigned):
+                        return value_str
+                    elif issubclass(vhdl_target_type, Signed):
+                        return f"signed(std_logic_vector({value_str}))"
+                    else:
+                        return f"std_logic_vector({value_str})"
 
-                return f"std_logic_vector({value_str})"
-            elif issubclass(value_type, Signed):
-                assert target_type.width == value_type.width
+                elif issubclass(target_type, Signed):
+                    value_str = f"to_signed({value_str}, {target_type.width})"
 
-                if issubclass(vhdl_target_type, Signed):
-                    return value_str
-                if issubclass(vhdl_target_type, Unsigned):
+                    if issubclass(vhdl_target_type, Signed):
+                        return value_str
+                    elif issubclass(vhdl_target_type, Unsigned):
+                        return f"unsigned(std_logic_vector({value_str}))"
+                    else:
+                        return f"std_logic_vector({value_str})"
+
+                raise AssertionError("invalid target for integer assignment")
+
+            if issubclass(vhdl_target_type, Unsigned):
+                if issubclass(value_type, Unsigned):
+                    if target_type.width == value_type.width:
+                        return value_str
+                    else:
+                        assert target_type.width > value_type.width
+                        return f"resize({value_str}, {target_type.width})"
+                elif issubclass(value_type, Signed):
+                    if issubclass(target_type, Signed):
+                        if target_type.width != value_type.width:
+                            assert target_type.width > value_type.width
+                            value_str = f"resize({value_str}, {target_type.width})"
+                    else:
+                        assert target_type.width == value_type.width
+
                     return f"unsigned(std_logic_vector({value_str}))"
-
-                return f"std_logic_vector({value_str})"
-
-            elif issubclass(value_type, BitVector):
-                assert target_type is value_type
-
-                if issubclass(vhdl_target_type, Unsigned):
-                    # if value is a BitVector literal
-                    # an explicit type conversion is required
-                    if isinstance(value, BitVector):
-                        value_str = f"std_logic_vector'({value_str})"
+                else:
+                    assert issubclass(value_type, BitVector)
+                    assert target_type.width == value_type.width
                     return f"unsigned({value_str})"
-                if issubclass(vhdl_target_type, Signed):
-                    # if value is a BitVector literal
-                    # an explicit type conversion is required
-                    if isinstance(value, BitVector):
-                        value_str = f"std_logic_vector'({value_str})"
+
+            if issubclass(vhdl_target_type, Signed):
+                if issubclass(value_type, Signed):
+                    if target_type.width == value_type.width:
+                        return value_str
+                    else:
+                        assert target_type.width > value_type.width
+                        return f"resize({value_str}, {target_type.width})"
+                elif issubclass(value_type, Unsigned):
+                    if issubclass(target_type, Unsigned):
+                        if target_type.width != value_type.width:
+                            assert target_type.width > value_type.width
+                            value_str = f"resize({value_str}, {target_type.width})"
+                    elif issubclass(target_type, Signed):
+                        assert target_type.width > value_type.width
+                        value_str = f"resize({value_str}, {target_type.width})"
+                    else:
+                        assert target_type.width == value_type.width
+
+                    return f"signed(std_logic_vector({value_str}))"
+                else:
+                    assert issubclass(value_type, BitVector)
+                    assert target_type.width == value_type.width
                     return f"signed({value_str})"
 
-                return value_str
+            if issubclass(vhdl_target_type, BitVector):
+                if issubclass(value_type, Signed):
+                    if issubclass(target_type, Signed):
+                        if target_type.width != value_type.width:
+                            assert target_type.width > value_type.width
+                            value_str = f"resize({value_str}, {target_type.width})"
+                    else:
+                        assert not issubclass(target_type, Unsigned)
+                        assert target_type.width == value_type.width
+
+                    return f"std_logic_vector({value_str})"
+
+                elif issubclass(value_type, Unsigned):
+                    if issubclass(target_type, Unsigned):
+                        if target_type.width != value_type.width:
+                            assert target_type.width > value_type.width
+                            value_str = f"resize({value_str}, {target_type.width})"
+                    elif issubclass(target_type, Signed):
+                        assert target_type.width > value_type.width
+                        value_str = f"resize({value_str}, {target_type.width})"
+                    else:
+                        assert target_type.width == value_type.width
+
+                    return f"std_logic_vector({value_str})"
+
+                else:
+                    assert issubclass(value_type, BitVector)
+                    assert target_type.width == value_type.width
+                    return value_str
+
+            raise AssertionError(
+                f"invalid {vhdl_target_type} - {target_type} - {value_type}"
+            )
+
+            #
+            #
+            #
+            #
+
+            if False:
+                if issubclass(target_type, Unsigned):
+                    if issubclass(value_type, Unsigned):
+                        if target_type.width == value_type.width:
+                            result = value_str
+                        elif target_type.width > value_type.width:
+                            result = f"resize({value_str}, {target_type.width})"
+                        else:
+                            raise AssertionError(
+                                f"cannot assign Unsigned to target with smaller width"
+                            )
+
+                        if issubclass(vhdl_target_type, Unsigned):
+                            return result
+                        elif issubclass(vhdl_target_type, Signed):
+                            return f"std_logic_vector(signed({result}))"
+                        else:
+                            return f"std_logic_vector({result})"
+
+                    if issubclass(value_type, BitVector):
+                        assert target_type.width == value_type.width
+
+                        # if value is a BitVector literal
+                        # an explicit type conversion is required
+                        if isinstance(value, BitVector):
+                            if issubclass(vhdl_target_type, Unsigned):
+                                return f"unsigned'({value_str})"
+                            elif issubclass(vhdl_target_type, Signed):
+                                return f"signed'({value_str})"
+                            else:
+                                return f"std_logic_vector'({value_str})"
+
+                        return f"unsigned({value_str})"
+                    if issubclass(value_type, _NullFullType):
+                        return self.format_literal(target_type(value))
+                    if issubclass(value_type, Integer):
+                        return f"to_unsigned({value_str}, {target_type.width})"
+
+                elif issubclass(target_type, Signed):
+                    if issubclass(value_type, Signed):
+                        if target_type.width == value_type.width:
+                            return value_str
+                        elif target_type.width > value_type.width:
+                            return f"resize({value_str}, {target_type.width})"
+                        raise AssertionError(
+                            f"cannot assign Signed to target with smaller width"
+                        )
+                    if issubclass(value_type, Unsigned):
+                        assert target_type.width > value_type.width
+                        return f"signed(std_logic_vector(resize({value_str}, {target_type.width})))"
+                    if issubclass(value_type, BitVector):
+                        assert target_type.width == value_type.width
+
+                        # if value is a BitVector literal
+                        # an explicit type conversion is required
+                        if isinstance(value, BitVector):
+                            value_str = f"std_logic_vector'({value_str})"
+
+                        return f"signed({value_str})"
+                    if issubclass(value_type, _NullFullType):
+                        return self.format_literal(target_type(value))
+                    if issubclass(value_type, Integer):
+                        return f"to_signed({value_str}, {target_type.width})"
+
+                elif issubclass(target_type, BitVector):
+                    if issubclass(value_type, _NullFullType):
+                        return self.format_literal(target_type(value))
+
+                    if issubclass(value_type, Unsigned):
+                        assert target_type.width == value_type.width
+
+                        if issubclass(vhdl_target_type, Unsigned):
+                            return value_str
+                        if issubclass(vhdl_target_type, Signed):
+                            return f"signed(std_logic_vector({value_str}))"
+
+                        return f"std_logic_vector({value_str})"
+                    elif issubclass(value_type, Signed):
+                        assert target_type.width == value_type.width
+
+                        if issubclass(vhdl_target_type, Signed):
+                            return value_str
+                        if issubclass(vhdl_target_type, Unsigned):
+                            return f"unsigned(std_logic_vector({value_str}))"
+
+                        return f"std_logic_vector({value_str})"
+
+                    elif issubclass(value_type, BitVector):
+                        assert target_type is value_type
+
+                        if issubclass(vhdl_target_type, Unsigned):
+                            # if value is a BitVector literal
+                            # an explicit type conversion is required
+                            if isinstance(value, BitVector):
+                                value_str = f"std_logic_vector'({value_str})"
+                            return f"unsigned({value_str})"
+                        if issubclass(vhdl_target_type, Signed):
+                            # if value is a BitVector literal
+                            # an explicit type conversion is required
+                            if isinstance(value, BitVector):
+                                value_str = f"std_logic_vector'({value_str})"
+                            return f"signed({value_str})"
+
+                        return value_str
 
         elif issubclass(target_type, Integer):
             if issubclass(value_type, (Integer, int)):

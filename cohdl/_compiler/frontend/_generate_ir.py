@@ -191,9 +191,7 @@ class IrGenerator:
 
         if isinstance(inp, out.SignalAlias):
             for block in open_blocks:
-                block.append(
-                    ir._SignalAlias(inp._signal, inp._replacement, inp._source)
-                )
+                block.append(ir._SignalAlias(inp._signal, inp._replacement))
 
             return open_blocks
 

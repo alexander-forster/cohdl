@@ -287,30 +287,50 @@ class PrepareAst:
             if result.assigned_value is None:
                 return out.Value(result.new_obj, [])
             else:
+                bound = []
+
+                if isinstance(
+                    result.assigned_value, _type_qualifier.TypeQualifier
+                ) or is_primitive(result.assigned_value):
+                    assigned = result.assigned_value
+                elif isinstance(result.assigned_value, _MergedBranch):
+                    pass
+                else:
+                    assigned = result.new_obj.type(result.assigned_value)
+
                 if (
                     isinstance(result.new_obj, Signal)
                     and self._context is ContextType.SEQUENTIAL
                 ):
                     signal_alias = Temporary[result.new_obj.type]()
-                    bound = [
-                        out.SignalAlias(
-                            result.new_obj, signal_alias, result.assigned_value, []
-                        ),
-                    ]
-                else:
-                    bound = []
 
-                return out.Value(
-                    result.new_obj,
-                    [
+                    if isinstance(result.assigned_value, _MergedBranch):
+                        result.assigned_value._redirect_values(signal_alias)
+                    else:
+                        bound.append(
+                            out.Assign(
+                                signal_alias,
+                                assigned,
+                                out.AssignMode._INFER,
+                                [],
+                            ),
+                        )
+
+                    bound.append(out.SignalAlias(result.new_obj, signal_alias, []))
+
+                if isinstance(result.assigned_value, _MergedBranch):
+                    result.assigned_value._redirect_values(result.new_obj)
+                else:
+                    bound.append(
                         out.Assign(
                             result.new_obj,
-                            result.assigned_value,
+                            assigned,
                             AssignMode._INFER,
-                            bound,
+                            [],
                         )
-                    ],
-                )
+                    )
+
+                return out.Value(result.new_obj, bound)
 
         if result is NotImplemented:
             return out.Value(result, [])

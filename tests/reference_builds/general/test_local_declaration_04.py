@@ -88,3 +88,14 @@ class Unittest(unittest.TestCase):
         cocotb_util.run_cocotb_tests(
             test_local_declaration_04, __file__, self.__module__
         )
+
+
+for _ in range(10):
+    print("#")
+print("\n")
+
+print(std.VhdlCompiler.to_string(test_local_declaration_04))
+
+print("\n")
+for _ in range(10):
+    print("#")
