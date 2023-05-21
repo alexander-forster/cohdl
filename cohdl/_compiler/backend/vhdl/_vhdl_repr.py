@@ -788,11 +788,11 @@ class VhdlScope:
         if isinstance(obj, BitVector):
             if isinstance(obj, Unsigned):
                 return (
-                    f"unsigned(std_logic_vector'({self.format_literal(obj.bitvector)}))"
+                    f"unsigned'({self.format_literal(obj.bitvector)})"
                 )
             if isinstance(obj, Signed):
                 return (
-                    f"signed(std_logic_vector'({self.format_literal(obj.bitvector)}))"
+                    f"signed'({self.format_literal(obj.bitvector)})"
                 )
             return f'"{obj}"'
         if isinstance(obj, Integer):
@@ -1072,9 +1072,8 @@ class VhdlScope:
                 return f"({value_str} /= 0)"
 
         elif issubclass(target_type, BitVector):
-            print(f">>>> {target_type}")
 
-            if issubclass(value_type, _NullFullType):
+            if issubclass(value_type, _NullFullType) or isinstance(value, BitVector):
                 return self.format_literal(vhdl_target_type(value))
 
             if issubclass(value_type, Integer):

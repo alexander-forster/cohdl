@@ -273,6 +273,3 @@ class Unittest(unittest.TestCase):
         cocotb_util.run_cocotb_tests(
             test_assignment_03, __file__, self.__module__, no_build=False
         )
-
-
-print(std.VhdlCompiler.to_string(test_assignment_03))
