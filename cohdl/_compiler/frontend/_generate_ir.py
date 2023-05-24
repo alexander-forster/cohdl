@@ -915,6 +915,8 @@ class IrGenerator:
                                 contains_transition = True 
                             
                             all_open_blocks.extend(open_orelse)
+                        else:
+                            all_open_blocks.append(code_orelse)
                     else:
                         new_open_blocks.append(code_orelse)
 
@@ -926,6 +928,14 @@ class IrGenerator:
                 # return initial open blocks
                 return initial_open_blocks
             else:
+                # prevent merging of nested blocks by
+                # unlinking parent blocks. This is required because
+                # at least one of the paths contains a transition
+                # so continuing after the merged blocks would override
+                # the transition
+                for block in all_open_blocks:
+                    block._root = block
+
                 # at least one branch contains a transition
                 # continue with all open blocks
                 return all_open_blocks
