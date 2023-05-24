@@ -32,7 +32,7 @@ class test_for_03(cohdl.Entity):
 
 
 @cocotb_util.test()
-async def testbench_for_02(dut: test_for_03):
+async def testbench_for_03(dut: test_for_03):
     gen = cocotb_util.ConstrainedGenerator(16)
 
     for value in gen.random(64, required=[0, 1]):

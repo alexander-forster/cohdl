@@ -1247,7 +1247,7 @@ class PrepareAst:
 
                 if body.empty():
                     target.restore_locals()
-                    break
+                    continue
 
                 is_first = body_cnt == 0
                 body_cnt += 1

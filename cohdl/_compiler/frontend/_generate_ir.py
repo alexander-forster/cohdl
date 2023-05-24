@@ -880,6 +880,9 @@ class IrGenerator:
 
             initial_open_blocks = open_blocks
 
+            contains_transition = False
+            all_open_blocks = []
+
             for branch in inp._branches:
                 expr, code = branch
                 # convert all expression
@@ -892,11 +895,12 @@ class IrGenerator:
                     code_orelse = ir.CodeBlock([], parent=block)
 
                     open_body = self.apply(code, open_blocks=[code_body])
+                    all_open_blocks.extend(open_body)
 
                     assert len(open_body) == 1
-                    assert (
-                        open_body[0] is code_body
-                    ), "await in CaseSelect not supported"
+
+                    if open_body[0] is not code_body:
+                        contains_transition = True 
 
                     block.append(ir.If(expr.result(), code_body, code_orelse))
 
@@ -906,18 +910,25 @@ class IrGenerator:
                                 inp._default, open_blocks=[code_orelse]
                             )
                             assert len(open_orelse) == 1
-                            assert (
-                                open_orelse[0] is code_orelse
-                            ), "await in CaseSelect default not supported"
+
+                            if open_orelse[0] is not code_orelse:
+                                contains_transition = True 
+                            
+                            all_open_blocks.extend(open_orelse)
                     else:
                         new_open_blocks.append(code_orelse)
 
                 # new open blocks are the orelse branches of generated if statements
                 open_blocks = new_open_blocks
 
-            # no transitions in case select
-            # return initial open blocks
-            return initial_open_blocks
+            if not contains_transition:
+                # no transitions in case select
+                # return initial open blocks
+                return initial_open_blocks
+            else:
+                # at least one branch contains a transition
+                # continue with all open blocks
+                return all_open_blocks
 
         if isinstance(inp, out.Assert):
             for block in open_blocks:
