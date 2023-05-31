@@ -787,13 +787,9 @@ class VhdlScope:
             return f"'{obj}'"
         if isinstance(obj, BitVector):
             if isinstance(obj, Unsigned):
-                return (
-                    f"unsigned'({self.format_literal(obj.bitvector)})"
-                )
+                return f"unsigned'({self.format_literal(obj.bitvector)})"
             if isinstance(obj, Signed):
-                return (
-                    f"signed'({self.format_literal(obj.bitvector)})"
-                )
+                return f"signed'({self.format_literal(obj.bitvector)})"
             return f'"{obj}"'
         if isinstance(obj, Integer):
             return f"{obj}"
@@ -820,7 +816,12 @@ class VhdlScope:
             assert len(obj.shape) == 1
             elemtype = obj.elemtype
 
-            elemstr = [self.format_literal(elemtype(elem)) for elem in val]
+            # use ( 0 => ELEM0, 1 => ELEM1 ) notation because
+            # ( ELEM0, ELEM1 ) form is not allowed for arrays with only a single element
+            elemstr = [
+                f"{nr} => {self.format_literal(elemtype(elem))}"
+                for nr, elem in enumerate(val)
+            ]
 
             width = obj.shape[0]
 
@@ -1072,7 +1073,6 @@ class VhdlScope:
                 return f"({value_str} /= 0)"
 
         elif issubclass(target_type, BitVector):
-
             if issubclass(value_type, _NullFullType) or isinstance(value, BitVector):
                 return self.format_literal(vhdl_target_type(value))
 
