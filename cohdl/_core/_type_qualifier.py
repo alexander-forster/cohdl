@@ -35,6 +35,12 @@ class Offset(RefSpec):
     def __init__(self, offset, base_offset: list | None):
         self.offset = offset
         self.base_offset = base_offset if base_offset is not None else []
+        self.obj = None
+
+    def copy(self):
+        new = Offset(self.offset, self.base_offset)
+        new.obj = self.obj
+        return new
 
     def simplify(self):
         base_offset = []
@@ -68,6 +74,12 @@ class Slice(RefSpec):
         self.start = start
         self.stop = stop
         self.base_offset = base_offset if base_offset is not None else []
+        self.obj = None
+
+    def copy(self):
+        new = Slice(self.start, self.stop, self.base_offset)
+        new.obj = self.obj
+        return new
 
     def simplify(self):
         base_offset = []
@@ -258,7 +270,15 @@ class TypeQualifier(metaclass=_TypeQualifier):
         self._attributes = [] if attributes is None else attributes
 
         self._root = self if _root is None else _root
-        self._ref_spec = [] if _ref_spec is None else _ref_spec
+
+        if _ref_spec is None:
+            self._ref_spec = []
+        else:
+            self._ref_spec = list(_ref_spec)
+
+            if len(self._ref_spec) != 0:
+                self._ref_spec[-1] = _ref_spec[-1].copy()
+                self._ref_spec[-1].obj = self
 
     @_intrinsic
     def name(self):

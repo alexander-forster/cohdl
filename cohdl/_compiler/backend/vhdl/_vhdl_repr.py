@@ -736,7 +736,22 @@ class VhdlScope:
                 len(ref_spec.base_offset) == 0
             ), "nested runtime variable offsets not implemented"
 
-            return f"{root_name}({self.format_value(ref_spec.offset, Integer())})"
+            result = f"{root_name}({self.format_value(ref_spec.offset, Integer())})"
+
+            if isinstance(obj, TypeQualifier):
+                root_obj = TypeQualifier.decay(obj._root)
+                primitive_obj = TypeQualifier.decay(obj)
+                obj_type = type(primitive_obj)
+
+                if isinstance(root_obj, Array):
+                    elem_type = root_obj.elemtype
+
+                    if elem_type != obj_type and not is_target:
+                        result = self.format_cast(
+                            primitive_obj, Signal[elem_type](), result
+                        )
+
+            return result
 
         if isinstance(ref_spec, Slice):
             ref_spec.simplify()
@@ -959,7 +974,7 @@ class VhdlScope:
                 result = root_name
 
                 for ref in obj._ref_spec:
-                    result = self._format_ref(obj, result, ref, False, constrain)
+                    result = self._format_ref(ref.obj, result, ref, False, constrain)
 
         if target_hint is None:
             return result
@@ -1133,7 +1148,7 @@ class VhdlScope:
                             assert target_type.width > value_type.width
                             value_str = f"resize({value_str}, {target_type.width})"
                     elif issubclass(target_type, Signed):
-                        assert target_type.width > value_type.width
+                        assert target_type.width >= value_type.width
                         value_str = f"resize({value_str}, {target_type.width})"
                     else:
                         assert target_type.width == value_type.width
