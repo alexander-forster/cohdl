@@ -876,69 +876,20 @@ class IrGenerator:
             # fallback to nested if statements
             #
 
-            last = inp._branches[-1]
+            if inp.returns():
+                assert inp.returns_always()
 
-            initial_open_blocks = open_blocks
-
-            contains_transition = False
-            all_open_blocks = []
-
-            for branch in inp._branches:
-                expr, code = branch
-                # convert all expression
-                open_blocks = self.apply(expr, open_blocks=open_blocks)
-
-                new_open_blocks = []
-
-                for block in open_blocks:
-                    code_body = ir.CodeBlock([], parent=block)
-                    code_orelse = ir.CodeBlock([], parent=block)
-
-                    open_body = self.apply(code, open_blocks=[code_body])
-                    all_open_blocks.extend(open_body)
-
-                    assert len(open_body) == 1
-
-                    if open_body[0] is not code_body:
-                        contains_transition = True 
-
-                    block.append(ir.If(expr.result(), code_body, code_orelse))
-
-                    if branch is last:
-                        if inp._default is not None:
-                            open_orelse = self.apply(
-                                inp._default, open_blocks=[code_orelse]
-                            )
-                            assert len(open_orelse) == 1
-
-                            if open_orelse[0] is not code_orelse:
-                                contains_transition = True 
-                            
-                            all_open_blocks.extend(open_orelse)
-                        else:
-                            all_open_blocks.append(code_orelse)
-                    else:
-                        new_open_blocks.append(code_orelse)
-
-                # new open blocks are the orelse branches of generated if statements
-                open_blocks = new_open_blocks
-
-            if not contains_transition:
-                # no transitions in case select
-                # return initial open blocks
-                return initial_open_blocks
+            if inp._default is not None:
+                rewritten = inp._default
             else:
-                # prevent merging of nested blocks by
-                # unlinking parent blocks. This is required because
-                # at least one of the paths contains a transition
-                # so continuing after the merged blocks would override
-                # the transition
-                for block in all_open_blocks:
-                    block._root = block
+                rewritten = out.CodeBlock([])
 
-                # at least one branch contains a transition
-                # continue with all open blocks
-                return all_open_blocks
+            for branch in inp._branches[::-1]:
+                expr, code = branch
+
+                rewritten = out.If(expr, code, rewritten)
+
+            return self.apply(rewritten, open_blocks=open_blocks)
 
         if isinstance(inp, out.Assert):
             for block in open_blocks:

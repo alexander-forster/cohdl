@@ -1235,6 +1235,7 @@ class PrepareAst:
 
             body_cnt = 0
             use_if_else = False
+            uses_return = False
 
             for elt in iterable:
                 target.unpack(elt)
@@ -1252,16 +1253,23 @@ class PrepareAst:
                 is_first = body_cnt == 0
                 body_cnt += 1
 
-                if body.contains_break():
-                    # for loop containing breaks are used to generate if-else chains
+                body_breaks = body.contains_break()
+                body_returns = body.returns()
+
+                if body_breaks or body_returns:
+                    # for loop containing breaks or returns are used to generate if-else chains
                     # this is only possible, when the body of the loop contains only
-                    # a single if statement where break is the last statement in the
+                    # a single if statement where break/return is the last statement in the
                     # body of the loop
+
+                    assert not (body_breaks and body_returns)
 
                     if is_first:
                         use_if_else = True
+                        uses_return = body_returns
                     else:
                         assert use_if_else
+                        assert uses_return is body_returns
 
                     # for loops containing break can only
                     # contain a single if statement without an orelse block
@@ -1272,16 +1280,23 @@ class PrepareAst:
 
                     if_body = if_stmt._body.statements()
 
-                    # ensure, that the trailing break statement is
-                    # the only one in the loop body
-                    for substmt in if_body[:-1]:
-                        assert not substmt.contains_break()
+                    if uses_return:
+                        # ensure, that the body of the if statement
+                        # always leeds to a return statement
+                        assert if_stmt._body.returns_always()
+                        assert isinstance(if_body[-1], out.Return)
+                    else:
+                        # ensure, that the trailing break statement is
+                        # the only one in the loop body
+                        for substmt in if_body[:-1]:
+                            assert not substmt.contains_break()
 
-                    assert isinstance(if_body[-1], out.Break)
+                        assert isinstance(if_body[-1], out.Break)
 
-                    # remove break statement since it only serves as a marker
-                    # and is not needed after it was detected
-                    del if_body[-1]
+                        # remove break statement since it only serves as a marker
+                        # and is not needed after it was detected
+                        del if_body[-1]
+                        if_stmt._body._contains_break = False
 
                     # add only if statement to collected
                     result.append(if_stmt)
@@ -1304,7 +1319,7 @@ class PrepareAst:
 
                 assert (
                     len(inp.orelse) == 0
-                ), "for else only supported for the special case where the for loop contains only a single if statement with trailing break"
+                ), "for else only supported for the special case where the for loop contains only a single if statement with trailing break or return"
                 return out.CodeBlock(result)
 
             #
@@ -1314,7 +1329,7 @@ class PrepareAst:
 
             assert (
                 self._context is ContextType.SEQUENTIAL
-            ), "for containing break statement only allowed in sequential context"
+            ), "for containing break/return statement only allowed in sequential context"
 
             if len(inp.orelse) == 0:
                 default = None
