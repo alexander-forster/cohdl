@@ -367,7 +367,7 @@ class FunctionDefinition:
             args.append(locals_dict[arg_name])
 
         if result._vararg is not None:
-            args.extend(*locals_dict[result._vararg])
+            args.extend(locals_dict[result._vararg])
 
         for kwarg_name in result._kwonly:
             kwargs[kwarg_name] = locals_dict[kwarg_name]
