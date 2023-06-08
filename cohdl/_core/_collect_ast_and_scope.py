@@ -1,4 +1,5 @@
 from __future__ import annotations
+from _ast import Lambda
 from ._source_location import SourceLocation
 
 
@@ -51,14 +52,7 @@ class _ClassifyNames(ast.NodeVisitor):
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
         self.visit_FunctionDef(node)
 
-    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
-        assert (
-            len(node.decorator_list) == 0
-        ), "decorator on local function not supported"
-
-        self.used_names.add(node.name)
-        self.local_names.add(node.name)
-
+    def _visit_fn_or_lambda(self, node: ast.FunctionDef | ast.Lambda):
         args = node.args
 
         self.generic_visit_list(args.defaults)
@@ -74,6 +68,19 @@ class _ClassifyNames(ast.NodeVisitor):
         sub_visitor = _ClassifyNames(subargs, node.body)
 
         self.used_names.update(sub_visitor.nonlocals())
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
+        assert (
+            len(node.decorator_list) == 0
+        ), "decorator on local function not supported"
+
+        self.used_names.add(node.name)
+        self.local_names.add(node.name)
+
+        self._visit_fn_or_lambda(node)
+
+    def visit_Lambda(self, node: Lambda) -> Any:
+        self._visit_fn_or_lambda(node)
 
     def __init__(self, args, body: list | ast.AST):
         self.used_names: set[str] = set()

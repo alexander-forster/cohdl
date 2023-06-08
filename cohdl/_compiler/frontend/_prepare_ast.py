@@ -1687,6 +1687,28 @@ class PrepareAst:
             # function declaration has no runtime effect other than declaring values for default arguments
             return out.CodeBlock(bound_stmt)
 
+        if isinstance(inp, ast.Lambda):
+            bound_stmt = []
+
+            def default_converter(x):
+                stmt = self.apply(x)
+                bound_stmt.append(stmt)
+                return stmt
+
+            return out.Value(
+                FunctionDefinition.from_ast_fn(
+                    inp,
+                    "lambda_expr",
+                    # global dict is empty because all globals are already contained in self._scope and passed to nonlocal_dict
+                    global_dict={},
+                    nonlocal_dict=self._scope,
+                    default_converter=default_converter,
+                ),
+                bound_statements=bound_stmt,
+            )
+
+        raise AssertionError(f"invalid ast node {inp}")
+
 
 #
 #

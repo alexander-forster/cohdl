@@ -28,3 +28,6 @@ GHz = Frequency.gigahertz
 
 from . import axi
 from .sequential_context import SeqContext
+
+from . import utility
+from .utility import instance_check, subclass_check

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ._assignable_type import AssignableType
+from cohdl._core import BitVector
 
 import typing
 
@@ -27,3 +28,15 @@ def bitfield(cls):
     class BitField(cls, AssignableType):
         pass
     return cls
+
+def make_bitfield(source, **fields):
+    @bitfield
+    class _BitField:
+        __annotations__ = fields
+    return _BitField(source)
+
+def underlying_value(source) -> BitVector:
+    """
+    return the underlying value (the value passed in the constructor)
+    of an instance of a  bitfield class
+    """

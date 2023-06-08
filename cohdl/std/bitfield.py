@@ -139,9 +139,27 @@ def bitfield(cls_=None, *, offset=0):
 
                 return cls(TypeQualifyer(initial))
 
+        for name, value in fields.items():
+            setattr(BitfieldClass, name, value)
+
+        for name, value in subbitfields.items():
+            setattr(BitfieldClass, name, value)
+
         BitfieldClass.__name__ = cls.__name__
         return BitfieldClass
 
     if cls_ is None or isinstance(cls_, int):
         return helper
     return helper(cls_)
+
+
+def make_bitfield(source, **fields):
+    @bitfield
+    class _BitField:
+        __annotations__ = fields
+
+    return _BitField(source)
+
+
+def underlying_value(source):
+    return source._input_vector
