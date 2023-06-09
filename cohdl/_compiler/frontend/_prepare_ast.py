@@ -844,10 +844,13 @@ class PrepareAst:
             val_lhs = lhs.result()
             val_rhs = rhs.result()
 
+            type_lhs = type(val_lhs)
+            type_rhs = type(val_rhs)
+
             def overloaded_operator(default_op, reverse_op):
-                if ObjTraits.hasattr(val_lhs, default_op):
+                if ObjTraits.hasattr(type_lhs, default_op):
                     call = self.subcall(
-                        ObjTraits.getattr(val_lhs, default_op), [val_rhs], {}
+                        ObjTraits.getattr(type_lhs, default_op), [val_lhs, val_rhs], {}
                     )
 
                     call.add_bound_statement(lhs)
@@ -857,7 +860,7 @@ class PrepareAst:
                         return call
 
                 reverse_call = self.subcall(
-                    ObjTraits.getattr(val_rhs, reverse_op), [val_lhs], {}
+                    ObjTraits.getattr(type_rhs, reverse_op), [val_rhs, val_lhs], {}
                 )
 
                 reverse_call.add_bound_statement(lhs)
@@ -902,10 +905,11 @@ class PrepareAst:
 
             operand = cast(out.Expression, self.apply(inp.operand))
             arg = operand.result()
+            type_arg = type(arg)
 
             def overloaded_operator(fn_name):
                 assert ObjTraits.hasattr(arg, fn_name)
-                call = self.subcall(ObjTraits.getattr(arg, fn_name), [], {})
+                call = self.subcall(ObjTraits.getattr(type_arg, fn_name), [arg], {})
 
                 call.add_bound_statement(operand)
                 return call
@@ -938,50 +942,53 @@ class PrepareAst:
                 val_lhs = lhs.result()
                 val_rhs = rhs.result()
 
+                type_lhs = type(val_lhs)
+                type_rhs = type(val_rhs)
+
                 if isinstance(operator, ast.Is):
                     return out.Value(val_lhs is val_rhs, [lhs, rhs])
                 elif isinstance(operator, ast.IsNot):
                     return out.Value(val_lhs is not val_rhs, [lhs, rhs])
                 elif isinstance(operator, ast.Eq):
-                    first_result = self.subcall(val_lhs.__eq__, [val_rhs], {})
+                    first_result = self.subcall(type_lhs.__eq__, [val_lhs, val_rhs], {})
 
                     if first_result.result() is NotImplemented:
-                        result = self.subcall(val_rhs.__eq__, [val_lhs], {})
+                        result = self.subcall(type_rhs.__eq__, [val_rhs, val_lhs], {})
                     else:
                         result = first_result
                 elif isinstance(operator, ast.NotEq):
-                    first_result = self.subcall(val_lhs.__ne__, [val_rhs], {})
+                    first_result = self.subcall(type_lhs.__ne__, [val_lhs, val_rhs], {})
 
                     if first_result.result() is NotImplemented:
-                        result = self.subcall(val_rhs.__ne__, [val_lhs], {})
+                        result = self.subcall(type_rhs.__ne__, [val_rhs, val_lhs], {})
                     else:
                         result = first_result
                 elif isinstance(operator, ast.Gt):
-                    first_result = self.subcall(val_lhs.__gt__, [val_rhs], {})
+                    first_result = self.subcall(type_lhs.__gt__, [val_lhs, val_rhs], {})
 
                     if first_result.result() is NotImplemented:
-                        result = self.subcall(val_rhs.__lt__, [val_lhs], {})
+                        result = self.subcall(type_rhs.__lt__, [val_rhs, val_lhs], {})
                     else:
                         result = first_result
                 elif isinstance(operator, ast.Lt):
-                    first_result = self.subcall(val_lhs.__lt__, [val_rhs], {})
+                    first_result = self.subcall(type_lhs.__lt__, [val_lhs, val_rhs], {})
 
                     if first_result.result() is NotImplemented:
-                        result = self.subcall(val_rhs.__gt__, [val_lhs], {})
+                        result = self.subcall(type_rhs.__gt__, [val_rhs, val_lhs], {})
                     else:
                         result = first_result
                 elif isinstance(operator, ast.GtE):
-                    first_result = self.subcall(val_lhs.__ge__, [val_rhs], {})
+                    first_result = self.subcall(type_lhs.__ge__, [val_lhs, val_rhs], {})
 
                     if first_result.result() is NotImplemented:
-                        result = self.subcall(val_rhs.__le__, [val_lhs], {})
+                        result = self.subcall(type_rhs.__le__, [val_rhs, val_lhs], {})
                     else:
                         result = first_result
                 elif isinstance(operator, ast.LtE):
-                    first_result = self.subcall(val_lhs.__le__, [val_rhs], {})
+                    first_result = self.subcall(type_lhs.__le__, [val_lhs, val_rhs], {})
 
                     if first_result.result() is NotImplemented:
-                        result = self.subcall(val_rhs.__ge__, [val_lhs], {})
+                        result = self.subcall(type_rhs.__ge__, [val_rhs, val_lhs], {})
                     else:
                         result = first_result
                 else:

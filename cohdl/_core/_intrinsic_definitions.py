@@ -115,6 +115,12 @@ _intrinsic(type(object).__new__)
 _intrinsic(object.__eq__)
 _intrinsic(object.__ne__)
 
+#
+# type methods
+#
+
+_intrinsic(type.__or__)
+_intrinsic(type.__ror__)
 
 #
 # range
