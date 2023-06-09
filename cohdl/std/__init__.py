@@ -30,4 +30,5 @@ from . import axi
 from .sequential_context import SeqContext
 
 from . import utility
-from .utility import instance_check, subclass_check
+from .utility import instance_check, subclass_check, iscouroutinefunction
+from .utility import check_type, select, choose_first, cond, check_return

@@ -668,7 +668,7 @@ class PrepareAst:
                 value = _return_stack.top()
 
                 assert value.aug_assign is None
-                assert isinstance(value.value, list)
+                assert isinstance(value.value, (list, tuple))
 
                 # convert name object
                 return self.apply(inp.value)
