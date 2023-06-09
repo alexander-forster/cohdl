@@ -717,7 +717,7 @@ class PrepareAst:
                             rhs.aug_assign, getattr(value, inp.attr), rhs.value
                         )
                     else:
-                        cls_value = getattr(type(value), inp.attr)
+                        cls_value = getattr(ObjTraits.gettype(value), inp.attr)
 
                         if isinstance(cls_value, property):
                             fset = cls_value.fset
@@ -844,8 +844,8 @@ class PrepareAst:
             val_lhs = lhs.result()
             val_rhs = rhs.result()
 
-            type_lhs = type(val_lhs)
-            type_rhs = type(val_rhs)
+            type_lhs = ObjTraits.gettype(val_lhs)
+            type_rhs = ObjTraits.gettype(val_rhs)
 
             def overloaded_operator(default_op, reverse_op):
                 if ObjTraits.hasattr(type_lhs, default_op):
@@ -905,10 +905,10 @@ class PrepareAst:
 
             operand = cast(out.Expression, self.apply(inp.operand))
             arg = operand.result()
-            type_arg = type(arg)
+            type_arg = ObjTraits.gettype(arg)
 
             def overloaded_operator(fn_name):
-                assert ObjTraits.hasattr(arg, fn_name)
+                assert ObjTraits.hasattr(type_arg, fn_name)
                 call = self.subcall(ObjTraits.getattr(type_arg, fn_name), [arg], {})
 
                 call.add_bound_statement(operand)
@@ -942,66 +942,51 @@ class PrepareAst:
                 val_lhs = lhs.result()
                 val_rhs = rhs.result()
 
-                type_lhs = type(val_lhs)
-                type_rhs = type(val_rhs)
+                type_lhs = ObjTraits.gettype(val_lhs)
+                type_rhs = ObjTraits.gettype(val_rhs)
+
+                def evaluate(normal_name, reverse_name):
+                    first_result = self.subcall(
+                        ObjTraits.getattr(type_lhs, normal_name), [val_lhs, val_rhs], {}
+                    )
+
+                    if first_result.result() is NotImplemented:
+                        result = self.subcall(
+                            ObjTraits.getattr(type_rhs, reverse_name),
+                            [val_rhs, val_lhs],
+                            {},
+                        )
+                    else:
+                        result = first_result
+
+                    assert (
+                        result.result() is not NotImplemented
+                    ), f"operation '{operator}' not implemented for operands '{val_lhs}' and '{val_rhs}'"
+
+                    result.add_bound_statement(lhs)
+                    result.add_bound_statement(rhs)
+
+                    return result
 
                 if isinstance(operator, ast.Is):
                     return out.Value(val_lhs is val_rhs, [lhs, rhs])
                 elif isinstance(operator, ast.IsNot):
                     return out.Value(val_lhs is not val_rhs, [lhs, rhs])
+
                 elif isinstance(operator, ast.Eq):
-                    first_result = self.subcall(type_lhs.__eq__, [val_lhs, val_rhs], {})
-
-                    if first_result.result() is NotImplemented:
-                        result = self.subcall(type_rhs.__eq__, [val_rhs, val_lhs], {})
-                    else:
-                        result = first_result
+                    return evaluate("__eq__", "__eq__")
                 elif isinstance(operator, ast.NotEq):
-                    first_result = self.subcall(type_lhs.__ne__, [val_lhs, val_rhs], {})
-
-                    if first_result.result() is NotImplemented:
-                        result = self.subcall(type_rhs.__ne__, [val_rhs, val_lhs], {})
-                    else:
-                        result = first_result
+                    return evaluate("__ne__", "__ne__")
                 elif isinstance(operator, ast.Gt):
-                    first_result = self.subcall(type_lhs.__gt__, [val_lhs, val_rhs], {})
-
-                    if first_result.result() is NotImplemented:
-                        result = self.subcall(type_rhs.__lt__, [val_rhs, val_lhs], {})
-                    else:
-                        result = first_result
+                    return evaluate("__gt__", "__lt__")
                 elif isinstance(operator, ast.Lt):
-                    first_result = self.subcall(type_lhs.__lt__, [val_lhs, val_rhs], {})
-
-                    if first_result.result() is NotImplemented:
-                        result = self.subcall(type_rhs.__gt__, [val_rhs, val_lhs], {})
-                    else:
-                        result = first_result
+                    return evaluate("__lt__", "__gt__")
                 elif isinstance(operator, ast.GtE):
-                    first_result = self.subcall(type_lhs.__ge__, [val_lhs, val_rhs], {})
-
-                    if first_result.result() is NotImplemented:
-                        result = self.subcall(type_rhs.__le__, [val_rhs, val_lhs], {})
-                    else:
-                        result = first_result
+                    return evaluate("__ge__", "__le__")
                 elif isinstance(operator, ast.LtE):
-                    first_result = self.subcall(type_lhs.__le__, [val_lhs, val_rhs], {})
-
-                    if first_result.result() is NotImplemented:
-                        result = self.subcall(type_rhs.__ge__, [val_rhs, val_lhs], {})
-                    else:
-                        result = first_result
+                    return evaluate("__le__", "__ge__")
                 else:
                     raise AssertionError(f"operator {operator} not yet supported")
-
-                assert (
-                    result.result() is not NotImplemented
-                ), f"operation '{operator}' not implemented for operands '{val_lhs}' and '{val_rhs}'"
-
-                result.add_bound_statement(lhs)
-                result.add_bound_statement(rhs)
-
-                return result
 
             comparators = cast(
                 list[out.Expression],

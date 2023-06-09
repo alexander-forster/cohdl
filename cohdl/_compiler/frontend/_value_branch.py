@@ -248,6 +248,12 @@ class ObjTraits:
         )
 
     @staticmethod
+    def gettype(obj):
+        if isinstance(obj, _MergedBranch):
+            return obj.type()
+        return type(obj)
+
+    @staticmethod
     def getattr(obj, name: str):
         if isinstance(obj, _MergedBranch):
             return obj._getattr(name)
