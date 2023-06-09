@@ -9,10 +9,6 @@ from typing import TYPE_CHECKING
 #
 #
 
-_intrinsic(type)
-_intrinsic(id)
-_intrinsic(isinstance)
-_intrinsic(issubclass)
 _intrinsic(getattr)
 _intrinsic(hasattr)
 

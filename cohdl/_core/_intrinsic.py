@@ -198,6 +198,59 @@ def reset_pushed_replacement():
 #
 
 
+class _IsInstance:
+    def __init__(self, obj, type):
+        self.obj = obj
+        self.type = type
+
+
+class _IsSubclass:
+    def __init__(self, cls, type):
+        self.cls = cls
+        self.type = type
+
+
+class _Type:
+    def __init__(self, obj):
+        self.obj = obj
+
+
+class _Id:
+    def __init__(self, obj):
+        self.obj = obj
+
+
+_intrinsic(isinstance)
+_intrinsic(issubclass)
+_intrinsic(type)
+_intrinsic(id)
+
+
+@_intrinsic_replacement(isinstance)
+def isinstance_replacement(obj, type):
+    return _IsInstance(obj, type)
+
+
+@_intrinsic_replacement(issubclass)
+def issubclass_replacement(obj, type):
+    return _IsSubclass(obj, type)
+
+
+@_intrinsic_replacement(type)
+def type_replacement(obj):
+    return _Type(obj)
+
+
+@_intrinsic_replacement(id)
+def id_replacement(obj):
+    return _Id(obj)
+
+
+#
+#
+#
+
+
 class _BitSignalEvent:
     class Type(enum.Enum):
         RISING = enum.auto()

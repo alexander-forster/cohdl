@@ -27,6 +27,7 @@ from cohdl._core._intrinsic import (
     _BitSignalEvent,
     _BitSignalEventGroup,
 )
+from cohdl._core import _intrinsic
 
 from cohdl._core._primitive_type import is_primitive
 
@@ -240,6 +241,34 @@ class PrepareAst:
 
         if isinstance(result, range):
             return out.Value(result, [])
+
+        #
+        #
+        #
+
+        if isinstance(result, _intrinsic._IsInstance):
+            assert not isinstance(result.type, _MergedBranch)
+            if isinstance(result.type, tuple):
+                assert not any(isinstance(elem, _MergedBranch) for elem in result.type)
+
+            if isinstance(result.obj, _MergedBranch):
+                return out.Value(result.obj.isinstance(result.type), [])
+            return out.Value(isinstance(result.obj, result.type), [])
+
+        if isinstance(result, _intrinsic._IsSubclass):
+            if isinstance(result.cls, _MergedBranch):
+                return out.Value(result.cls.issubclass(result.type), [])
+            return out.Value(issubclass(result.cls, result.type), [])
+
+        if isinstance(result, _intrinsic._Type):
+            if isinstance(result.obj, _MergedBranch):
+                return out.Value(result.obj.type(), [])
+            return out.Value(type(result.obj), [])
+
+        if isinstance(result, _intrinsic._Id):
+            if isinstance(result.obj, _MergedBranch):
+                return out.Value(result.obj.id(), [])
+            return out.Value(id(result.obj), [])
 
         #
         #

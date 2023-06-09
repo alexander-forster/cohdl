@@ -48,6 +48,12 @@ class _ValueBranch:
         self.obj = obj
         self.hook = hook
 
+    def _type(self):
+        return _ValueBranch(self.hook, type(self.obj))
+
+    def _id(self):
+        return _ValueBranch(self.hook, id(self.obj))
+
     def __getitem__(self, args):
         return _ValueBranch(self.hook, self.obj.__getitem__(args))
 
@@ -175,8 +181,36 @@ class _MergedBranch:
             self.branches = branches
             self._cohdl_init_complete = True
 
+    def isinstance(self, types):
+        branch_results = [isinstance(branch.obj, types) for branch in self.branches]
+
+        all_results = all(branch_results)
+        any_result = any(branch_results)
+
+        assert (
+            all_results or not any_result
+        ), "the result of isinstance must be the same for all possible input objects"
+        return all_results
+
+    def issubclass(self, types):
+        branch_results = [issubclass(branch.obj, types) for branch in self.branches]
+
+        all_results = all(branch_results)
+        any_result = any(branch_results)
+
+        assert (
+            all_results or not any_result
+        ), "the result of issubclass must be the same for all possible input objects"
+        return all_results
+
+    def type(self):
+        return _MergedBranch([branch._type() for branch in self.branches])
+
+    def id(self):
+        return _MergedBranch([branch._id() for branch in self.branches])
+
     def _getitem(self, *args):
-        _MergedBranch([branch.__getitem__(*args) for branch in self.branches])
+        return _MergedBranch([branch.__getitem__(*args) for branch in self.branches])
 
     def _hasattr(self, name):
         return all(ObjTraits.hasattr(branch.obj, name) for branch in self.branches)
