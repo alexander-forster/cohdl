@@ -175,6 +175,9 @@ class PrepareAst:
         if not replacement.is_special_case:
             return out.Value(replacement.fn(*args, **kwargs), [])
 
+        if replacement.evaluate:
+            return self.subcall(replacement.fn, args, kwargs)
+
         if replacement.assignment_spec is not None:
             target = args[replacement.assignment_spec.nr_target]
             source = args[replacement.assignment_spec.nr_source]
@@ -657,6 +660,12 @@ class PrepareAst:
             value_expr = cast(out.Expression, self.apply(inp.value))
 
             with _return_stack.enter(value_expr.result(), inp.op):
+                return out.CodeBlock([value_expr, self.apply(inp.target)])
+
+        if isinstance(inp, ast.AnnAssign):
+            value_expr = cast(out.Expression, self.apply(inp.value))
+
+            with _return_stack.enter(value_expr.result()):
                 return out.CodeBlock([value_expr, self.apply(inp.target)])
 
         if isinstance(inp, ast.Nonlocal):

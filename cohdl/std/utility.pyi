@@ -1,21 +1,42 @@
 from __future__ import annotations
 
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, TypeGuard
 
-from cohdl._core import Bit, BitVector
+from cohdl._core import Bit, BitVector, Temporary
+
+T = TypeVar("T")
+U = TypeVar("U")
+
+class _TC(Generic[T]):
+    def __getitem__(self, t: type[U]) -> _TC[U]: ...
+    def __call__(self, arg) -> T | Temporary[T]:
+        """
+        `tc[T]` is a conversion utility function that creates
+        either a temporary or constant object of type `T` depending on the given argument.
+
+        When `arg` is type qualified (Signal/Variable or Temporary)
+        the return value is a new Temporary constructed from arg.
+        Otherwise a new constant is constructed using the expression `T(arg)`.
+
+        `tc[T]` is used to write code that is constant evaluated when
+        possible and only falls back to runtime variable temporaries
+        when necessary.
+        """
+
+tc = _TC()
+
+#
+#
+#
 
 def iscouroutinefunction(fn) -> bool: ...
-def instance_check(val, type) -> bool:
-    return isinstance(val, type)
-
+def instance_check(val, type: type[T]) -> TypeGuard[T]: ...
 def subclass_check(val, type) -> bool:
     return issubclass(val, type)
 
 #
 #
 #
-T = TypeVar("T")
-U = TypeVar("U")
 
 Option = TypeVar("Option")
 Condition = TypeVar("Condition")

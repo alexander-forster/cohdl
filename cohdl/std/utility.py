@@ -4,8 +4,39 @@ import inspect
 import typing
 
 from cohdl._core._type_qualifier import TypeQualifier, Temporary
-from cohdl._core import Bit, BitVector, select_with
+from cohdl._core import Bit, BitVector, select_with, evaluated
 from cohdl._core._intrinsic import _intrinsic
+
+
+class _TC:
+    def __init__(self, T=None) -> None:
+        self._T = T
+
+    def __call__(self, arg):
+        if self._T is None:
+            if isinstance(arg, TypeQualifier):
+                assert evaluated(), "expression only allowed in synthesizable contexts"
+                return Temporary(arg)
+            else:
+                return arg
+        else:
+            if isinstance(arg, TypeQualifier):
+                assert evaluated(), "expression only allowed in synthesizable contexts"
+                return Temporary[self._T](arg)
+            else:
+                return self._T(arg)
+
+    @_intrinsic
+    def __getitem__(self, T):
+        assert self._T is None, "redefining expression type not allowed"
+        return _TC(T)
+
+
+tc = _TC()
+
+#
+#
+#
 
 
 @_intrinsic

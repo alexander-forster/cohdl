@@ -310,6 +310,9 @@ class UnaryOp(Expression):
                 as_bool = Boolean(self._arg)
                 return as_bool.write(scope)
 
+            if self._op is self.Operator.ABS:
+                return f"abs({self._arg.write(scope)})"
+
             op = UnaryOp.operator_string[self._op]
             return f"{op}({self._arg.write(scope)})"
 
@@ -1431,6 +1434,7 @@ class ModuleScope(VhdlScope):
         "with",
         "xnor",
         "xor",
+        "default",
     }
 
     _additional_reserved = {

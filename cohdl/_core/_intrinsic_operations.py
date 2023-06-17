@@ -9,6 +9,7 @@ class UnaryOperator(enum.Enum):
     POS = enum.auto()
     INV = enum.auto()
     NOT = enum.auto()
+    ABS = enum.auto()
 
 
 class BinaryOperator(enum.Enum):

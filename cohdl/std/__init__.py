@@ -30,5 +30,7 @@ from . import axi
 from .sequential_context import SeqContext
 
 from . import utility
-from .utility import instance_check, subclass_check, iscouroutinefunction
+from .utility import tc, instance_check, subclass_check, iscouroutinefunction
 from .utility import check_type, select, choose_first, cond, check_return
+
+from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle

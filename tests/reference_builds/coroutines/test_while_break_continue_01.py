@@ -76,7 +76,7 @@ class Mock(MockBase):
 
 @cocotb_util.test()
 async def testbench_while_break_continue_01(dut: test_while_break_continue_01):
-    mock = Mock(dut, record=True)
+    mock = Mock(dut)
     mock.zero_inputs()
     mock.check()
 

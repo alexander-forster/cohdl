@@ -61,12 +61,27 @@ class Unsigned(BitVector):
 
         super().__init__(val)
 
-    def min(self) -> int:
+    @classmethod
+    @_intrinsic
+    def min_int(cls) -> int:
         # only implemented for symmetry with Signed
         return 0
 
-    def max(self) -> int:
-        return 2**self.width - 1
+    @classmethod
+    @_intrinsic
+    def max_int(cls) -> int:
+        return 2**cls.width - 1
+
+    @classmethod
+    @_intrinsic
+    def min(cls) -> Unsigned:
+        # only implemented for symmetry with Signed
+        return cls(cls.min_int())
+
+    @classmethod
+    @_intrinsic
+    def max(cls) -> Unsigned:
+        return cls(cls.max_int())
 
     def _assign(self, other):
         import cohdl
@@ -318,7 +333,7 @@ class Unsigned(BitVector):
         return bool(self.to_int() >= rhs)
 
     @_intrinsic
-    def resize(self, target_width: int | None, *, zeros: int = 0):
+    def resize(self, target_width: int | None = None, *, zeros: int = 0):
         if target_width is None:
             target_width = self.width + zeros
 

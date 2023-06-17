@@ -258,13 +258,33 @@ class TestValue:
 
 
 def run_cocotb_tests(
-    entity, file, module, *, no_build=False, build_files=[], extra_env=None
+    entity,
+    file,
+    module,
+    *,
+    no_build=False,
+    build_files=[],
+    extra_env=None,
+    relatilve_vhdl_sources=None,
+    vhdl_sources=None,
+    sim_args=None,
+    **kwargs,
 ):
     entity_name = entity.__name__
     local_dir = os.path.dirname(os.path.realpath(file))
     build_dir = f"{local_dir}/test_build"
     vhdl_path = f"{build_dir}/{entity_name}.vhd"
     sim_dir = f"{local_dir}/test_sim"
+
+    if sim_args is None:
+        sim_args = []
+
+    if vhdl_sources is None:
+        vhdl_sources = []
+
+    if relatilve_vhdl_sources is not None:
+        for path in relatilve_vhdl_sources:
+            vhdl_sources.append(f"{local_dir}/{path}")
 
     if not no_build:
         if pathlib.Path(build_dir).exists():
@@ -278,15 +298,17 @@ def run_cocotb_tests(
 
     simulator.run(
         simulator="ghdl",
-        sim_args=["--vcd=waveform.vcd"],
+        sim_args=["--vcd=waveform.vcd", *sim_args],
         sim_build=sim_dir,
         vhdl_sources=[
             vhdl_path,
             *[f"{build_dir}/{filename}" for filename in build_files],
+            *vhdl_sources,
         ],
         toplevel=entity_name,
         module=str(module),
         extra_env=extra_env,
+        **kwargs,
     )
 
 

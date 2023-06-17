@@ -10,7 +10,7 @@ from cohdl_testutil import cocotb_util
 from cohdl_testutil.cocotb_mock import MockBase
 
 
-class test_while_break_02(cohdl.Entity):
+class test_while_break_03(cohdl.Entity):
     clk = Port.input(Bit)
     reset = Port.input(Bit)
     state = Port.output(Unsigned[3], default=Null)
@@ -40,7 +40,7 @@ class test_while_break_02(cohdl.Entity):
 
 
 class Mock(MockBase):
-    def __init__(self, dut: test_while_break_02, *, record=False, no_assert=False):
+    def __init__(self, dut: test_while_break_03, *, record=False, no_assert=False):
         super().__init__(dut.clk, record=record, no_assert=no_assert)
         cv = cocotb_util.ConstraindValue
         self.reset = self.inpair(dut.reset, cv(1), "reset")
@@ -65,7 +65,7 @@ class Mock(MockBase):
 
 
 @cocotb_util.test()
-async def testbench_while_break_02(dut: test_while_break_02):
+async def testbench_while_break_03(dut: test_while_break_03):
     mock = Mock(dut)
     mock.zero_inputs()
     mock.check()
@@ -79,4 +79,4 @@ async def testbench_while_break_02(dut: test_while_break_02):
 
 class Unittest(unittest.TestCase):
     def test_base(self):
-        cocotb_util.run_cocotb_tests(test_while_break_02, __file__, self.__module__)
+        cocotb_util.run_cocotb_tests(test_while_break_03, __file__, self.__module__)

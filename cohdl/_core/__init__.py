@@ -6,7 +6,15 @@ from ._signed import Signed
 from ._integer import Integer
 from . import _enum as enum
 
-from ._type_qualifier import Signal, Port, Variable, Temporary, Generic, Attribute
+from ._type_qualifier import (
+    TypeQualifier,
+    Signal,
+    Port,
+    Variable,
+    Temporary,
+    Generic,
+    Attribute,
+)
 
 from ._context import sequential_context, concurrent_context, Block, Entity
 

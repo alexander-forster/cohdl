@@ -623,6 +623,11 @@ class TypeQualifier(metaclass=_TypeQualifier):
     #
 
     @_intrinsic
+    def __abs__(self):
+        result = self._value.__abs__()
+        return Temporary[type(result)](result)
+
+    @_intrinsic
     def __inv__(self):
         result = self._value.__inv__()
         return Temporary[type(result)](result)
@@ -916,6 +921,11 @@ class TypeQualifier(metaclass=_TypeQualifier):
     #
     # unary operators
     #
+
+    @_intrinsic_replacement(__abs__)
+    def _abs_replacement(self):
+        result = self.__abs__()
+        return intr_op._IntrinsicUnaryOp(intr_op.UnaryOperator.ABS, result, self)
 
     @_intrinsic_replacement(__inv__)
     def _inv_replacement(self):

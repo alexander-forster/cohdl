@@ -19,10 +19,15 @@ class _IntrinsicReplacement:
             self.nr_target = nr_target
             self.nr_source = nr_source
 
-    def __init__(self, fn, is_special_case, *, assignment_spec=None):
+    def __init__(self, fn, is_special_case, *, assignment_spec=None, evaluate=False):
         self.fn = fn
+
+        if evaluate:
+            assert is_special_case
+
         self.is_special_case = is_special_case
         self.assignment_spec = assignment_spec
+        self.evaluate = evaluate
 
 
 _intrinsic_functions = []
@@ -39,6 +44,7 @@ def _intrinsic_replacement(
     *,
     special_case=True,
     assignment_spec: tuple[int, int] | None = None,
+    evaluate=False,
 ):
     assert default_implementation in _intrinsic_functions
 
@@ -48,7 +54,7 @@ def _intrinsic_replacement(
     def helper(fn):
         assert default_implementation not in _intrinsic_replacements
         _intrinsic_replacements[default_implementation] = _IntrinsicReplacement(
-            fn, special_case, assignment_spec=assignment_spec
+            fn, special_case, assignment_spec=assignment_spec, evaluate=evaluate
         )
         return fn
 

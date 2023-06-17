@@ -68,13 +68,25 @@ class Signed(BitVector):
 
         return self.msb(self.width - exp).as_signed()
 
+    @classmethod
     @_intrinsic
-    def min(self) -> int:
-        return -(2 ** (self.width - 1))
+    def min_int(cls) -> int:
+        return -(2 ** (cls.width - 1))
 
+    @classmethod
     @_intrinsic
-    def max(self) -> int:
-        return 2 ** (self.width - 1) - 1
+    def max_int(cls) -> int:
+        return 2 ** (cls.width - 1) - 1
+
+    @classmethod
+    @_intrinsic
+    def min(cls) -> Signed:
+        return cls(cls.min_int())
+
+    @classmethod
+    @_intrinsic
+    def max(cls) -> Signed:
+        return cls(cls.max_int())
 
     @_intrinsic
     def _assign(self, other) -> None:
@@ -273,6 +285,13 @@ class Signed(BitVector):
     def __rshift__(self, rhs) -> Signed:
         val = self.to_int() >> int(rhs)
         return Signed[self.width](val)
+
+    @_intrinsic
+    def __abs__(self) -> Signed:
+        if self >= 0:
+            return Signed[self.width](self.to_int())
+        else:
+            return -self
 
     @_intrinsic
     def __neg__(self) -> Signed:

@@ -3,7 +3,21 @@ from __future__ import annotations
 import cohdl
 
 
-class AssignableType:
+class _MetaAssignableType(type):
+    @cohdl.consteval
+    def __str__(self):
+        if hasattr(self, "_class_str_"):
+            return self._class_str_()
+        return _MetaAssignableType.__repr__(self)
+
+    @cohdl.consteval
+    def __repr__(self):
+        if hasattr(self, "_class_repr_"):
+            return self._class_repr_()
+        return self.__name__
+
+
+class AssignableType(metaclass=_MetaAssignableType):
     def _assign_(self, source, mode: cohdl.AssignMode):
         raise AssertionError("_assign_ must be overwritten")
 

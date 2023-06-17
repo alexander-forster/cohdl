@@ -23,6 +23,7 @@ def setattr_replacement(__obj, __name, __value):
 
 _intrinsic(min)
 _intrinsic(max)
+_intrinsic(abs)
 
 
 @_intrinsic_replacement(min, special_case=False)
@@ -41,6 +42,11 @@ def max_replacement(*args):
 
     assert all(isinstance(arg, (int, float, str)) for arg in args)
     return max(args)
+
+
+@_intrinsic_replacement(abs, special_case=True, evaluate=True)
+def abs_replacement(arg):
+    return arg.__abs__()
 
 
 #
@@ -66,6 +72,30 @@ _intrinsic(int.__and__)
 _intrinsic(int.__or__)
 _intrinsic(int.__xor__)
 _intrinsic(int.__pow__)
+_intrinsic(int.__abs__)
+
+#
+# float methods
+#
+
+
+_intrinsic(float.__neg__)
+_intrinsic(float.__pos__)
+_intrinsic(float.__add__)
+_intrinsic(float.__sub__)
+_intrinsic(float.__mul__)
+_intrinsic(float.__truediv__)
+_intrinsic(float.__floordiv__)
+_intrinsic(float.__mod__)
+_intrinsic(float.__eq__)
+_intrinsic(float.__ne__)
+_intrinsic(float.__lt__)
+_intrinsic(float.__gt__)
+_intrinsic(float.__le__)
+_intrinsic(float.__ge__)
+_intrinsic(float.__bool__)
+_intrinsic(float.__pow__)
+_intrinsic(float.__abs__)
 
 #
 # bool methods
