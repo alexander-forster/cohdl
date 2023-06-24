@@ -201,7 +201,17 @@ class _TypeQualifier(type):
     #
 
 
-class TypeQualifier(metaclass=_TypeQualifier):
+class TypeQualifierBase:
+    @_intrinsic
+    def decay(val):
+        if isinstance(val, TypeQualifier):
+            return val._value
+        elif isinstance(val, TypeQualifierBase):
+            return val.decay()
+        return val
+
+
+class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @property
     def type(cls):
         return cls._Wrapped
@@ -209,12 +219,6 @@ class TypeQualifier(metaclass=_TypeQualifier):
     @property
     def qualifier(self):
         return self._Qualifier
-
-    @_intrinsic
-    def decay(val):
-        if isinstance(val, TypeQualifier):
-            return val._value
-        return val
 
     @property
     def width(self):

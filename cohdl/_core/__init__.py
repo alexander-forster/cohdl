@@ -7,6 +7,7 @@ from ._integer import Integer
 from . import _enum as enum
 
 from ._type_qualifier import (
+    TypeQualifierBase,
     TypeQualifier,
     Signal,
     Port,

@@ -9,6 +9,7 @@ from ._core import (
     Integer,
     Signed,
     Variable,
+    TypeQualifierBase,
     TypeQualifier,
     Signal,
     Temporary,

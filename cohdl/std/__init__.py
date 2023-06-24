@@ -13,9 +13,9 @@ from ._context import (
     Reset,
     Frequency,
     Period,
+    Duration,
 )
 
-Duration = Period
 
 ms = Period.milliseconds
 us = Period.microseconds

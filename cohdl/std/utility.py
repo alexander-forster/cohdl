@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import typing
 
-from cohdl._core._type_qualifier import TypeQualifier, Temporary
+from cohdl._core._type_qualifier import TypeQualifierBase, TypeQualifier, Temporary
 from cohdl._core import Bit, BitVector, select_with, evaluated
 from cohdl._core._intrinsic import _intrinsic
 
@@ -17,12 +17,16 @@ class _TC:
             if isinstance(arg, TypeQualifier):
                 assert evaluated(), "expression only allowed in synthesizable contexts"
                 return Temporary(arg)
+            elif isinstance(arg, TypeQualifierBase):
+                return TypeQualifierBase.decay(arg)
             else:
                 return arg
         else:
             if isinstance(arg, TypeQualifier):
                 assert evaluated(), "expression only allowed in synthesizable contexts"
                 return Temporary[self._T](arg)
+            elif isinstance(arg, TypeQualifierBase):
+                return TypeQualifierBase.decay(arg)
             else:
                 return self._T(arg)
 
@@ -45,11 +49,11 @@ def iscouroutinefunction(fn):
 
 
 def instance_check(val, type):
-    return isinstance(TypeQualifier.decay(val), type)
+    return isinstance(TypeQualifierBase.decay(val), type)
 
 
 def subclass_check(val, type):
-    return issubclass(TypeQualifier.decay(val), type)
+    return issubclass(TypeQualifierBase.decay(val), type)
 
 
 #

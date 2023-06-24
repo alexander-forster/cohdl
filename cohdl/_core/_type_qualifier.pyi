@@ -25,6 +25,9 @@ class Attribute:
     def __init__(self, value):
         self.value = value
 
+class TypeQualifierBase(typing.Generic[T]):
+    def decay(val): ...
+
 class TypeQualifier(typing.Generic[T]):
     @property
     def type(cls): ...

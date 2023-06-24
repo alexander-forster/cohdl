@@ -81,6 +81,9 @@ class Frequency:
 
         self._val = float(val)
 
+    def frequency(self) -> Frequency:
+        return self
+
     def period(self) -> Period:
         return Period(1 / self._val)
 
@@ -118,6 +121,9 @@ class Period:
     def frequency(self) -> Frequency:
         return self._freq
 
+    def period(self) -> Period:
+        return self
+
     def picoseconds(self):
         return Period._getter(self, 1e12)
 
@@ -135,6 +141,32 @@ class Period:
 
     def __eq__(self, other: Period):
         return self._freq == other._freq
+
+    def count_periods(
+        self, subperiod: Period, *, allowed_delta=1e-9, float_result=False
+    ):
+        self_ps = self.picoseconds()
+        other_ps = subperiod.picoseconds()
+
+        real_result = self_ps / other_ps
+
+        if float_result:
+            return real_result
+        else:
+            rounded = round(real_result)
+            assert abs(rounded) <= allowed_delta, "subperiod does not divide period"
+            return rounded
+
+    def __truediv__(self, other: int | float | Period):
+        if isinstance(other, Period):
+            self_ps = self.picoseconds()
+            other_ps = other.picoseconds()
+            return self_ps / other_ps
+        else:
+            return type(self).picoseconds(self.picoseconds() / other)
+
+
+Duration = Period
 
 
 class ClockEdge(enum.Enum):
@@ -199,6 +231,13 @@ class Clock:
 
     def is_falling_edge(self) -> bool:
         return self._edge is ClockEdge.FALLING
+
+    def duration_ticks(self, duration: Duration):
+        clk_duration = self._frequency.period()
+        return duration // clk_duration
+
+    def ticks(self, target_frequency: Frequency | Period):
+        ...
 
     def edge(self):
         return self._edge
