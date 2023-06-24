@@ -1712,6 +1712,10 @@ class PrepareAst:
         if isinstance(inp, ast.FunctionDef):
             bound_stmt = []
 
+            assert (
+                len(inp.decorator_list) == 0
+            ), "decorators on local functions not supported"
+
             def default_converter(x):
                 stmt = self.apply(x)
                 bound_stmt.append(stmt)

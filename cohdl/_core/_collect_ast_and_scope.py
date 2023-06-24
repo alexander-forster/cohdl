@@ -70,14 +70,12 @@ class _ClassifyNames(ast.NodeVisitor):
         self.used_names.update(sub_visitor.nonlocals())
 
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
-        assert (
-            len(node.decorator_list) == 0
-        ), "decorator on local function not supported"
-
         self.used_names.add(node.name)
         self.local_names.add(node.name)
 
         self._visit_fn_or_lambda(node)
+
+        self.generic_visit_list(node.decorator_list)
 
     def visit_Lambda(self, node: Lambda) -> Any:
         self._visit_fn_or_lambda(node)

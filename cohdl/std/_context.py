@@ -6,7 +6,7 @@ import inspect
 import enum
 
 import cohdl
-from cohdl import BitSignalEvent, SourceLocation
+from cohdl import BitSignalEvent, SourceLocation, Bit, Signal, evaluated
 
 
 class Reset:
@@ -40,25 +40,31 @@ class Reset:
 
     def active_high_signal(self) -> cohdl.Signal[cohdl.Bit]:
         if self._active_low:
-            out = cohdl.Signal[cohdl.Bit]()
+            if evaluated():
+                return ~self._signal
+            else:
+                out = cohdl.Signal[cohdl.Bit]()
 
-            @concurrent
-            def inv_reset():
-                out.next = ~self._signal
+                @concurrent
+                def inv_reset():
+                    out.next = ~self._signal
 
-            return out
+                return out
         else:
             return self._signal
 
     def active_low_signal(self) -> cohdl.Signal[cohdl.Bit]:
         if not self._active_low:
-            out = cohdl.Signal[cohdl.Bit]()
+            if evaluated():
+                return ~self._signal
+            else:
+                out = cohdl.Signal[cohdl.Bit]()
 
-            @concurrent
-            def inv_reset():
-                out.next = ~self._signal
+                @concurrent
+                def inv_reset():
+                    out.next = ~self._signal
 
-            return out
+                return out
         else:
             return self._signal
 
@@ -299,9 +305,10 @@ def block(fn: Callable | None = None, /, comment=None, attributes: dict | None =
 
 def concurrent(
     fn: Callable | None = None,
-    capture_lazy: bool = False,
+    *,
     comment=None,
     attributes: dict | None = None,
+    capture_lazy: bool = False,
 ):
     if attributes is None:
         attributes = {}
@@ -334,10 +341,13 @@ def concurrent(
 
 def sequential(
     trigger,
+    /,
     reset=None,
-    capture_lazy: bool = False,
+    *,
+    step_cond=None,
     comment=None,
     attributes: dict | None = None,
+    capture_lazy: bool = False,
 ):
     is_coro = inspect.iscoroutinefunction(trigger)
 
@@ -347,6 +357,9 @@ def sequential(
     if comment is not None:
         assert "comment" not in attributes
         attributes["comment"] = comment
+
+    if step_cond is None:
+        step_cond = lambda: True
 
     if inspect.isfunction(trigger) or is_coro:
         if is_coro:
@@ -362,7 +375,7 @@ def sequential(
 
             if is_coro:
                 cohdl.coroutine_step(coro)
-            else:
+            elif step_cond():
                 fn()
 
         wrapper.__name__ = trigger.__name__
@@ -389,12 +402,13 @@ def sequential(
             def wrapper():
                 cohdl.sensitivity.list(trigger.signal())
                 if trigger:
-                    cohdl.reset_pushed()
+                    if step_cond():
+                        cohdl.reset_pushed()
 
-                    if is_coro:
-                        cohdl.coroutine_step(coro)
-                    else:
-                        fn()
+                        if is_coro:
+                            cohdl.coroutine_step(coro)
+                        else:
+                            fn()
 
             wrapper.__name__ = fn.__name__
 
@@ -412,12 +426,13 @@ def sequential(
                 if reset:
                     cohdl.reset_context()
                 elif trigger:
-                    cohdl.reset_pushed()
+                    if step_cond():
+                        cohdl.reset_pushed()
 
-                    if is_coro:
-                        cohdl.coroutine_step(coro)
-                    else:
-                        fn()
+                        if is_coro:
+                            cohdl.coroutine_step(coro)
+                        else:
+                            fn()
 
             wrapper.__name__ = fn.__name__
 
@@ -435,7 +450,7 @@ def sequential(
                 if trigger:
                     if reset:
                         cohdl.reset_context()
-                    else:
+                    elif step_cond():
                         cohdl.reset_pushed()
                         if is_coro:
                             cohdl.coroutine_step(coro)
@@ -452,3 +467,129 @@ def sequential(
             )
 
     return helper
+
+
+def concurrent_assign(target, source):
+    @concurrent(comment="my comment for concurrent_assign")
+    def logic():
+        nonlocal target
+        target <<= source
+
+
+def concurrent_eval(target, fn, *args, **kwargs):
+    @concurrent
+    def logic():
+        nonlocal target
+        target <<= fn(*args, **kwargs)
+
+
+def concurrent_call(fn, *args, **kwargs):
+    @concurrent
+    def logic():
+        fn(*args, **kwargs)
+
+
+class Context:
+    def __init__(self, clk: Clock, reset: Reset | None = None, *, step_cond=None):
+        self._clk = clk
+        self._reset = reset
+        self._step_cond = step_cond
+
+    def clk(self):
+        return self._clk
+
+    def reset(self):
+        return self._reset
+
+    def step_cond(self):
+        return self._step_cond
+
+    def with_params(
+        self, *, clk: Clock | None = None, reset: Reset | None = None, step_cond=None
+    ):
+        return Context(
+            clk=self._clk if clk is None else clk,
+            reset=self._reset if reset is None else reset,
+            step_cond=self._step_cond if step_cond is None else step_cond,
+        )
+
+    def or_reset(
+        self,
+        cond: Bit | None = None,
+        *,
+        expr=None,
+        active_low: bool | None = None,
+        is_async: bool | None = None,
+    ):
+        combined_reset = Signal[Bit]()
+
+        if cond is not None:
+            assert expr is None
+            expr = lambda: cond
+        else:
+            assert expr is not None
+
+        if self._reset is None:
+
+            @concurrent
+            def logic():
+                nonlocal combined_reset
+                combined_reset <<= expr()
+
+        else:
+            active_low = (
+                active_low if active_low is not None else self._reset.is_active_low()
+            )
+            is_async = is_async if is_async is not None else self._reset.is_async()
+
+            @concurrent
+            def logic():
+                nonlocal combined_reset
+                combined_reset <<= self._reset.active_high_signal() or expr()
+
+        return Context(
+            self._clk,
+            Reset(combined_reset, active_low=active_low, is_async=is_async),
+        )
+
+    def and_reset(
+        self,
+        cond: Bit | None = None,
+        *,
+        expr=None,
+        active_low: bool | None = None,
+        is_async: bool | None = None,
+    ):
+        combined_reset = Signal[Bit]()
+
+        if cond is not None:
+            assert expr is None
+            expr = lambda: cond
+        else:
+            assert expr is not None
+
+        if self._reset is None:
+
+            @concurrent
+            def logic():
+                nonlocal combined_reset
+                combined_reset <<= expr()
+
+        else:
+            active_low = (
+                active_low if active_low is not None else self._reset.is_active_low()
+            )
+            is_async = is_async if is_async is not None else self._reset.is_async()
+
+            @concurrent
+            def logic():
+                nonlocal combined_reset
+                combined_reset <<= self._reset.active_high_signal() and expr()
+
+        return Context(
+            self._clk,
+            Reset(combined_reset, active_low=active_low, is_async=is_async),
+        )
+
+    def __call__(self, fn):
+        return sequential(self._clk, self._reset, step_cond=self._step_cond)(fn)

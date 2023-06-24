@@ -5,7 +5,7 @@ from typing import Callable, overload, TypeVar
 import enum
 
 import cohdl
-from cohdl import BitSignalEvent, SourceLocation
+from cohdl import BitSignalEvent, SourceLocation, Bit, Signal
 
 T = TypeVar("T")
 
@@ -252,14 +252,181 @@ def block(
 ): ...
 def concurrent(
     fn: Callable | None = None,
-    capture_lazy: bool = False,
-    comment=None,
+    *,
+    comment: str | None = None,
     attributes: dict | None = None,
-): ...
+    capture_lazy: bool = False,
+):
+    """
+    turns the decorated function into a synthesizeable concurrent context
+
+    When a `comment` is set it will be added to the VHDL representation
+    before the converted logic.
+
+    For now the parameters `attributes` and `capture_lazy` are only used
+    internally by cohdl.
+    """
+
 def sequential(
-    trigger,
-    reset=None,
-    capture_lazy: bool = False,
-    comment=None,
+    clk: Clock,
+    /,
+    reset: Reset | None = None,
+    *,
+    step_cond=None,
+    comment: str | None = None,
     attributes: dict | None = None,
-): ...
+    capture_lazy: bool = False,
+):
+    """
+    turns the decorated function into a synthesizable sequential context
+    equivalent to a VHDL process
+
+    The generated process has roughly the following structure.
+
+    if `clk`:
+       if `reset`:
+           reset_context()
+       elif `step_cond`():
+           # run decorated function
+
+    For asynchronous resets the order of `if reset` and `if clk` is swapped.
+    If no `step_cond` is defined it is assumed to evaluate to true.
+
+    When a `comment` is set it will be added to the VHDL representation
+    before the converted process.
+
+    For now the parameters `attributes` and `capture_lazy` are only used
+    internally by cohdl.
+    """
+
+def concurrent_assign(target, source):
+    """
+    signals assigns `source` to `target` in a concurrent context
+    """
+
+def concurrent_eval(target, fn, *args, **kwargs):
+    """
+    calls `fn` with the given `args`/`kwargs` in a concurrent context
+    and signal assigns the result to `target`
+    """
+
+def concurrent_call(fn, *args, **kwargs):
+    """
+    calls `fn` with the given `args`/`kwargs` in a concurrent context
+    """
+
+class Context:
+    """
+    helper type that wraps the arguments of std.sequential in a single object
+    """
+
+    def __init__(
+        self,
+        clk: Clock,
+        reset: Reset | None = None,
+        *,
+        step_cond: Callable[[], bool] | None = None,
+    ):
+        """
+        creates an instance of Context
+
+        when applied to a function it is equivalent to
+        | std.sequential(`clk`, `reset`, step_cond=`step_cond`)
+        """
+    def clk(self) -> Clock:
+        """
+        returns the instance of Clock
+        """
+    def reset(self) -> Reset | None:
+        """
+        returns the instance of Reset
+        """
+    def step_cond(self) -> Callable[[], bool] | None:
+        """
+        returns the step cond expression of the context
+        """
+    def with_params(
+        self, *, clk: Clock | None = None, reset: Reset | None = None, step_cond=None
+    ) -> Context:
+        """
+        returns a copy of self with all supplied parameters changed
+        """
+    @overload
+    def or_reset(
+        self,
+        cond: Bit | None = None,
+        *,
+        active_low: bool | None = None,
+        is_async: bool | None = None,
+    ) -> Context:
+        """
+        Returns a copy of self with the reset condition set to the
+        result of ORing `cond` with self.reset().
+
+        If self.reset() is None `cond` is used as the sole reset condition.
+
+        When `async_low` and/or `is_async` are specified they
+        define the reset behavior of the new context.
+        Otherwise these values are inherited from self.reset().
+        """
+    @overload
+    def or_reset(
+        self,
+        *,
+        expr=None,
+        active_low: bool | None = None,
+        is_async: bool | None = None,
+    ) -> Context:
+        """
+        Returns a copy of self with the reset condition set to the
+        result of ORing `expr()` with self.reset().
+        `expr` is a callable taking no arguments and evaluated in a concurrent context.
+
+        If self.reset() is None `expr()` is used as the sole reset condition.
+
+        When `async_low` and/or `is_async` are specified they
+        define the reset behavior of the new context.
+        Otherwise these values are inherited from self.reset().
+        """
+    @overload
+    def and_reset(
+        self,
+        cond: Bit | None = None,
+        *,
+        active_low: bool | None = None,
+        is_async: bool | None = None,
+    ) -> Context:
+        """
+        Returns a copy of self with the reset condition set to the
+        result of ANDing `cond` with self.reset().
+
+        If self.reset() is None `cond` is used as the sole reset condition.
+
+        When `async_low` and/or `is_async` are specified they
+        define the reset behavior of the new context.
+        Otherwise these values are inherited from self.reset().
+        """
+    @overload
+    def and_reset(
+        self,
+        *,
+        expr=None,
+        active_low: bool | None = None,
+        is_async: bool | None = None,
+    ) -> Context:
+        """
+        Returns a copy of self with the reset condition set to the
+        result of ANDing `expr()` with self.reset().
+        `expr` is a callable taking no arguments and evaluated in a concurrent context.
+
+        If self.reset() is None `expr()` is used as the sole reset condition.
+
+        When `async_low` and/or `is_async` are specified they
+        define the reset behavior of the new context.
+        Otherwise these values are inherited from self.reset().
+        """
+    def __call__(self, fn):
+        """
+        __call__ is defined to be used as a decorator
+        that turns the function it is applied to into a sequential context
+        """
