@@ -811,8 +811,8 @@ class PrepareAst:
 
             for val_result in val_results:
                 # strings are not allowed in boolean contexts because the difference
-                # in the expected behaviour in python (only the empty string evaluates to False)
-                # and CoHDL (BitVector literals containing only zeros evalue to False) could leed to confusing results
+                # in the expected behavior in python (only the empty string evaluates to False)
+                # and CoHDL (BitVector literals containing only zeros evaluate to False) could lead to confusing results
                 assert not isinstance(
                     val_result, str
                 ), "str cannot be used in boolean contexts"

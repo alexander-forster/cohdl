@@ -3,9 +3,16 @@ from __future__ import annotations
 import inspect
 import typing
 
-from cohdl._core._type_qualifier import TypeQualifierBase, TypeQualifier, Temporary
-from cohdl._core import Bit, BitVector, select_with, evaluated
+from cohdl._core._type_qualifier import (
+    TypeQualifierBase,
+    TypeQualifier,
+    Temporary,
+    Signal,
+)
+from cohdl._core import Bit, BitVector, Unsigned, select_with, evaluated, true
 from cohdl._core._intrinsic import _intrinsic
+
+from ._context import Duration, Context
 
 
 class _TC:
@@ -185,3 +192,48 @@ def stretch(val: Bit | BitVector, factor: int):
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
     assert old.width == new.width
     return (old & ~mask) | (new & mask)
+
+
+#
+#
+#
+
+
+@_intrinsic
+def max_int(arg: int | Unsigned):
+    if isinstance(arg, int):
+        return arg
+    else:
+        return TypeQualifierBase.decay(arg).max_int()
+
+
+@_intrinsic
+def _is_one(val):
+    x = isinstance(val, int) and val == 1
+    return x
+
+
+async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = False):
+    if isinstance(duration, Duration):
+        ctx = Context.current()
+        assert (
+            ctx is not None
+        ), "wait_for can only infer the clock in sequential contexts created with std.Context"
+        cnt = duration.count_periods(ctx.clk().period())
+    else:
+        cnt = duration
+
+    if allow_zero:
+        if duration == 0:
+            return
+    else:
+        assert (
+            cnt > 0
+        ), "waiting for 0 ticks only possible when allow_zero is set to True"
+
+    if _is_one(cnt):
+        await true
+    else:
+        counter = Signal[Unsigned.upto(max_int(cnt - 1))](cnt - 1)
+        while counter:
+            counter <<= counter - 1

@@ -497,12 +497,11 @@ class Await(Expression):
 
 class Call(Expression):
     def __init__(self, code: CodeBlock):
-        if code.returns():
-            assert code.returns_always()
-
         self._code = code
-
         result = _MergedBranch([stmt.branch() for stmt in code.return_paths()])
+
+        if code.returns() and result is not None:
+            assert code.returns_always()
 
         super().__init__(result)
 

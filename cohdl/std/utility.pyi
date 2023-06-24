@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import TypeVar, Generic, TypeGuard
+from typing import TypeVar, Generic, TypeGuard, overload
 
-from cohdl._core import Bit, BitVector, Temporary
+from cohdl._core import Bit, BitVector, Temporary, Unsigned
+
+from ._context import Duration
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -106,3 +108,35 @@ def binary_fold(fn, first, *args): ...
 def concat(first, *args) -> BitVector: ...
 def stretch(val: Bit | BitVector, factor: int) -> BitVector: ...
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector: ...
+
+#
+#
+#
+
+def max_int(arg: int | Unsigned) -> int:
+    """
+    returns the largest possible runtime value of `arg`
+    for Unsigned values this is 2**width-1
+    since integers are runtime constant they are returned unchanged
+    """
+
+@overload
+async def wait_for(duration: int | Unsigned, *, allow_zero: bool = False) -> None:
+    """
+    wait for a given number of ticks
+
+    To avoid a runtime check and logic duplication for the rarely needed
+    case of waiting zero ticks, `duration` wait_for does not allow
+    a value of 0. This can be changed using `allow_zero`.
+    """
+
+@overload
+async def wait_for(duration: Duration) -> None:
+    """
+    wait for a given time duration
+
+    wait_for uses `std.Context.current()` to determine the clock period
+    of the enclosing synthesizable context and calculates the needed number
+    of wait cycles from it. Because of that this function can only be
+    used in contexts defined with std.Context.
+    """

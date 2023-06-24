@@ -229,6 +229,7 @@ class Clock:
     def __init__(
         self,
         clk_signal: cohdl.Signal[cohdl.Bit],
+        *
         active_edge: ClockEdge = ClockEdge.RISING,
         frequency: Frequency | int | None = None,
         period: Period | int | None = None,
@@ -320,6 +321,12 @@ class Context:
     helper type that wraps the arguments of std.sequential in a single object
     """
 
+    @staticmethod
+    def current() -> Context | None:
+        """
+        returns the currently use context
+        or None when no such context exists
+        """
     def __init__(
         self,
         clk: Clock,

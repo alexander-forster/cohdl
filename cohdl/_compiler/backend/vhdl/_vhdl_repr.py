@@ -462,7 +462,7 @@ class Assert(Statement):
     def write(self, scope: VhdlScope) -> str:
         if self._message is None:
             return f"assert {self._test.write(scope)};"
-        return f'assert {self._test.write(scope)}, "{self._message}";'
+        return f'assert {self._test.write(scope)} report "{self._message}";'
 
 
 #

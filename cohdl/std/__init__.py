@@ -35,6 +35,14 @@ from .sequential_context import SeqContext
 
 from . import utility
 from .utility import tc, instance_check, subclass_check, iscouroutinefunction
-from .utility import check_type, select, choose_first, cond, check_return
+from .utility import (
+    check_type,
+    select,
+    choose_first,
+    cond,
+    check_return,
+    wait_for,
+    max_int,
+)
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle

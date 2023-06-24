@@ -6,7 +6,7 @@ import inspect
 import enum
 
 import cohdl
-from cohdl import BitSignalEvent, SourceLocation, Bit, Signal, evaluated
+from cohdl import BitSignalEvent, SourceLocation, Bit, Signal, evaluated, consteval
 
 
 class Reset:
@@ -74,11 +74,13 @@ class Reset:
 
 class Frequency:
     @staticmethod
+    @consteval
     def _getter(arg, factor):
         if isinstance(arg, Frequency):
             return arg._val / factor
         return Frequency(arg * factor)
 
+    @consteval
     def __init__(self, val: int | float | Frequency | Period):
         if isinstance(val, Period):
             val = val.frequency()
@@ -87,35 +89,44 @@ class Frequency:
 
         self._val = float(val)
 
+    @consteval
     def frequency(self) -> Frequency:
         return self
 
+    @consteval
     def period(self) -> Period:
         return Period(1 / self._val)
 
+    @consteval
     def gigahertz(self) -> float:
         return Frequency._getter(self, 1e9)
 
+    @consteval
     def megahertz(self) -> float:
         return Frequency._getter(self, 1e6)
 
+    @consteval
     def kilohertz(self) -> float:
         return Frequency._getter(self, 1e3)
 
+    @consteval
     def hertz(self) -> float:
         return Frequency._getter(self, 1)
 
+    @consteval
     def __eq__(self, other: Frequency):
         return self._val == other._val
 
 
 class Period:
     @staticmethod
+    @consteval
     def _getter(arg, factor):
         if isinstance(arg, Period):
             return factor / arg._freq._val
         return Period(arg / factor)
 
+    @consteval
     def __init__(self, val: int | float | Frequency | Period):
         if isinstance(val, Period):
             self._freq = val._freq
@@ -124,30 +135,39 @@ class Period:
         else:
             self._freq = Frequency(1 / val)
 
+    @consteval
     def frequency(self) -> Frequency:
         return self._freq
 
+    @consteval
     def period(self) -> Period:
         return self
 
+    @consteval
     def picoseconds(self):
         return Period._getter(self, 1e12)
 
+    @consteval
     def nanoseconds(self):
         return Period._getter(self, 1e9)
 
+    @consteval
     def microseconds(self):
         return Period._getter(self, 1e6)
 
+    @consteval
     def milliseconds(self):
         return Period._getter(self, 1e3)
 
+    @consteval
     def seconds(self):
         return Period._getter(self, 1)
 
+    @consteval
     def __eq__(self, other: Period):
         return self._freq == other._freq
 
+    @consteval
     def count_periods(
         self, subperiod: Period, *, allowed_delta=1e-9, float_result=False
     ):
@@ -160,9 +180,12 @@ class Period:
             return real_result
         else:
             rounded = round(real_result)
-            assert abs(rounded) <= allowed_delta, "subperiod does not divide period"
+            assert (
+                abs(rounded - real_result) <= allowed_delta
+            ), "subperiod does not divide period"
             return rounded
 
+    @consteval
     def __truediv__(self, other: int | float | Period):
         if isinstance(other, Period):
             self_ps = self.picoseconds()
@@ -181,6 +204,7 @@ class ClockEdge(enum.Enum):
     FALLING = enum.auto()
     BOTH = enum.auto()
 
+    @consteval
     def event_type(self) -> BitSignalEvent.Type:
         if self is ClockEdge.RISING:
             return BitSignalEvent.Type.RISING
@@ -198,6 +222,7 @@ class Clock:
     def __init__(
         self,
         clk_signal: cohdl.Signal[cohdl.Bit],
+        *,
         active_edge: ClockEdge = ClockEdge.RISING,
         frequency: Frequency | int | None = None,
         period: Period | int | None = None,
@@ -242,9 +267,6 @@ class Clock:
         clk_duration = self._frequency.period()
         return duration // clk_duration
 
-    def ticks(self, target_frequency: Frequency | Period):
-        ...
-
     def edge(self):
         return self._edge
 
@@ -265,21 +287,29 @@ class Clock:
 
     def rising(self) -> Clock:
         return Clock(
-            self._signal, ClockEdge.RISING, self._frequency, self._duty, self._phase
+            self._signal,
+            active_edge=ClockEdge.RISING,
+            frequency=self._frequency,
+            duty=self._duty,
+            phase=self._phase,
         )
 
     def falling(self) -> Clock:
         return Clock(
             self._signal,
-            ClockEdge.FALLING,
-            self._frequency,
-            self._duty,
-            self._phase,
+            active_edge=ClockEdge.FALLING,
+            frequency=self._frequency,
+            duty=self._duty,
+            phase=self._phase,
         )
 
     def both(self) -> Clock:
         return Clock(
-            self._signal, ClockEdge.BOTH, self._frequency, self._duty, self._phase
+            self._signal,
+            active_edge=ClockEdge.BOTH,
+            frequency=self._frequency,
+            duty=self._duty,
+            phase=self._phase,
         )
 
 
@@ -489,7 +519,27 @@ def concurrent_call(fn, *args, **kwargs):
         fn(*args, **kwargs)
 
 
+_current_context: Context | None = None
+
+
 class Context:
+    @staticmethod
+    @consteval
+    def current() -> Context | None:
+        return _current_context
+
+    @staticmethod
+    @consteval
+    def _enter_context(ctx: Context):
+        global _current_context
+        _current_context = ctx
+
+    @staticmethod
+    @consteval
+    def _exit_context():
+        global _current_context
+        _current_context = None
+
     def __init__(self, clk: Clock, reset: Reset | None = None, *, step_cond=None):
         self._clk = clk
         self._reset = reset
@@ -592,4 +642,18 @@ class Context:
         )
 
     def __call__(self, fn):
-        return sequential(self._clk, self._reset, step_cond=self._step_cond)(fn)
+        if inspect.iscoroutinefunction(fn):
+
+            async def context_fn():
+                self._enter_context(self)
+                await fn()
+                self._exit_context()
+
+        else:
+
+            def context_fn():
+                self._enter_context(self)
+                fn()
+                self._exit_context()
+
+        return sequential(self._clk, self._reset, step_cond=self._step_cond)(context_fn)
