@@ -63,6 +63,9 @@ class ConstraindValue:
 
         self.assign(value)
 
+    def copy(self):
+        return ConstraindValue(self.width, self.value, default=self.default)
+
     def reset(self):
         if self.default is not None:
             self.assign(self.default)

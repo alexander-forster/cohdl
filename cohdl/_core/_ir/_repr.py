@@ -919,9 +919,11 @@ class _State(Statement):
 
         def apply_alias(obj, access: AccessFlags):
             # replace all reads from aliased signals with replacement
-            if access is AccessFlags.READ:
-                if obj in alias_map:
-                    return alias_map[obj]
+            if access is AccessFlags.READ and hasattr(obj, "_root"):
+                if obj._root in alias_map:
+                    return Temporary[obj.type](
+                        obj._value, _root=alias_map[obj._root], _ref_spec=obj._ref_spec
+                    )
             return obj
 
         self._code.visit_objects(apply_alias)

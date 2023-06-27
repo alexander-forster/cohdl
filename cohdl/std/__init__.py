@@ -43,6 +43,8 @@ from .utility import (
     check_return,
     wait_for,
     max_int,
+    InShiftRegister,
+    OutShiftRegister,
 )
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle

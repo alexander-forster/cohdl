@@ -9,7 +9,7 @@ from cohdl._core._type_qualifier import (
     Temporary,
     Signal,
 )
-from cohdl._core import Bit, BitVector, Unsigned, select_with, evaluated, true
+from cohdl._core import Bit, BitVector, Unsigned, select_with, evaluated, true, Null
 from cohdl._core._intrinsic import _intrinsic
 
 from ._context import Duration, Context
@@ -237,3 +237,86 @@ async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = Fa
         counter = Signal[Unsigned.upto(max_int(cnt - 1))](cnt - 1)
         while counter:
             counter <<= counter - 1
+
+
+class OutShiftRegister:
+    def __init__(self, src: BitVector, msb_first=False):
+        self._msb_first = msb_first
+
+        if msb_first:
+            self._data = Signal(src @ Bit(True), name="shift_out")
+        else:
+            self._data = Signal(Bit(True) @ src, name="shift_out")
+
+    def set_data(self, data):
+        assert len(data) == len(self._data) - 1
+        if self._msb_first:
+            self._data <<= Signal(data @ Bit(True))
+        else:
+            self._data <<= Signal(Bit(True) @ data)
+
+    async def shift_all(self, target: Bit, shift_delayed=False):
+        if not shift_delayed:
+            target <<= self.shift()
+
+        while not self.empty():
+            target <<= self.shift()
+
+    def empty(self):
+        if self._msb_first:
+            return not self._data.msb(rest=1)
+        else:
+            return not self._data.lsb(rest=1)
+
+    def shift(self):
+        if self._msb_first:
+            self._data <<= self._data.lsb(rest=1) @ Bit(0)
+            return self._data.msb()
+        else:
+            self._data <<= Bit(0) @ self._data.msb(rest=1)
+            return self._data.lsb()
+
+
+class InShiftRegister:
+    def __init__(self, len: int, msb_first=False):
+        self._msb_first = msb_first
+        self._len = len
+
+        if msb_first:
+            self._data = Signal(BitVector[len](Null) @ Bit(True))
+        else:
+            self._data = Signal(Bit(True) @ BitVector[len](Null))
+
+    async def shift_all(self, src: Bit, shift_delayed=False):
+        if not shift_delayed:
+            self.shift(src)
+
+        while not self.full():
+            self.shift(src)
+
+        return self.data()
+
+    def clear(self):
+        if self._msb_first:
+            self._data <<= BitVector[self._len](Null) @ Bit(True)
+        else:
+            self._data <<= Bit(True) @ BitVector[self._len](Null)
+
+    def full(self):
+        if self._msb_first:
+            return self._data.msb().copy()
+        else:
+            return self._data.lsb().copy()
+
+    def shift(self, src: Bit):
+        assert not self.full()
+        if self._msb_first:
+            self._data <<= self._data.lsb(rest=1) @ src
+        else:
+            self._data <<= src @ self._data.msb(rest=1)
+
+    def data(self):
+        if self._msb_first:
+            return self._data.lsb(rest=1).copy()
+        else:
+            return self._data.msb(rest=1).copy()

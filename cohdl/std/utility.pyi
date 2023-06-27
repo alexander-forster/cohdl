@@ -140,3 +140,79 @@ async def wait_for(duration: Duration) -> None:
     of wait cycles from it. Because of that this function can only be
     used in contexts defined with std.Context.
     """
+
+class OutShiftRegister:
+    def __init__(self, src: BitVector, msb_first=False):
+        """
+        Initializes a shift register with the current state of `src`.
+        `msb_first` defines the order in which the bits will be
+        shifted out of the register.
+        """
+    def set_data(self, data: BitVector):
+        """
+        Reinitialize the shift register with the given data
+        `data` must have the same width as `src` in __init__
+
+        Warning: setting data is a signal assignment
+        and will be overwritten if `shift` is called
+        after `set_data` in the same clock cycle.
+        """
+    async def shift_all(self, target: Bit, shift_delayed=True):
+        """
+        Shift one bit per clock cycle into target until
+        the shift register is empty.
+        When `shift_delayed` is set to False shifting starts with
+        a delay of one clock cycle
+        """
+    def empty(self):
+        """
+        Returns True when all bits have been shifted out of the register
+        """
+    def shift(self):
+        """
+        Shifts the register by one bit
+        and returns the state of the shifted out bit.
+
+        This method can only be called once per clock cycle
+        and may not be mixed with `shift_all`.
+        """
+
+class InShiftRegister:
+    def __init__(self, len: int, msb_first=False):
+        """
+        Initializes an empty shift register of length `len`.
+        `msb_first` defines the order in which the bits will be
+        shifted out of the register.
+        """
+    async def shift_all(self, src: Bit, shift_delayed=False):
+        """
+        Shift the state of `src` into the shift register
+        until it is full.
+        When `shift_delayed` is set to True shifting starts with
+        a delay of one clock cycle.
+        """
+    def clear(self):
+        """
+        Reinitialize the shift register.
+
+        Warning: clearing is a signal assignment
+        and will be overwritten if `shift` is called
+        after `clear` in the same clock cycle.
+        """
+    def full(self):
+        """
+        Returns True when `len` bits of data have been
+        shifted into the register.
+        """
+    def shift(self, src: Bit):
+        """
+        Shifts one bit from `src` into the register.
+
+        This method can only be called once per clock cycle
+        and may not be mixed with `shift_all`.
+        """
+    def data(self):
+        """
+        Returns the deserialized data.
+        This call is only valid when the register is full.
+        """

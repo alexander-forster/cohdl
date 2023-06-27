@@ -521,7 +521,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic
     def __rmatmul__(self, other):
-        result = _decay(other).__rmatmul__(self._value)
+        result = _decay(other).__matmul__(self._value)
         return Temporary[type(result)](result)
 
     #
