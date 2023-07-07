@@ -1061,7 +1061,20 @@ class StatemachineContext:
         if len(ctx._states) == 0:
             return CodeBlock([], None)
         elif len(ctx._states) == 1:
-            return ctx._states[0].code()
+            # when the statemachine consists of only one state,
+            # it can be treated as a normal code block
+            # no transition logic is needed
+
+            code = ctx._states[0].code()
+
+            def remove_transitions(stmt):
+                if isinstance(stmt, _Transition):
+                    return Nop()
+                return stmt
+
+            code.visit(remove_transitions)
+
+            return code
 
         # if a statemachine contains multiple states
         # add a transition back to the first state to all code blocks, that reach the end

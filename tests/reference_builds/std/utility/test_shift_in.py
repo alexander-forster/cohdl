@@ -15,10 +15,10 @@ class test_shift_in(cohdl.Entity):
 
     bit_inp = Port.input(Bit)
 
-    res_in = Port.output(BitVector[8])
-    res_in_delay = Port.output(BitVector[8])
-    res_in_msb = Port.output(BitVector[8])
-    res_in_msb_delay = Port.output(BitVector[8])
+    res_in = Port.output(BitVector[5])
+    res_in_delay = Port.output(BitVector[5])
+    res_in_msb = Port.output(BitVector[5])
+    res_in_msb_delay = Port.output(BitVector[5])
 
     def architecture(self):
         clk = std.Clock(self.clk)
@@ -26,7 +26,7 @@ class test_shift_in(cohdl.Entity):
         @std.sequential(clk)
         async def proc_in():
             await self.start
-            reg = std.InShiftRegister(8)
+            reg = std.InShiftRegister(5)
             self.res_in <<= await reg.shift_all(self.bit_inp)
             reg.clear()
             await self.start
@@ -38,7 +38,7 @@ class test_shift_in(cohdl.Entity):
         @std.sequential(clk)
         async def proc_in_delay():
             await self.start
-            reg = std.InShiftRegister(8)
+            reg = std.InShiftRegister(5)
             self.res_in_delay <<= await reg.shift_all(self.bit_inp, shift_delayed=True)
             reg.clear()
             await self.start
@@ -49,7 +49,7 @@ class test_shift_in(cohdl.Entity):
         @std.sequential(clk)
         async def proc_in_msb():
             await self.start
-            reg = std.InShiftRegister(8, msb_first=True)
+            reg = std.InShiftRegister(5, msb_first=True)
             self.res_in_msb <<= await reg.shift_all(self.bit_inp)
             reg.clear()
             await self.start
@@ -61,7 +61,7 @@ class test_shift_in(cohdl.Entity):
         @std.sequential(clk)
         async def proc_in_msb_delay():
             await self.start
-            reg = std.InShiftRegister(8, msb_first=True)
+            reg = std.InShiftRegister(5, msb_first=True)
             self.res_in_msb_delay <<= await reg.shift_all(
                 self.bit_inp, shift_delayed=True
             )
@@ -79,7 +79,7 @@ class test_shift_in(cohdl.Entity):
 
 @cocotb_util.test()
 async def testbench_shift(dut: test_shift_in):
-    gen = cocotb_util.ConstrainedGenerator(9)
+    gen = cocotb_util.ConstrainedGenerator(6)
 
     async def wait_for(n):
         for _ in range(n):
@@ -88,21 +88,20 @@ async def testbench_shift(dut: test_shift_in):
     seq = cocotb_util.SequentialTest(dut.clk)
     dut.start.value = 0
 
-    for _ in range(32):
-        val = gen.random()
+    for val in gen.all():
         shifted = val.copy()
         await wait_for(5)
         dut.start.value = 1
 
-        for _ in range(10):
+        for _ in range(7):
             dut.bit_inp.value = shifted[0].as_int()
             shifted = shifted >> 1
             await wait_for(1)
             dut.start.value = 0
         await wait_for(3)
 
-        slice = val.get_slice(0, 7)
-        slice_delayed = val.get_slice(1, 8)
+        slice = val.get_slice(0, 4)
+        slice_delayed = val.get_slice(1, 5)
 
         assert dut.res_in.value == slice.as_int()
         assert dut.res_in_delay.value == slice_delayed.as_int()

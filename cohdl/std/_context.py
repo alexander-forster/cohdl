@@ -6,7 +6,16 @@ import inspect
 import enum
 
 import cohdl
-from cohdl import BitSignalEvent, SourceLocation, Bit, Signal, evaluated, consteval
+from cohdl import (
+    BitSignalEvent,
+    SourceLocation,
+    Bit,
+    Signal,
+    evaluated,
+    consteval,
+    Variable,
+    AssignMode,
+)
 
 
 class Reset:
@@ -519,7 +528,20 @@ def concurrent_call(fn, *args, **kwargs):
         fn(*args, **kwargs)
 
 
+class _ContextData:
+    def __init__(
+        self,
+        ctx: Context,
+        executors_before: list[Executor],
+        executors_after: list[Executor],
+    ):
+        self.ctx = ctx
+        self.executors_before = executors_before
+        self.executors_after = executors_after
+
+
 _current_context: Context | None = None
+_current_context_data: _ContextData | None = None
 
 
 class Context:
@@ -530,17 +552,27 @@ class Context:
 
     @staticmethod
     @consteval
-    def _enter_context(ctx: Context):
-        global _current_context
+    def current_data():
+        return _current_context_data
+
+    @staticmethod
+    @consteval
+    def _enter_context(ctx: Context, data: _ContextData | None = None):
+        global _current_context, _current_context_data
         _current_context = ctx
+        _current_context_data = data
 
     @staticmethod
     @consteval
     def _exit_context():
-        global _current_context
+        global _current_context, _current_context_data
         _current_context = None
+        _current_context_data = None
 
     def __init__(self, clk: Clock, reset: Reset | None = None, *, step_cond=None):
+        assert isinstance(clk, Clock)
+        assert reset is None or isinstance(reset, Reset)
+
         self._clk = clk
         self._reset = reset
         self._step_cond = step_cond
@@ -641,19 +673,215 @@ class Context:
             Reset(combined_reset, active_low=active_low, is_async=is_async),
         )
 
-    def __call__(self, fn):
-        if inspect.iscoroutinefunction(fn):
+    def __call__(self, fn=None, *, executors: list[Executor] | None = None):
+        executors = [] if executors is None else executors
 
-            async def context_fn():
-                self._enter_context(self)
-                await fn()
-                self._exit_context()
+        data = _ContextData(
+            self,
+            executors_before=[
+                e for e in executors if e._mode is ExecutorMode.immediate_before
+            ],
+            executors_after=[
+                e for e in executors if e._mode is ExecutorMode.immediate_after
+            ],
+        )
 
+        def convert_executors(executors: list[Executor], mode: ExecutorMode):
+            for executor in executors:
+                assert executor._mode is mode
+
+                cohdl.coroutine_step(executor.executor_statemachine())
+                executor._start @= False
+
+        def helper(fn):
+            if inspect.iscoroutinefunction(fn):
+
+                def context_fn():
+                    self._enter_context(self, data)
+                    convert_executors(
+                        data.executors_before, mode=ExecutorMode.immediate_before
+                    )
+                    cohdl.coroutine_step(fn())
+                    convert_executors(
+                        data.executors_after, mode=ExecutorMode.immediate_after
+                    )
+                    self._exit_context()
+
+            else:
+
+                def context_fn():
+                    self._enter_context(self, data)
+                    convert_executors(
+                        data.executors_before, mode=ExecutorMode.immediate_before
+                    )
+                    fn()
+                    convert_executors(
+                        data.executors_after, mode=ExecutorMode.immediate_after
+                    )
+                    self._exit_context()
+
+            return sequential(self._clk, self._reset, step_cond=self._step_cond)(
+                context_fn
+            )
+
+        if fn is not None:
+            return helper(fn)
         else:
+            return helper
 
-            def context_fn():
-                self._enter_context(self)
-                fn()
-                self._exit_context()
 
-        return sequential(self._clk, self._reset, step_cond=self._step_cond)(context_fn)
+#
+#
+#
+#
+#
+#
+#
+
+
+class ExecutorMode(enum.Enum):
+    parallel_process = enum.auto()
+    immediate_after = enum.auto()
+    immediate_before = enum.auto()
+
+
+class Executor:
+    """
+    Executor wraps a coroutine in a sequential process
+    and provides methods to start the execution from a different
+    context.
+    """
+
+    @consteval
+    def _check_context(self):
+        if not self._mode is ExecutorMode.parallel_process:
+            current_ctx = Context.current()
+            current_data = Context.current_data()
+            assert (
+                current_ctx is not None
+            ), "Executor with mode {self._mode} can only be used in functions marked with std.Context"
+
+            if self._mode is ExecutorMode.immediate_before:
+                assert (
+                    self in current_data.executors_before
+                ), "all used executors with mode {ExecutorMode.immediate_before} must be specified in the std.Context decorator of the enclosing function"
+            else:
+                assert self._mode is ExecutorMode.immediate_after
+                if self not in current_data.executors_after:
+                    current_data.executors_after.append(self)
+
+    async def executor_statemachine(self):
+        while not self._start:
+            self._process_ready._assign_(True, AssignMode.AUTO)
+        self._process_ready._assign_(False, AssignMode.AUTO)
+
+        if self._result is None:
+            await self._action(*self._args, **self._kwargs)
+        else:
+            self._result._assign_(
+                await self._action(*self._args, **self._kwargs), AssignMode.AUTO
+            )
+        self._process_ready._assign_(True, AssignMode.AUTO)
+
+    def __init__(
+        self,
+        ctx: Context | None,
+        mode: ExecutorMode,
+        action,
+        result=None,
+        args: list | None = None,
+        kwargs: dict | None = None,
+    ):
+        self._mode = mode
+        self._ctx = ctx
+        self._action = action
+
+        args = args if args is not None else []
+        kwargs = kwargs if kwargs is not None else {}
+
+        self._args = args
+        self._kwargs = kwargs
+        self._result = result
+
+        if ctx is None:
+            self._start = Variable[Bit](False, name="executor_start")
+            self._process_ready = Variable[Bit](False, name="executor_process_ready")
+        else:
+            assert mode is ExecutorMode.parallel_process
+
+            self._start = Signal[Bit](False, name="executor_start")
+            self._process_ready = Signal[Bit](False, name="executor_process_ready")
+
+            @ctx
+            async def proc():
+                await self.executor_statemachine()
+
+    @classmethod
+    def make_parallel(cls, ctx: Context, action, result, *args, **kwargs):
+        return cls(
+            ctx=ctx,
+            mode=ExecutorMode.parallel_process,
+            action=action,
+            result=result,
+            args=args,
+            kwargs=kwargs,
+        )
+
+    @classmethod
+    def make_before(cls, action, result, *args, **kwargs):
+        return cls(
+            ctx=None,
+            mode=ExecutorMode.immediate_before,
+            action=action,
+            result=result,
+            args=args,
+            kwargs=kwargs,
+        )
+
+    @classmethod
+    def make_after(cls, action, result, *args, **kwargs):
+        return cls(
+            ctx=None,
+            mode=ExecutorMode.immediate_after,
+            action=action,
+            result=result,
+            args=args,
+            kwargs=kwargs,
+        )
+
+    def start(self, *args, **kwargs):
+        self._check_context()
+        assert self.ready()
+        assert len(self._args) == len(args)
+
+        for target, src in zip(self._args, args):
+            target._assign_(src, AssignMode.AUTO)
+
+        for name, val in kwargs.items():
+            self._kwargs[name]._assign_(val, AssignMode.AUTO)
+
+        if self._mode is ExecutorMode.parallel_process:
+            self._start ^= True
+        else:
+            self._start @= True
+
+    async def exec(self, *args, **kwargs):
+        self._check_context()
+        assert self.ready()
+        self.start(*args, **kwargs)
+        await self.ready()
+
+        if self._result is not None:
+            return self._result.copy()
+        else:
+            return None
+
+    def ready(self):
+        return self._process_ready and not self._start
+
+    def result(self):
+        assert self.ready()
+        return self._result.copy()
+
+    def __hash__(self):
+        return id(self)

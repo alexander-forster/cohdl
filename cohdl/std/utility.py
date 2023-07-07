@@ -169,15 +169,30 @@ def check_return(fn):
 #
 
 
-def binary_fold(fn, first, *args):
+def binary_fold(fn, first, *args, right_fold=False):
     if len(args) == 0:
-        return Temporary(first)
+        return tc(first)
     else:
-        return fn(first, binary_fold(fn, *args))
+        if right_fold:
+            return fn(first, binary_fold(fn, *args), right_fold=True)
+        else:
+            snd, *rest = args
+            return binary_fold(fn, fn(first, snd), *rest)
+
+
+def _concat_impl(first, *args):
+    return binary_fold(lambda a, b: a @ b, first, *args)
 
 
 def concat(first, *args):
-    return binary_fold(lambda a, b: a @ b, first, *args)
+    if len(args) == 0:
+        if instance_check(first, Bit):
+            return as_bitvector(first)
+        else:
+            assert instance_check(first, BitVector)
+            return tc[BitVector[len(first)]](first)
+    else:
+        return _concat_impl(first, *args)
 
 
 def stretch(val: Bit | BitVector, factor: int):
@@ -192,6 +207,11 @@ def stretch(val: Bit | BitVector, factor: int):
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
     assert old.width == new.width
     return (old & ~mask) | (new & mask)
+
+
+def as_bitvector(inp: Bit):
+    assert instance_check(inp, Bit)
+    return (inp @ inp)[0:0]
 
 
 #
@@ -264,9 +284,9 @@ class OutShiftRegister:
 
     def empty(self):
         if self._msb_first:
-            return not self._data.msb(rest=1)
-        else:
             return not self._data.lsb(rest=1)
+        else:
+            return not self._data.msb(rest=1)
 
     def shift(self):
         if self._msb_first:

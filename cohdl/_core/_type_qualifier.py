@@ -752,6 +752,15 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic_replacement(_assign_, assignment_spec=(0, 1))
     def _assign_replacement(self, value, assign_mode: AssignMode):
+        if assign_mode is AssignMode.AUTO:
+            if isinstance(self, Signal):
+                assign_mode = AssignMode.NEXT
+            else:
+                assert isinstance(
+                    self, Variable
+                ), "AssignMode.AUTO only valid for signals and variables"
+                assign_mode = AssignMode.VALUE
+
         if assign_mode is AssignMode.NEXT:
             assert isinstance(
                 self, Signal

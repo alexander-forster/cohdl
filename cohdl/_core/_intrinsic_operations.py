@@ -95,8 +95,8 @@ class AssignMode(enum.Enum):
     VALUE = enum.auto()
     NEXT = enum.auto()
     PUSH = enum.auto()
+    AUTO = enum.auto()
     _TEMP = enum.auto()
-    _INFER = enum.auto()
 
 
 class _IntrinsicAssignment:

@@ -33,9 +33,11 @@ from ._intrinsic_operations import AssignMode
 
 from ._intrinsic_definitions import _All, _Any, _Bool, always, evaluated, static_assert
 from ._array import Array
+from ._primitive_type import is_primitive, is_primitive_type
 
 from ._boolean import true, false, Null, Full, _NullFullType, _Boolean
 from ._source_location import SourceLocation
+
 
 from ._inline import InlineCode as _InlineCode
 from ._inline import InlineRaw as inline_raw

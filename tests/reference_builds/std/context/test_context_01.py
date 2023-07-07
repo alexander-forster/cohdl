@@ -124,7 +124,7 @@ class Mock(MockBase):
 
 @cocotb_util.test()
 async def testbench_context_01(dut):
-    mock = Mock(dut, record=True)
+    mock = Mock(dut)
     mock.step <<= 0
     mock.check()
 
@@ -141,8 +141,6 @@ async def testbench_context_01(dut):
         mock.reset.assign_maybe(reset_state, 0.2)
         await mock.delta_step()
         mock.reset.assign(not reset_state)
-
-    mock.dump_record()
 
 
 class Unittest(unittest.TestCase):

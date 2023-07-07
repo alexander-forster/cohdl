@@ -157,7 +157,7 @@ class IrGenerator:
             value = inp.value()
             mode = inp._mode
 
-            if mode is AssignMode._INFER:
+            if mode is AssignMode.AUTO:
                 if isinstance(target, Signal):
                     mode = AssignMode.NEXT
                 elif isinstance(target, Temporary):

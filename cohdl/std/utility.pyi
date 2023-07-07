@@ -104,10 +104,74 @@ def check_return(fn):
 #
 #
 
-def binary_fold(fn, first, *args): ...
-def concat(first, *args) -> BitVector: ...
-def stretch(val: Bit | BitVector, factor: int) -> BitVector: ...
-def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector: ...
+def binary_fold(fn, first, *args, right_fold=False):
+    """
+    similar to pythons `reduce` function and C++ fold expressions
+
+    ---
+
+    binary_fold(fn, 1, 2)
+
+    `fn(1, 2)`
+
+    binary_fold(fn, 1, 2, 3, 4)
+
+    `fn(fn(fn(1, 2), 3), 4)`
+
+    ---
+
+    when only a single argument is given, a copy of it is returned
+    and fn is not called
+
+    ---
+
+    when `right_fold` is set to True the order in which arguments
+    are passed to `fn`is reversed:
+
+    binary_fold(fn, 1, 2, 3):
+
+    `fn(fn(1, 2), 3)`
+
+    binary_fold(fn, 1, 2, 3, right_fold=True):
+
+    `fn(1, fn(2, 3))`
+    """
+
+def concat(first, *args) -> BitVector:
+    """
+    concatenate all arguments
+
+    this is equivalent to `first @ arg1 @ arg2 @ ...`
+
+    when only one argument is given the return value
+    is a new BitVector (even when the argument was a single Bit)
+    """
+
+def stretch(val: Bit | BitVector, factor: int) -> BitVector:
+    """
+    repeat the bits of `val` `factor` times:
+
+    example:
+
+    stretch(Bit('0'), 1)        -> BitVector("0")
+    stretch(Bit('1'), 2)        -> BitVector("11")
+    stretch(BitVector('10'), 3) -> BitVector("101010")
+    """
+
+def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
+    """
+    takes three BitVectors of the same length and returns a new
+    BitVector of that same length.
+    Each result bit is constructed from the corresponding input
+    bits according to the following expression:
+
+    `result_bit = new_bit if mask_bit else old_bit`
+    """
+
+def as_bitvector(inp: Bit) -> BitVector[0:0]:
+    """
+    returns a BitVector of length one with the same state as the given input
+    """
 
 #
 #

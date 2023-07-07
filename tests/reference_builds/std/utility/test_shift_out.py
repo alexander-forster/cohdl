@@ -13,7 +13,7 @@ class test_shift_out(cohdl.Entity):
 
     start = Port.input(Bit)
 
-    vec_inp = Port.input(BitVector[8])
+    vec_inp = Port.input(BitVector[5])
 
     res = Port.output(Bit)
     res_delay = Port.output(Bit)
@@ -67,7 +67,7 @@ class test_shift_out(cohdl.Entity):
 
 @cocotb_util.test()
 async def testbench_shift(dut: test_shift_out):
-    gen = cocotb_util.ConstrainedGenerator(8)
+    gen = cocotb_util.ConstrainedGenerator(5)
 
     async def wait_for(n):
         for _ in range(n):
@@ -76,20 +76,19 @@ async def testbench_shift(dut: test_shift_out):
     seq = cocotb_util.SequentialTest(dut.clk)
     dut.start.value = 0
 
-    for _ in range(16):
-        val = gen.random()
+    for val in gen.all():
         await wait_for(5)
         dut.start.value = 1
         dut.vec_inp.value = val.as_int()
 
         def in_range(x):
-            return 0 <= x <= 7
+            return 0 <= x <= 4
 
-        for i in range(9):
+        for i in range(6):
             res = i
             res_delay = i - 1
-            res_msb = 7 - i
-            res_msb_delay = 8 - i
+            res_msb = 4 - i
+            res_msb_delay = 5 - i
 
             await wait_for(1)
 
@@ -107,7 +106,7 @@ async def testbench_shift(dut: test_shift_out):
 
             dut.start.value = 0
 
-        await wait_for(20)
+        await wait_for(10)
 
 
 class Unittest(unittest.TestCase):

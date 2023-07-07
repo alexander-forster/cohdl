@@ -116,6 +116,7 @@ _intrinsic(dict.items)
 _intrinsic(dict.keys)
 _intrinsic(dict.values)
 _intrinsic(dict.get)
+_intrinsic(dict.__getitem__)
 
 #
 # tuple methods

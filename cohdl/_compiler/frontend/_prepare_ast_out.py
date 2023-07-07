@@ -426,7 +426,7 @@ class Return(Statement):
 
     def bound_statements(self) -> list[Statement]:
         return super().bound_statements() + [
-            Assign(redirect.target, redirect.source, AssignMode._INFER, [])
+            Assign(redirect.target, redirect.source, AssignMode.AUTO, [])
             for redirect in self._hook.redirects
         ]
 

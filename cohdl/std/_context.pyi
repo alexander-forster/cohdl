@@ -229,7 +229,7 @@ class Clock:
     def __init__(
         self,
         clk_signal: cohdl.Signal[cohdl.Bit],
-        *
+        *,
         active_edge: ClockEdge = ClockEdge.RISING,
         frequency: Frequency | int | None = None,
         period: Period | int | None = None,
@@ -432,8 +432,79 @@ class Context:
         define the reset behavior of the new context.
         Otherwise these values are inherited from self.reset().
         """
-    def __call__(self, fn):
+    def __call__(self, fn=None, *, executors: list[Executor] | None = None):
         """
         __call__ is defined to be used as a decorator
         that turns the function it is applied to into a sequential context
+
+        `executors` is an optional list of all Executors used in the context
+        it is only needed for Executors with mode `immediate_before`.
+        Executors with other modes can be specified but have no effect
+        since the context can detect their usage during parsing.
+        """
+
+#
+#
+#
+#
+
+class ExecutorMode(enum.Enum):
+    parallel_process = enum.auto()
+    immediate_after = enum.auto()
+    immediate_before = enum.auto()
+
+class Executor:
+    """
+    Executor wraps a coroutine in a sequential process
+    and provides methods to start the execution from a different
+    context.
+    """
+
+    def __init__(
+        self,
+        ctx: Context | None,
+        mode: ExecutorMode,
+        action,
+        result=None,
+        args: list | None = None,
+        kwargs: dict | None = None,
+    ): ...
+    @classmethod
+    def make_parallel(
+        cls, ctx: Context, action, result, *args, **kwargs
+    ) -> Executor: ...
+    @classmethod
+    def make_before(cls, action, result, *args, **kwargs) -> Executor: ...
+    @classmethod
+    def make_after(cls, action, result, *args, **kwargs) -> Executor: ...
+    def start(self, *args, **kwargs):
+        """
+        Start the executor with the given arguments.
+
+        All args/kwargs are signal assigned to the corresponding argument
+        specified in the constructor. Since Executor does not inspect the
+        signature of the given coroutine function, position and keyword arguments
+        must match the definition in __init__.
+
+        It is not necessary to specify all keyword arguments. This makes
+        it possible to pass constant parameters, that do not support
+        assignments in __init__.
+        """
+    async def exec(self, *args, **kwargs):
+        """
+        Start the Executor, wait until the execution is completed
+        and return the result value.
+
+        Check the documentation of `start` for limitations of the
+        `args` and `kwargs`.
+        """
+    def ready(self) -> bool:
+        """
+        Check if the Executor is ready for a call to start/exec.
+
+        The returned Signal is false while the Executor is active or in reset.
+        """
+    def result(self):
+        """
+        returns the result of the last execution of the executor
         """

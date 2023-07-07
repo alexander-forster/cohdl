@@ -312,7 +312,7 @@ class PrepareAst:
         if isinstance(result, intr_op._IntrinsicElemAccess):
             return out.Value(
                 result.obj,
-                [out.Assign(result.index_temp, result.index, AssignMode._INFER, [])],
+                [out.Assign(result.index_temp, result.index, AssignMode.AUTO, [])],
             )
 
         if isinstance(result, intr_op._IntrinsicDeclaration):
@@ -343,7 +343,7 @@ class PrepareAst:
                             out.Assign(
                                 signal_alias,
                                 assigned,
-                                out.AssignMode._INFER,
+                                out.AssignMode.AUTO,
                                 [],
                             ),
                         )
@@ -357,7 +357,7 @@ class PrepareAst:
                         out.Assign(
                             result.new_obj,
                             assigned,
-                            AssignMode._INFER,
+                            AssignMode.AUTO,
                             [],
                         )
                     )

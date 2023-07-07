@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import cohdl
 
@@ -29,67 +30,8 @@ class AssignableType(metaclass=_MetaAssignableType):
         )
 
     @classmethod
-    def signal(cls, *args, **kwargs):
-        return cls._init_qualified_(cohdl.Signal, *args, **kwargs)
-
-    @classmethod
-    def variable(cls, *args, **kwargs):
-        return cls._init_qualified_(cohdl.Variable, *args, **kwargs)
-
-    def __ilshift__(self, source):
-        self._assign_(source, cohdl.AssignMode.NEXT)
-        return self
-
-    def __imatmul__(self, source):
-        self._assign_(source, cohdl.AssignMode.VALUE)
-        return self
-
-    def __ixor__(self, source):
-        self._assign_(source, cohdl.AssignMode.PUSH)
-        return self
-
-    @property
-    def next(self):
-        raise AssertionError("next only supported in store context")
-
-    @next.setter
-    def next(self, value):
-        self <<= value
-
-    @property
-    def push(self):
-        raise AssertionError("push only supported in store context")
-
-    @push.setter
-    def push(self, value):
-        self ^= value
-
-    @property
-    def value(self):
-        raise AssertionError("value only supported in store context")
-
-    @value.setter
-    def value(self, value):
-        self @= value
-
-
-class Class:
-    def _assign_(self, source, mode: cohdl.AssignMode):
-        raise AssertionError("_assign_ must be overwritten")
-
-    @classmethod
-    def _from_vector_(cls, vector: cohdl.BitVector):
-        raise AssertionError("_from_vector_ must be overwritten")
-
-    def _to_vector_(self):
-        raise AssertionError("_to_vector_ must be overwritten")
-
-    @classmethod
-    def _init_qualified_(cls, Qualifier, *args, **kwargs):
-        return cls(
-            *[Qualifier(arg) for arg in args],
-            **{name: Qualifier(kwarg) for name, kwarg in kwargs.items()},
-        )
+    def _make_qualified_(cls, Qualifier, *args, **kwargs):
+        return cls._init_qualified_(Qualifier, *args, **kwargs)
 
     @classmethod
     def signal(cls, *args, **kwargs):
@@ -134,3 +76,33 @@ class Class:
     @value.setter
     def value(self, value):
         self @= value
+
+
+def make_qualified(Type, Qualifier, *args, **kwargs):
+    if cohdl.is_primitive_type(Type):
+        return Qualifier[Type](*args, **kwargs)
+    else:
+        return Type._make_qualified_(Qualifier, *args, **kwargs)
+
+
+class _Make:
+    def __init__(self, qualifier=None):
+        self._qualifier = qualifier
+
+    def __call__(self, Type, *args: Any, **kwargs: Any) -> Any:
+        return make_qualified(Type, self._qualifier, *args, **kwargs)
+
+    def __getitem__(self, Qualifier):
+        assert self._qualifier is None
+        return _Make(Qualifier)
+
+
+make = _Make()
+
+
+def make_signal(Type, *args, **kwargs):
+    return make[cohdl.Signal](Type, *args, **kwargs)
+
+
+def make_variable(Type, *args, **kwargs):
+    return make[cohdl.Variable](Type, *args, **kwargs)

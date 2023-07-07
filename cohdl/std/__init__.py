@@ -1,5 +1,11 @@
 from ._compile import VhdlCompiler
-from ._assignable_type import AssignableType
+from ._assignable_type import (
+    AssignableType,
+    make_qualified,
+    make,
+    make_signal,
+    make_variable,
+)
 
 from ._prescaler import Prescaler, moving_average, duty_cycle, ClockDivider
 from ._uart import UartReceiver, UartTransmitter
@@ -18,6 +24,8 @@ from ._context import (
     concurrent_assign,
     concurrent_call,
     concurrent_eval,
+    Executor,
+    ExecutorMode,
 )
 
 
