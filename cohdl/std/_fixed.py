@@ -194,7 +194,9 @@ class SFixed(AssignableType):
     #
 
     @classmethod
-    def _init_qualified_(cls, Qualifier, val: SFixed | Signed | Unsigned | int):
+    def _init_qualified_(
+        cls, Qualifier, val: SFixed | Signed | Unsigned | int | None = None
+    ):
         if isinstance(val, SFixed):
             assert cls.left() >= val.left()
             assert cls.right() <= val.right()
@@ -203,6 +205,9 @@ class SFixed(AssignableType):
             return cls(raw=Qualifier(val._val.resize(cls._width, zeros=zeros)))
         elif isinstance(val, int):
             return cls(raw=Qualifier(Signed[cls._width](cls._adjust_val(val))))
+
+        elif val is None:
+            return cls(raw=Qualifier(Signed[cls._width]()))
         else:
             raise AssertionError("not implemented")
 
@@ -239,14 +244,14 @@ class SFixed(AssignableType):
     def __add__(self, other: SFixed):
         assert isinstance(other, SFixed)
 
-        target_rigth = min(self.right(), other.right())
+        target_right = min(self.right(), other.right())
         target_left = max(self.left(), other.left()) + 1
-        target_width = target_left - target_rigth + 1
+        target_width = target_left - target_right + 1
 
-        lhs_zeros = self.right() - target_rigth
-        rhs_zeros = other.right() - target_rigth
+        lhs_zeros = self.right() - target_right
+        rhs_zeros = other.right() - target_right
 
-        return SFixed[target_left:target_rigth](
+        return SFixed[target_left:target_right](
             raw=self._val.resize(target_width, zeros=lhs_zeros)
             + other._val.resize(target_width, zeros=rhs_zeros)
         )
@@ -254,14 +259,14 @@ class SFixed(AssignableType):
     def __sub__(self, other: SFixed):
         assert isinstance(other, SFixed)
 
-        target_rigth = min(self.right(), other.right())
+        target_right = min(self.right(), other.right())
         target_left = max(self.left(), other.left()) + 1
-        target_width = target_left - target_rigth + 1
+        target_width = target_left - target_right + 1
 
-        lhs_zeros = self.right() - target_rigth
-        rhs_zeros = other.right() - target_rigth
+        lhs_zeros = self.right() - target_right
+        rhs_zeros = other.right() - target_right
 
-        return SFixed[target_left:target_rigth](
+        return SFixed[target_left:target_right](
             raw=self._val.resize(target_width, zeros=lhs_zeros)
             - other._val.resize(target_width, zeros=rhs_zeros)
         )
@@ -296,9 +301,13 @@ class SFixed(AssignableType):
             if overflow_style is FixedOverflowStyle.WRAP:
                 if selfright >= right:
                     zeros = selfright - right
-                    return Result(
-                        raw=self._val.lsb(rest=overflow).signed.resize(zeros=zeros)
-                    )
+
+                    if overflow >= self._val.width:
+                        return Result(raw=Signed[Result._width](Null))
+                    else:
+                        return Result(
+                            raw=self._val.lsb(rest=overflow).signed.resize(zeros=zeros)
+                        )
                 else:
                     cutoff = right - selfright
 
@@ -310,31 +319,53 @@ class SFixed(AssignableType):
                         )
                     else:
                         assert round_style is FixedRoundStyle.ROUND
+
+                        if cutoff == 1:
+                            do_round = (
+                                Signed[2](1)
+                                if self._val[cutoff - 1] and self._val[cutoff]
+                                else Signed[2](0)
+                            )
+                        else:
+                            do_round = (
+                                Signed[2](1)
+                                if self._val[cutoff - 1]
+                                and (self._val[cutoff] or self._val[cutoff - 2 : 0])
+                                else Signed[2](0)
+                            )
+
                         return Result(
                             raw=tc[Signed[Result._width]](
                                 self._val.lsb(rest=overflow).msb(rest=cutoff).signed
-                                + self._val[cutoff - 1 : cutoff - 1]
-                                .unsigned.resize(Result._width)
-                                .signed
+                                + do_round
                             )
                         )
             else:
                 assert overflow_style is FixedOverflowStyle.SATURATE
-                overflow_bits = self._val.msb(selfleft - left)
+                sign_bit = self._val.msb()
 
-                does_underflow = bool(overflow_bits.msb())
-                does_overflow = bool(overflow_bits)
+                overflow_bitcnt = min(selfleft - left, self._width - 1)
+                overflow_bits = self._val.lsb(rest=1).msb(overflow_bitcnt)
+
+                does_overflow = not sign_bit and overflow_bits
+                does_underflow = sign_bit and ~overflow_bits
 
                 if selfright >= right:
                     zeros = selfright - right
+
+                    if self._val.width <= overflow:
+                        default_bits = Signed[Result._width](0)
+                    else:
+                        default_bits = self._val.lsb(rest=overflow).signed.resize(
+                            Result._width, zeros=zeros
+                        )
+
                     return Result(
                         raw=tc[Signed[Result._width]](
                             choose_first(
                                 (does_underflow, Signed[Result._width].min()),
                                 (does_overflow, Signed[Result._width].max()),
-                                default=self._val.lsb(rest=overflow).signed.resize(
-                                    Result._width, zeros=zeros
-                                ),
+                                default=default_bits,
                             )
                         )
                     )
@@ -356,17 +387,34 @@ class SFixed(AssignableType):
                     else:
                         assert round_style is FixedRoundStyle.ROUND
 
+                        if cutoff == 1:
+                            do_round = (
+                                Signed[2](1)
+                                if self._val[cutoff - 1] and self._val[cutoff]
+                                else Signed[2](0)
+                            )
+                        else:
+                            do_round = (
+                                Signed[2](1)
+                                if self._val[cutoff - 1]
+                                and (self._val[cutoff] or self._val[cutoff - 2 : 0])
+                                else Signed[2](0)
+                            )
+
+                        selected_bits = self._val.lsb(rest=overflow + 1).msb(
+                            rest=cutoff
+                        )
+                        overflow_or_full = does_overflow or not ~selected_bits
+
                         return Result(
                             raw=tc[Signed[Result._width]](
                                 choose_first(
                                     (does_underflow, Signed[Result._width].min()),
-                                    (does_overflow, Signed[Result._width].max()),
+                                    (overflow_or_full, Signed[Result._width].max()),
                                     default=self._val.lsb(rest=overflow)
                                     .msb(rest=cutoff)
                                     .signed
-                                    + self._val[cutoff - 1 : cutoff - 1]
-                                    .unsigned.resize(Result._width)
-                                    .signed,
+                                    + do_round,
                                 )
                             )
                         )
@@ -388,12 +436,24 @@ class SFixed(AssignableType):
                 else:
                     assert round_style is FixedRoundStyle.ROUND
 
+                    if cutoff == 1:
+                        do_round = (
+                            Signed[2](1)
+                            if self._val[cutoff - 1] and self._val[cutoff]
+                            else Signed[2](0)
+                        )
+                    else:
+                        do_round = (
+                            Signed[2](1)
+                            if self._val[cutoff - 1]
+                            and (self._val[cutoff] or self._val[cutoff - 2 : 0])
+                            else Signed[2](0)
+                        )
+
                     return Result(
                         raw=tc[Signed[Result._width]](
                             self._val.msb(rest=cutoff).signed.resize(Result._width)
-                            + self._val[cutoff - 1 : cutoff - 1]
-                            .unsigned.resize(Result._width)
-                            .signed,
+                            + do_round
                         )
                     )
 
@@ -540,14 +600,14 @@ class UFixed(AssignableType):
     def __add__(self, other: UFixed):
         assert isinstance(other, UFixed)
 
-        target_rigth = min(self.right(), other.right())
+        target_right = min(self.right(), other.right())
         target_left = max(self.left(), other.left()) + 1
-        target_width = target_left - target_rigth + 1
+        target_width = target_left - target_right + 1
 
-        lhs_zeros = self.right() - target_rigth
-        rhs_zeros = other.right() - target_rigth
+        lhs_zeros = self.right() - target_right
+        rhs_zeros = other.right() - target_right
 
-        return UFixed[target_left:target_rigth](
+        return UFixed[target_left:target_right](
             raw=self._val.resize(target_width, zeros=lhs_zeros)
             + other._val.resize(target_width, zeros=rhs_zeros)
         )
@@ -555,14 +615,14 @@ class UFixed(AssignableType):
     def __sub__(self, other: UFixed):
         assert isinstance(other, UFixed)
 
-        target_rigth = min(self.right(), other.right())
+        target_right = min(self.right(), other.right())
         target_left = max(self.left(), other.left()) + 1
-        target_width = target_left - target_rigth + 1
+        target_width = target_left - target_right + 1
 
-        lhs_zeros = self.right() - target_rigth
-        rhs_zeros = other.right() - target_rigth
+        lhs_zeros = self.right() - target_right
+        rhs_zeros = other.right() - target_right
 
-        return UFixed[target_left:target_rigth](
+        return UFixed[target_left:target_right](
             raw=self._val.resize(target_width, zeros=lhs_zeros)
             - other._val.resize(target_width, zeros=rhs_zeros)
         )

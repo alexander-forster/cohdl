@@ -39,7 +39,6 @@ MHz = Frequency.megahertz
 GHz = Frequency.gigahertz
 
 from . import axi
-from .sequential_context import SeqContext
 
 from . import utility
 from .utility import tc, instance_check, subclass_check, iscouroutinefunction
