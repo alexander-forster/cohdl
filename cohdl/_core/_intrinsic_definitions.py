@@ -240,11 +240,24 @@ def always(expr, /):
 # expr
 #
 
+_expr_functions = {}
+
+
+@_intrinsic
+def _is_expr_function(fn):
+    return id(fn) in _expr_functions
+
 
 def expr(e, /):
     # should never be called, expr is handled by the parser
 
     raise AssertionError("expr called outside synthesizable context")
+
+
+@_intrinsic
+def expr_fn(e, /):
+    _expr_functions[id(e)] = e
+    return e
 
 
 #

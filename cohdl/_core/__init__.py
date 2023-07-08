@@ -37,6 +37,7 @@ from ._intrinsic_definitions import (
     _Bool,
     always,
     expr,
+    expr_fn,
     evaluated,
     static_assert,
 )

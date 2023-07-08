@@ -876,6 +876,7 @@ class Executor:
         else:
             return None
 
+    @cohdl.expr_fn
     def ready(self):
         return self._process_ready and not self._start
 

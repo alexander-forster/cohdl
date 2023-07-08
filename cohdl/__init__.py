@@ -29,7 +29,15 @@ from ._core import _ir as ir
 from ._core import enum
 
 from ._core import reset_context, reset_pushed, sensitivity
-from ._core import select_with, always, expr, evaluated, static_assert, coroutine_step
+from ._core import (
+    select_with,
+    always,
+    expr,
+    expr_fn,
+    evaluated,
+    static_assert,
+    coroutine_step,
+)
 from ._core import rising_edge, falling_edge, high_level, low_level
 from ._core import Array
 from ._core._intrinsic import _intrinsic as constexpr

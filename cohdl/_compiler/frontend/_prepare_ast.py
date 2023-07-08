@@ -33,7 +33,13 @@ from cohdl._core._primitive_type import is_primitive
 
 from cohdl._core import _intrinsic_operations as intr_op
 from cohdl._core._intrinsic_operations import AssignMode
-from cohdl._core._intrinsic_definitions import _All, _Any, _Bool, always
+from cohdl._core._intrinsic_definitions import (
+    _All,
+    _Any,
+    _Bool,
+    always,
+    _is_expr_function,
+)
 
 from cohdl._core._context import Context, ContextType
 from cohdl.utility.id_map import IdMap
@@ -376,7 +382,7 @@ class PrepareAst:
         parent: PrepareAst | None = None,
         first_arg=None,
     ):
-        super().__init__()
+        self._last_apply_inp = None
 
         for name, value in fn_def.scope().items():
             if (
@@ -648,6 +654,9 @@ class PrepareAst:
     #
 
     def apply_impl(self, inp):
+        last_inp = self._last_apply_inp
+        self._last_apply_inp = inp
+
         if isinstance(inp, ast.Assign):
             value_expr = self.apply(inp.value)
 
@@ -1622,6 +1631,9 @@ class PrepareAst:
 
             # special case for expr expressions in sequential blocks
             if func_ref is cohdl.expr:
+                assert isinstance(
+                    last_inp, ast.Await
+                ), "cohdl.expr may only be used as a wrapper around the argument of await expressions"
                 assert len(inp.args) == 1
                 assert len(inp.keywords) == 0
 
@@ -1632,96 +1644,118 @@ class PrepareAst:
             #
             #
 
-            bound_expressions: list[out.Statement] = [
-                func_expr,
-            ]
+            def convert_call():
+                nonlocal func_ref
+                bound_expressions: list[out.Statement] = [
+                    func_expr,
+                ]
 
-            arg_expr: list[out.Expression] = []
+                arg_expr: list[out.Expression] = []
 
-            for arg in inp.args:
-                expr = cast(out.Expression, self.apply(arg))
+                for arg in inp.args:
+                    expr = cast(out.Expression, self.apply(arg))
 
-                if isinstance(expr, out.StarredValue):
-                    bound_expressions.extend(expr.bound_statements())
-                    for item in expr.result():
-                        arg_expr.append(out.Value(item, []))
-                else:
+                    if isinstance(expr, out.StarredValue):
+                        bound_expressions.extend(expr.bound_statements())
+                        for item in expr.result():
+                            arg_expr.append(out.Value(item, []))
+                    else:
+                        bound_expressions.append(expr)
+                        arg_expr.append(expr)
+
+                kwarg_expr: dict[str, out.Expression] = {}
+
+                for kwarg in inp.keywords:
+                    expr = cast(out.Expression, self.apply(kwarg.value))
                     bound_expressions.append(expr)
-                    arg_expr.append(expr)
+                    if kwarg.arg is None:
+                        kwdict = expr.result()
+                        assert isinstance(kwdict, dict)
 
-            kwarg_expr: dict[str, out.Expression] = {}
+                        for name, value in kwdict.items():
+                            kwarg_expr[name] = out.Value(value, [])
+                    else:
+                        assert isinstance(kwarg.arg, str)
+                        kwarg_expr[kwarg.arg] = expr
 
-            for kwarg in inp.keywords:
-                expr = cast(out.Expression, self.apply(kwarg.value))
-                bound_expressions.append(expr)
-                if kwarg.arg is None:
-                    kwdict = expr.result()
-                    assert isinstance(kwdict, dict)
+                args: list[Any] = [expr.result() for expr in arg_expr]
+                kwargs: dict[str, Any] = {
+                    name: expr.result() for name, expr in kwarg_expr.items()
+                }
 
-                    for name, value in kwdict.items():
-                        kwarg_expr[name] = out.Value(value, [])
-                else:
-                    assert isinstance(kwarg.arg, str)
-                    kwarg_expr[kwarg.arg] = expr
+                if isinstance(func_ref, type) and not _is_intrinsic(func_ref):
+                    # call is constructor of type obj_type
+                    obj_type = func_ref
 
-            args: list[Any] = [expr.result() for expr in arg_expr]
-            kwargs: dict[str, Any] = {
-                name: expr.result() for name, expr in kwarg_expr.items()
-            }
+                    if issubclass(obj_type, super):
+                        assert len(args) == 0
+                        assert len(kwargs) == 0
 
-            if isinstance(func_ref, type) and not _is_intrinsic(func_ref):
-                # call is constructor of type obj_type
-                obj_type = func_ref
+                        class_info = self.lookup_name("__class__")
+                        obj_info = self.super_arg()
 
-                if issubclass(obj_type, super):
-                    assert len(args) == 0
-                    assert len(kwargs) == 0
+                        return out.Value(super(class_info, obj_info), bound_expressions)
 
-                    class_info = self.lookup_name("__class__")
-                    obj_info = self.super_arg()
+                    #
+                    # obj_type is no special case, construct a new object
+                    #
 
-                    return out.Value(super(class_info, obj_info), bound_expressions)
+                    # non default __new__ not (yet) supported
 
-                #
-                # obj_type is no special case, construct a new object
-                #
+                    assert _is_intrinsic(obj_type.__new__)
 
-                # non default __new__ not (yet) supported
+                    new_call = self.subcall(obj_type.__new__, [obj_type, *args], kwargs)
+                    new_obj = new_call.result()
 
-                assert _is_intrinsic(obj_type.__new__)
+                    if not isinstance(new_obj, obj_type):
+                        return new_call
 
-                new_call = self.subcall(obj_type.__new__, [obj_type, *args], kwargs)
-                new_obj = new_call.result()
+                    if obj_type.__init__ is object.__init__:
+                        # emulated type has no __init__ function
+                        # no call required
+                        return out.Value(new_obj, bound_expressions)
 
-                if not isinstance(new_obj, obj_type):
-                    return new_call
+                    args.insert(0, new_obj)
+                    func_ref = obj_type.__init__
 
-                if obj_type.__init__ is object.__init__:
-                    # emulated type has no __init__ function
-                    # no call required
-                    return out.Value(new_obj, bound_expressions)
+                    # set flag to indicate, that declarations are allowed
+                    new_obj._cohdl_init_active = True
+                    result = self.subcall(func_ref, args, kwargs)
+                    del new_obj._cohdl_init_active
 
-                args.insert(0, new_obj)
-                func_ref = obj_type.__init__
+                    assert isinstance(result, (out.Call, out.Value))
 
-                # set flag to indicate, that declarations are allowed
-                new_obj._cohdl_init_active = True
+                    # add a return statement that returns the self argument
+                    # so expressions that use the constructor receive the constructed object
+                    return out.Call(
+                        out.CodeBlock(
+                            [
+                                *bound_expressions,
+                                result,
+                                out.Return(out.Value(new_obj, [])),
+                            ]
+                        ),
+                    )
+
                 result = self.subcall(func_ref, args, kwargs)
-                del new_obj._cohdl_init_active
+                result._bound_statements = [
+                    *bound_expressions,
+                    *result._bound_statements,
+                ]
+                return result
 
-                assert isinstance(result, (out.Call, out.Value))
+            converted = convert_call()
 
-                # add a return statement that returns the self argument
-                # so expressions that use the constructor receive the constructed object
-                return out.Call(
-                    out.CodeBlock(
-                        [*bound_expressions, result, out.Return(out.Value(new_obj, []))]
-                    ),
-                )
+            if inspect.ismethod(func_ref):
+                base_function = func_ref.__func__
+            else:
+                base_function = func_ref
 
-            result = self.subcall(func_ref, args, kwargs)
-            result._bound_statements = [*bound_expressions, *result._bound_statements]
-            return result
+            # special case for expr expressions in sequential blocks
+            if _is_expr_function(base_function):
+                return out.CohdlExpr(converted.result(), [converted])
+
+            return converted
 
         if isinstance(inp, ast.Return):
             if inp.value is None:
