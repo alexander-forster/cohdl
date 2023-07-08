@@ -206,6 +206,15 @@ class Value(Expression):
         return IndentBlock(title=f"Value (value={self.result()})", content=[])
 
 
+class CohdlExpr(Value):
+    """
+    special case for cohdl.expr(...)
+    """
+
+    def dump(self):
+        return IndentBlock(title=f"CohdlExpr (value={self.result()})", content=[])
+
+
 class SignalAlias(Statement):
     """
     Signals, that are constructed in sequential contexts
@@ -486,9 +495,12 @@ class Continue(Statement):
 
 
 class Await(Expression):
-    def __init__(self, expr: Expression, primitive: bool):
+    def __init__(
+        self, expr: Expression, primitive: bool, expr_before: list | None = None
+    ):
         expr_result = expr.result()
         self._awaitable_primitive = primitive
+        self._expr_before = expr_before if expr_before is not None else []
         super().__init__(expr_result, bound_statements=[expr])
 
     def dump(self) -> IndentBlock:

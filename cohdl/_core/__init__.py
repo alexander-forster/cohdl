@@ -31,7 +31,15 @@ from ._intrinsic import _BitSignalEvent
 from ._intrinsic import rising_edge, falling_edge, high_level, low_level
 from ._intrinsic_operations import AssignMode
 
-from ._intrinsic_definitions import _All, _Any, _Bool, always, evaluated, static_assert
+from ._intrinsic_definitions import (
+    _All,
+    _Any,
+    _Bool,
+    always,
+    expr,
+    evaluated,
+    static_assert,
+)
 from ._array import Array
 from ._primitive_type import is_primitive, is_primitive_type
 

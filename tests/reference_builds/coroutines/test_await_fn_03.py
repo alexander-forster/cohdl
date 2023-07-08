@@ -14,7 +14,7 @@ async def invalid_coroutine(sig):
 
 # test that varargs and kwargs work for coroutines
 async def wait_for_any(*args, **kwargs):
-    return await any([*args, *kwargs.values()])
+    return await cohdl.expr(any([*args, *kwargs.values()]))
 
 
 class test_await_fn_03(cohdl.Entity):

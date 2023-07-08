@@ -20,14 +20,6 @@ class test_await_fn_01(cohdl.Entity):
     output = Port.output(Bit)
 
     def architecture(self):
-        print("~")
-        print("~")
-        print("~")
-        print("~")
-        print("~")
-        print("~")
-        print("~")
-        print("~")
         clk = std.Clock(self.clk)
 
         @std.sequential(clk)

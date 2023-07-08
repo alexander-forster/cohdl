@@ -435,6 +435,9 @@ class IrGenerator:
             ctx = ir.StatemachineContext.get()
 
             if inp._awaitable_primitive:
+                for expr_before in inp._expr_before:
+                    open_blocks = self.apply(expr_before, open_blocks=open_blocks)
+
                 if ctx.at_start():
                     # special case for sequential instances with `await` as
                     # first statement. Empty first state is used to avoid

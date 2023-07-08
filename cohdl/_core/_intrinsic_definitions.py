@@ -228,14 +228,23 @@ class _Bool:
 
 
 def always(expr, /):
-    """
-    should never be called, always is handled by parser
-    """
+    # should never be called, always is handled by the parser
 
     if TYPE_CHECKING:
         return expr
 
     raise AssertionError("always called outside synthesizable context")
+
+
+#
+# expr
+#
+
+
+def expr(e, /):
+    # should never be called, expr is handled by the parser
+
+    raise AssertionError("expr called outside synthesizable context")
 
 
 #

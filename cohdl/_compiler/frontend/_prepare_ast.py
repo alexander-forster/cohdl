@@ -1186,8 +1186,20 @@ class PrepareAst:
             value_expr = cast(out.Expression, self.apply(inp.value))
             result = value_expr.result()
 
-            if isinstance(result, (_type_qualifier.TypeQualifier, _BooleanLiteral)):
+            if isinstance(value_expr, out.CohdlExpr):
+                assert isinstance(
+                    result, (_type_qualifier.TypeQualifier, _BooleanLiteral)
+                ), "`cohdl.expr` should always return a primitive type"
                 return out.Await(out.Value(result, [value_expr]), primitive=True)
+
+            if isinstance(result, (_type_qualifier.TypeQualifier, _BooleanLiteral)):
+                assert not isinstance(
+                    result, _type_qualifier.Temporary
+                ), "Temporaries can not be awaited, you can use the `await cohdl.expr(...)` pattern to fix this problem"
+
+                return out.Await(
+                    out.Value(result, []), primitive=True, expr_before=[value_expr]
+                )
 
             assert inspect.iscoroutine(result)
 
@@ -1196,7 +1208,7 @@ class PrepareAst:
             )
 
             # close coroutine to suppress
-            # RuntimeWarning: couroutine was never awaited
+            # RuntimeWarning: coroutine was never awaited
             result.close()
 
             sub = self.subcall(fn_def, [], {})
@@ -1607,6 +1619,14 @@ class PrepareAst:
 
                 self.add_always_expr(arg_expr)
                 return out.Value(arg_expr.result(), [])
+
+            # special case for expr expressions in sequential blocks
+            if func_ref is cohdl.expr:
+                assert len(inp.args) == 1
+                assert len(inp.keywords) == 0
+
+                arg_expr = self.apply(inp.args[0])
+                return out.CohdlExpr(arg_expr.result(), [arg_expr])
 
             #
             #
