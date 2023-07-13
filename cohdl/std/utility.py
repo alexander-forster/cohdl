@@ -9,7 +9,16 @@ from cohdl._core._type_qualifier import (
     Temporary,
     Signal,
 )
-from cohdl._core import Bit, BitVector, Unsigned, select_with, evaluated, true, Null
+from cohdl._core import (
+    Bit,
+    BitVector,
+    Unsigned,
+    select_with,
+    evaluated,
+    true,
+    Null,
+    static_assert,
+)
 from cohdl._core._intrinsic import _intrinsic
 
 from ._context import Duration, Context
@@ -66,6 +75,12 @@ def subclass_check(val, type):
 #
 #
 #
+
+
+def const_cond(arg):
+    result = bool(arg)
+    static_assert(isinstance(result, bool), "condition is not a constant")
+    return result
 
 
 class _UncheckedType:

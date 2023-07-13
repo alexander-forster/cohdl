@@ -1,7 +1,7 @@
 from ._intrinsic import _intrinsic, _intrinsic_replacement
 
 from typing import TYPE_CHECKING
-
+from types import NoneType
 
 #
 #
@@ -152,6 +152,15 @@ _intrinsic(object.__ne__)
 
 _intrinsic(type.__or__)
 _intrinsic(type.__ror__)
+
+#
+# None methods
+#
+
+
+_intrinsic(NoneType.__bool__)
+_intrinsic(NoneType.__eq__)
+
 
 #
 # range

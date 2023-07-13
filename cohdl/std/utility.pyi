@@ -40,6 +40,20 @@ def subclass_check(val, type) -> bool:
 #
 #
 
+def const_cond(arg) -> bool:
+    """
+    Asserts, that the argument is convertible to a compile
+    time constant boolean value. And returns that value.
+
+    This function is used to ensure, that if-statements are
+    resolved at compile time (similar to VHDL if-generate statements or preprocessor #if blocks in C).
+
+    Note: CoHDL always evaluates if-Statements with constant argument at compile time
+    and discards the dead branch without inspecting it. When the
+    context compiles `const_cond` has no effect (other than calling arg.__bool__). The purpose of this function is to prevent
+    the accidental usage of runtime variables in conditions.
+    """
+
 Option = TypeVar("Option")
 Condition = TypeVar("Condition")
 Result = TypeVar("Result")
@@ -180,8 +194,8 @@ def as_bitvector(inp: Bit) -> BitVector[0:0]:
 def max_int(arg: int | Unsigned) -> int:
     """
     returns the largest possible runtime value of `arg`
-    for Unsigned values this is 2**width-1
-    since integers are runtime constant they are returned unchanged
+    - for Unsigned values this is 2**width-1
+    - since integers are runtime constant they are returned unchanged
     """
 
 @overload
