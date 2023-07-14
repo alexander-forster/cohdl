@@ -18,6 +18,7 @@ from cohdl._core import (
     true,
     Null,
     static_assert,
+    concurrent_context,
 )
 from cohdl._core._intrinsic import _intrinsic
 
@@ -355,3 +356,91 @@ class InShiftRegister:
             return self._data.lsb(rest=1).copy()
         else:
             return self._data.msb(rest=1).copy()
+
+
+def continuous_counter(ctx: Context, limit):
+    counter = Signal[Unsigned.upto(max_int(limit))](0)
+
+    @ctx
+    def proc():
+        nonlocal counter
+        if counter >= limit:
+            counter <<= 0
+        else:
+            counter <<= counter + 1
+
+    return counter
+
+
+class ToggleSignal:
+    def __init__(
+        self,
+        ctx: Context,
+        off_duration: int | Unsigned | Duration,
+        on_duration: int | Unsigned | Duration,
+        initial_on=False,
+    ):
+        assert isinstance(initial_on, bool)
+
+        if isinstance(on_duration, Duration):
+            cnt_switch_on = on_duration.count_periods(ctx.clk().period())
+        else:
+            cnt_switch_on = on_duration
+
+        if isinstance(off_duration, Duration):
+            cnt_switch_off = off_duration.count_periods(ctx.clk().period())
+        else:
+            cnt_switch_off = off_duration
+
+        if isinstance(cnt_switch_on, Signal) or isinstance(cnt_switch_off, Signal):
+            max_counter_end = max_int(cnt_switch_off) + max_int(cnt_switch_on) - 1
+            counter_end = Signal[Unsigned.upto(max_counter_end)]()
+
+            @concurrent_context
+            def logic():
+                counter_end.next = cnt_switch_off + cnt_switch_on - 1
+
+        else:
+            counter_end = cnt_switch_off + cnt_switch_on - 1
+
+        self._reset = Signal[Bit](False)
+
+        counter = continuous_counter(ctx.or_reset(self._reset), counter_end)
+
+        self._state = Signal[Bit]()
+        self._rising = Signal[Bit]()
+        self._falling = Signal[Bit]()
+
+        if initial_on:
+
+            @concurrent_context
+            def logic():
+                self._state <<= counter < cnt_switch_on
+                self._rising <<= counter == 0
+                self._falling <<= counter == cnt_switch_on
+
+        else:
+
+            @concurrent_context
+            def logic():
+                self._state <<= counter >= cnt_switch_off
+                self._rising <<= counter == cnt_switch_off
+                self._falling <<= counter == 0
+
+    def reset_signal(self):
+        return self._reset
+
+    def enable(self):
+        self._reset <<= False
+
+    def disable(self):
+        self._reset <<= True
+
+    def rising(self):
+        return self._rising
+
+    def falling(self):
+        return self._falling
+
+    def state(self):
+        return self._state

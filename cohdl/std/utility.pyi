@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TypeVar, Generic, TypeGuard, overload
 
-from cohdl._core import Bit, BitVector, Temporary, Unsigned
+from cohdl._core import Bit, BitVector, Temporary, Unsigned, Signal
 
-from ._context import Duration
+from ._context import Duration, Context
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -293,4 +293,69 @@ class InShiftRegister:
         """
         Returns the deserialized data.
         This call is only valid when the register is full.
+        """
+
+def continuous_counter(ctx: Context, limit: int | Unsigned) -> Signal[Unsigned]:
+    """
+    Returns a unsigned signal that is incremented on each tick of `ctx`.
+    When `limit` is reached the counter continues from zero.
+
+    example:
+
+    `continuous_counter(ctx, 3)`
+
+    produces the sequence `0-1-2-3-0-1-2-...`
+
+    """
+
+class ToggleSignal:
+    def __init__(
+        self,
+        ctx: Context,
+        off_duration: int | Unsigned | Duration,
+        on_duration: int | Unsigned | Duration,
+        initial_on=False,
+    ):
+        """
+        Defines a bit signal that toggles between `0` and `1` with a defined
+        period and duty cycle.
+
+        The duration parameters define how long the signal remains in each state.
+        These values are relative to the clock tick of `ctx`. `int` and `Unsigned`
+        parameters are interpreted as a number of clock ticks. When a `std.Duration`
+        is given the number of ticks is inferred from the clock of `ctx`
+        (so this only works if the clock as a defined frequency).
+        `off_duration` and `on_duration` can have different types.
+
+        By default all toggle signals start out in the `0` state
+        and transition to `1` after the first `off_duration`. When `initial_on`
+        is set to True the signal starts out in the `1` state and transitions
+        to `0` after the first `on_duration`.
+        """
+    def reset_signal(self) -> Signal[Bit]:
+        """
+        Returns the signal used to reset the internal toggle mechanism.
+        `enable` and `disable` are helper methods that set/reset this signal.
+        """
+    def enable(self) -> None:
+        """
+        Start the toggle signal after a previous call to `disable`.
+        """
+    def disable(self) -> None:
+        """
+        Stop the toggle signal and reset the internal counter to zero.
+        """
+    def state(self) -> Signal[Bit]:
+        """
+        Returns the bit signal that is toggled by this instance of ToggleSignal.
+        """
+    def rising(self) -> Signal[Bit]:
+        """
+        Returns a bit signal that is `1` for a single clock cycle after
+        each transition of the toggled signal from `0` to `1`.
+        """
+    def falling(self) -> Signal[Bit]:
+        """
+        Returns a bit signal that is `1` for a single clock cycle after
+        each transition of the toggled signal from `1` to `0`.
         """

@@ -53,6 +53,8 @@ from .utility import (
     max_int,
     InShiftRegister,
     OutShiftRegister,
+    continuous_counter,
+    ToggleSignal,
 )
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle

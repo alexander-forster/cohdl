@@ -324,7 +324,7 @@ class Context:
     @staticmethod
     def current() -> Context | None:
         """
-        returns the currently use context
+        returns the currently used context
         or None when no such context exists
         """
     def __init__(
@@ -435,7 +435,7 @@ class Context:
     def __call__(self, fn=None, *, executors: list[Executor] | None = None):
         """
         __call__ is defined to be used as a decorator
-        that turns the function it is applied to into a sequential context
+        that turns the function it is applied to into a sequential context.
 
         `executors` is an optional list of all Executors used in the context
         it is only needed for Executors with mode `immediate_before`.
