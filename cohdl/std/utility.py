@@ -73,6 +73,13 @@ def subclass_check(val, type):
     return issubclass(TypeQualifierBase.decay(val), type)
 
 
+async def as_awaitable(fn, /, *args, **kwargs):
+    if iscouroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    else:
+        return fn(*args, **kwargs)
+
+
 #
 #
 #

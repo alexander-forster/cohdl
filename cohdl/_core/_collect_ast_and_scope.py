@@ -541,7 +541,7 @@ class FunctionDefinition:
 
         for posonly in self._posonly:
             assert (
-                posonly not in kwargs
+                posonly not in kwargs or self._kwarg is not None
             ), f"position only argument `{posonly}` may not be passed as keyword argument"
 
             if len(args) != 0:

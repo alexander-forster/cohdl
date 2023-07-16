@@ -244,7 +244,7 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
         if isinstance(other, str):
             other = BitVector[len(other)](other)
 
-        assert isinstance(other, BitVector)
+        assert isinstance(other, BitVector), f"expected BitVector not '{other}'"
 
         assert (
             self._width == other._width

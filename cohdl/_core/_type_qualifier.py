@@ -1022,7 +1022,7 @@ class Signal(TypeQualifier):
 
     @_intrinsic_replacement(next.fset, assignment_spec=(0, 1))
     def _next_setter_replacement(self, value):
-        # assign value to check wheather operation is allowed
+        # assign value to check whether operation is allowed
         inp_value = _decay(value)
         self._value._assign(inp_value)
         if is_primitive(inp_value):

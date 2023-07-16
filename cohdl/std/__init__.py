@@ -41,7 +41,13 @@ GHz = Frequency.gigahertz
 from . import axi
 
 from . import utility
-from .utility import tc, instance_check, subclass_check, iscouroutinefunction
+from .utility import (
+    tc,
+    instance_check,
+    subclass_check,
+    iscouroutinefunction,
+    as_awaitable,
+)
 from .utility import (
     const_cond,
     check_type,

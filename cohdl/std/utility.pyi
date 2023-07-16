@@ -31,10 +31,43 @@ tc = _TC()
 #
 #
 
-def iscouroutinefunction(fn) -> bool: ...
-def instance_check(val, type: type[T]) -> TypeGuard[T]: ...
+def iscouroutinefunction(fn, /) -> bool:
+    """
+    Returns true when fn is a coroutine function
+    """
+
+def instance_check(val, type: type[T]) -> TypeGuard[T]:
+    """
+    `instance_check` is similar to Pythons `isinstance`.
+    The only difference is that type qualified types (Signals, Variables, Temporaries)
+    are decayed before the type check.
+
+    ---
+    example:
+
+    `isinstance(Bit(), Bit) == True`
+
+    `instance_check(Bit(), Bit) == True`
+
+    `isinstance(Signal[Bit](), Bit) == False`
+
+    `instance_check(Signal[Bit](), Bit) == True`
+    """
+
 def subclass_check(val, type) -> bool:
-    return issubclass(val, type)
+    """
+    `subclass_check` is similar to Pythons `issubclass`.
+    The only difference is that type qualified types (Signals, Variables, Temporaries)
+    are decayed before the type check.
+    """
+
+async def as_awaitable(fn, /, *args, **kwargs):
+    """
+    Calls or awaits `fn` with the given arguments.
+
+    `await as_awaitable(fn, a, b=b)` is equivalent to `await fn(a, b=b)` when `fn`is a coroutine function.
+    Otherwise the expression is equivalent to `fn(a, b=b)`.
+    """
 
 #
 #
