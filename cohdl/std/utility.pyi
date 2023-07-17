@@ -231,6 +231,12 @@ def max_int(arg: int | Unsigned) -> int:
     - since integers are runtime constant they are returned unchanged
     """
 
+def int_log_2(inp: int) -> int:
+    """
+    Returns the base two logarithm of a number.
+    Asserts, that `inp` is of type int and a power of 2.
+    """
+
 @overload
 async def wait_for(duration: int | Unsigned, *, allow_zero: bool = False) -> None:
     """

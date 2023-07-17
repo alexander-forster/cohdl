@@ -251,6 +251,14 @@ def max_int(arg: int | Unsigned):
 
 
 @_intrinsic
+def int_log_2(inp: int) -> int:
+    assert isinstance(inp, int)
+    assert inp > 0
+    assert inp.bit_count() == 1
+    return inp.bit_length() - 1
+
+
+@_intrinsic
 def _is_one(val):
     x = isinstance(val, int) and val == 1
     return x

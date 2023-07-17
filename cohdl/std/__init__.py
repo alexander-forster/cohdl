@@ -57,6 +57,7 @@ from .utility import (
     check_return,
     wait_for,
     max_int,
+    int_log_2,
     InShiftRegister,
     OutShiftRegister,
     continuous_counter,
