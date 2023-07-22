@@ -91,8 +91,6 @@ class Value(Expression):
         super().__init__(value)
 
     def write(self, scope: VhdlScope, target_hint=None, constrain=False):
-        if target_hint is None:
-            return scope.format_value(self.result, constrain=constrain)
         return scope.format_value(self.result, target_hint, constrain)
 
 
@@ -429,7 +427,7 @@ class CaseWhen(Statement):
 
         return TextBlock(
             [
-                f"case {self._cond.write(scope)} is",
+                f"case {self._cond.write(scope, constrain=True)} is",
                 *[
                     IndentBlock(
                         [
@@ -564,6 +562,16 @@ class VhdlScope:
             if isinstance(obj, (type, Instance)):
                 if _obj_only:
                     return
+
+                if (
+                    isinstance(obj, type)
+                    and issubclass(obj, Array)
+                    and issubclass(
+                        obj.elemtype, (cohdl_enum.Enum, cohdl_enum.DynamicEnum, Array)
+                    )
+                ):
+                    self.declare(obj.elemtype, True)
+                    type_declared = True
             elif isinstance(obj, TypeQualifier):
                 # type of signal must be declared before signal
                 if (
@@ -741,20 +749,16 @@ class VhdlScope:
 
             result = f"{root_name}({self.format_value(ref_spec.offset, Integer())})"
 
-            if isinstance(obj, TypeQualifier):
-                root_obj = TypeQualifier.decay(obj._root)
-                primitive_obj = TypeQualifier.decay(obj)
-                obj_type = type(primitive_obj)
+            primitive_obj = TypeQualifier.decay(obj)
+            obj_type = type(primitive_obj)
 
-                if isinstance(root_obj, Array):
-                    elem_type = root_obj.elemtype
+            if isinstance(primitive_obj, Array):
+                result_type = primitive_obj.elemtype
+            else:
+                assert isinstance(primitive_obj, BitVector)
+                result_type = Bit
 
-                    if elem_type != obj_type and not is_target:
-                        result = self.format_cast(
-                            primitive_obj, Signal[elem_type](), result
-                        )
-
-            return result
+            return result, result_type
 
         if isinstance(ref_spec, Slice):
             ref_spec.simplify()
@@ -768,23 +772,25 @@ class VhdlScope:
             else:
                 slice_result = f"{root_name}({ref_spec.start} to {ref_spec.stop})"
 
+            width = abs(ref_spec.start - ref_spec.stop) + 1
+
             if is_target:
-                return slice_result
+                return slice_result, BitVector[width]
 
             obj_type = obj.type
 
             if constrain:
                 if issubclass(obj_type, Unsigned):
-                    return f"unsigned'({slice_result})"
+                    return f"unsigned'({slice_result})", Unsigned[width]
                 if issubclass(obj_type, Signed):
-                    return f"signed'({slice_result})"
-                return f"std_logic_vector'({slice_result})"
+                    return f"signed'({slice_result})", Signed[width]
+                return f"std_logic_vector'({slice_result})", BitVector[width]
 
             if issubclass(obj_type, Unsigned):
-                return f"unsigned({slice_result})"
+                return f"unsigned({slice_result})", Unsigned[width]
             if issubclass(obj_type, Signed):
-                return f"signed({slice_result})"
-            return f"std_logic_vector({slice_result})"
+                return f"signed({slice_result})", Signed[width]
+            return f"std_logic_vector({slice_result})", BitVector[width]
 
         raise AssertionError("error, cannot format input")
 
@@ -874,7 +880,15 @@ class VhdlScope:
                 enumerators = [member.name for member in obj.__members__]
                 return f"type {name} is ({', '.join(enumerators)});"
             elif issubclass(obj, cohdl.Array):
-                return f"type {name} is array({0} to {obj.shape[0]-1}) of {self.format_type(obj.elemtype())};"
+                elemtype = obj.elemtype
+
+                if issubclass(elemtype, cohdl_enum.Enum):
+                    first, *rest = elemtype._member_map_.values()
+                    elem_obj = elemtype(first)
+                else:
+                    elem_obj = elemtype()
+
+                return f"type {name} is array({0} to {obj.shape[0]-1}) of {self.format_type(elem_obj)};"
             elif issubclass(obj, cohdl.Attribute):
                 return f"attribute {obj.name} : {self.format_type(obj.attr_type)};"
             else:
@@ -975,9 +989,15 @@ class VhdlScope:
                 result = self.format_vhdl_cast(obj, root_name)
             else:
                 result = root_name
+                parent = obj._root
 
                 for ref in obj._ref_spec:
-                    result = self._format_ref(ref.obj, result, ref, False, constrain)
+                    result, result_type = self._format_ref(
+                        parent, result, ref, False, constrain
+                    )
+                    parent = ref.obj
+
+                result = self.format_cast(obj.copy(), Signal[result_type](), result)
 
         if target_hint is None:
             return result
@@ -987,10 +1007,12 @@ class VhdlScope:
     def format_target(self, obj):
         assert isinstance(obj, (Signal, Variable, Temporary))
 
-        result = self.lookup_name(obj._root)
+        root = obj._root
+        result = self.lookup_name(root)
+        parent = root
 
         for ref in obj._ref_spec:
-            result = self._format_ref(obj, result, ref, True)
+            result, result_type = self._format_ref(parent, result, ref, True)
 
         return result
 
@@ -1059,15 +1081,19 @@ class VhdlScope:
                 vhdl_target_type = type(TypeQualifier.decay(target._root))
 
                 if target._ref_spec is not None:
-                    if issubclass(vhdl_target_type, Array):
-                        vhdl_target_type = vhdl_target_type.elemtype[target_type.width]
-                    else:
-                        if issubclass(vhdl_target_type, Signed):
-                            vhdl_target_type = Signed[target_type.width]
-                        elif issubclass(vhdl_target_type, Unsigned):
-                            vhdl_target_type = Unsigned[target_type.width]
+                    for ref_spec in target._ref_spec:
+                        if issubclass(vhdl_target_type, Array):
+                            if isinstance(ref_spec, Offset):
+                                vhdl_target_type = vhdl_target_type.elemtype
+                            else:
+                                raise AssertionError("Array slices are not implemented")
                         else:
-                            vhdl_target_type = BitVector[target_type.width]
+                            if issubclass(vhdl_target_type, Signed):
+                                vhdl_target_type = Signed[target_type.width]
+                            elif issubclass(vhdl_target_type, Unsigned):
+                                vhdl_target_type = Unsigned[target_type.width]
+                            else:
+                                vhdl_target_type = BitVector[target_type.width]
 
         if issubclass(target_type, Bit):
             if issubclass(value_type, Bit):
@@ -1195,116 +1221,6 @@ class VhdlScope:
             raise AssertionError(
                 f"invalid {vhdl_target_type} - {target_type} - {value_type}"
             )
-
-            #
-            #
-            #
-            #
-
-            if False:
-                if issubclass(target_type, Unsigned):
-                    if issubclass(value_type, Unsigned):
-                        if target_type.width == value_type.width:
-                            result = value_str
-                        elif target_type.width > value_type.width:
-                            result = f"resize({value_str}, {target_type.width})"
-                        else:
-                            raise AssertionError(
-                                f"cannot assign Unsigned to target with smaller width"
-                            )
-
-                        if issubclass(vhdl_target_type, Unsigned):
-                            return result
-                        elif issubclass(vhdl_target_type, Signed):
-                            return f"std_logic_vector(signed({result}))"
-                        else:
-                            return f"std_logic_vector({result})"
-
-                    if issubclass(value_type, BitVector):
-                        assert target_type.width == value_type.width
-
-                        # if value is a BitVector literal
-                        # an explicit type conversion is required
-                        if isinstance(value, BitVector):
-                            if issubclass(vhdl_target_type, Unsigned):
-                                return f"unsigned'({value_str})"
-                            elif issubclass(vhdl_target_type, Signed):
-                                return f"signed'({value_str})"
-                            else:
-                                return f"std_logic_vector'({value_str})"
-
-                        return f"unsigned({value_str})"
-                    if issubclass(value_type, _NullFullType):
-                        return self.format_literal(target_type(value))
-                    if issubclass(value_type, Integer):
-                        return f"to_unsigned({value_str}, {target_type.width})"
-
-                elif issubclass(target_type, Signed):
-                    if issubclass(value_type, Signed):
-                        if target_type.width == value_type.width:
-                            return value_str
-                        elif target_type.width > value_type.width:
-                            return f"resize({value_str}, {target_type.width})"
-                        raise AssertionError(
-                            f"cannot assign Signed to target with smaller width"
-                        )
-                    if issubclass(value_type, Unsigned):
-                        assert target_type.width > value_type.width
-                        return f"signed(std_logic_vector(resize({value_str}, {target_type.width})))"
-                    if issubclass(value_type, BitVector):
-                        assert target_type.width == value_type.width
-
-                        # if value is a BitVector literal
-                        # an explicit type conversion is required
-                        if isinstance(value, BitVector):
-                            value_str = f"std_logic_vector'({value_str})"
-
-                        return f"signed({value_str})"
-                    if issubclass(value_type, _NullFullType):
-                        return self.format_literal(target_type(value))
-                    if issubclass(value_type, Integer):
-                        return f"to_signed({value_str}, {target_type.width})"
-
-                elif issubclass(target_type, BitVector):
-                    if issubclass(value_type, _NullFullType):
-                        return self.format_literal(target_type(value))
-
-                    if issubclass(value_type, Unsigned):
-                        assert target_type.width == value_type.width
-
-                        if issubclass(vhdl_target_type, Unsigned):
-                            return value_str
-                        if issubclass(vhdl_target_type, Signed):
-                            return f"signed(std_logic_vector({value_str}))"
-
-                        return f"std_logic_vector({value_str})"
-                    elif issubclass(value_type, Signed):
-                        assert target_type.width == value_type.width
-
-                        if issubclass(vhdl_target_type, Signed):
-                            return value_str
-                        if issubclass(vhdl_target_type, Unsigned):
-                            return f"unsigned(std_logic_vector({value_str}))"
-
-                        return f"std_logic_vector({value_str})"
-
-                    elif issubclass(value_type, BitVector):
-                        assert target_type is value_type
-
-                        if issubclass(vhdl_target_type, Unsigned):
-                            # if value is a BitVector literal
-                            # an explicit type conversion is required
-                            if isinstance(value, BitVector):
-                                value_str = f"std_logic_vector'({value_str})"
-                            return f"unsigned({value_str})"
-                        if issubclass(vhdl_target_type, Signed):
-                            # if value is a BitVector literal
-                            # an explicit type conversion is required
-                            if isinstance(value, BitVector):
-                                value_str = f"std_logic_vector'({value_str})"
-                            return f"signed({value_str})"
-
-                        return value_str
 
         elif issubclass(target_type, Integer):
             if issubclass(value_type, (Integer, int)):

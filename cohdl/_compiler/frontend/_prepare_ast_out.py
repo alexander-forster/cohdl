@@ -203,7 +203,9 @@ class Value(Expression):
         super().__init__(value, bound_statements=bound_statements)
 
     def dump(self):
-        return IndentBlock(title=f"Value (value={self.result()})", content=[])
+        return IndentBlock(
+            title=f"Value (value={self.result()})", content=self.dump_bound()
+        )
 
 
 class CohdlExpr(Value):

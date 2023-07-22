@@ -1119,13 +1119,13 @@ class PrepareAst:
                     rhs.aug_assign,
                     elem.result(),
                     rhs.value,
-                    bound=[elem],
+                    bound=[value_expr, slice_expr, elem],
                 )
 
             if isinstance(inp.ctx, ast.Load):
                 if isinstance(value_result, (list, dict, str)):
                     item = value_result[slice_result]
-                    return out.Value(item, [value_expr])
+                    return out.Value(item, [value_expr, slice_expr])
 
                 else:
                     if isinstance(value_result, type):

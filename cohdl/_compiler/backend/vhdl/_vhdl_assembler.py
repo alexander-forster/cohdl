@@ -40,7 +40,6 @@ class _StmtAssembler:
     #
 
     def apply(self, inp, *args, **kwargs):
-
         if isinstance(
             inp, (ir.SignalAssignment | ir.SignalPush | ir.VariableAssignment)
         ):
@@ -260,7 +259,6 @@ class VhdlAssembler:
     #
 
     def apply(self, inp, **kwargs):
-
         if isinstance(inp, ir.Entity):
             scope = kwargs["parent_scope"]
 
@@ -370,7 +368,7 @@ class VhdlAssembler:
                     parent_scope.declare(obj._root)
                 return obj
 
-            inp.code().visit_objects(collect_objects)
+            inp.code().visit_referenced_objects(collect_objects)
 
             return vhdl.Concurrent(
                 parent_scope,
@@ -393,7 +391,7 @@ class VhdlAssembler:
                     scope.declare(obj._root)
                 return obj
 
-            inp.code().visit_objects(collect_objects)
+            inp.code().visit_referenced_objects(collect_objects)
 
             kwargs = {**kwargs, "context": Context.SEQUENTIAL}
 
@@ -412,14 +410,14 @@ class VhdlAssembler:
 
             # since process(all) is not supported prior to VHDL-2008
             # instead search for all signals, that are read in the process
-            # and specify them explicitly in the sensivity list
+            # and specify them explicitly in the sensitivity list
             if isinstance(inp._sensitivity, _SensitivityAll):
-
                 read_roots = IdSet()
 
                 def find_read_roots(obj, access: ir.AccessFlags):
                     if access is ir.AccessFlags.READ and isinstance(obj, Signal):
                         read_roots.add(obj._root)
+                    return obj
 
                 inp.visit_referenced_objects(find_read_roots)
 

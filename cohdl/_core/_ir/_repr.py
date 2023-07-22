@@ -66,7 +66,7 @@ class AccessFlags(enum.Flag):
 
 
 def _visit_referenced_objects(self, operation):
-    # used to include objects in refspec in vistit_objects
+    # used to include objects in refspec in visited_objects
 
     def visit_single_object(obj, access):
         if isinstance(obj, TypeQualifier):
@@ -74,6 +74,7 @@ def _visit_referenced_objects(self, operation):
                 if isinstance(ref, Offset):
                     if isinstance(ref.offset, TypeQualifier):
                         ref.offset = operation(ref.offset, AccessFlags.READ)
+
                 elif isinstance(ref, Slice):
                     if isinstance(ref.start, TypeQualifier):
                         ref.start = operation(ref.start, AccessFlags.READ)

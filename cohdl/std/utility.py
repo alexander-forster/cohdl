@@ -15,6 +15,7 @@ from cohdl._core import (
     Unsigned,
     select_with,
     evaluated,
+    _intrinsic,
     true,
     Null,
     static_assert,
@@ -104,12 +105,19 @@ def _check_type(result, expected):
         return instance_check(result, expected)
 
 
+@_intrinsic
+def _format_type_check_error(expected_type, actual_type):
+    return f"invalid type in checked expression: expected '{expected_type}' but got '{actual_type}'"
+
+
 class _TypeCheckedExpression:
     def __init__(self, expected_type: type | tuple = _UncheckedType):
         self._expected = expected_type
 
     def _checked(self, arg):
-        assert _check_type(arg, self._expected), "invalid type in checked expression"
+        assert _check_type(arg, self._expected), _format_type_check_error(
+            self._expected, arg
+        )
         return arg
 
     def __getitem__(self, expected_type):

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ._primitive_type import is_primitive_type, _PrimitiveType
 from ._intrinsic import _intrinsic
+from ._enum import Enum
 
 
 class _MetaArray(type):
@@ -12,8 +13,9 @@ class _MetaArray(type):
 
     @_intrinsic
     def __getitem__(cls, slice):
-        assert isinstance(slice, tuple)
-        assert len(slice) == 2
+        assert (
+            isinstance(slice, tuple) and len(slice) == 2
+        ), "cohdl.Array[] requires two arguments [DATA_TYPE, SIZE]"
         assert isinstance(slice[0], type)
 
         elem_type = slice[0]
@@ -75,7 +77,14 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
         assert len(slice) == len(self._shape)
         # TODO: multidimensional array
         assert len(slice) == 1
-        return self._elem_type()
+
+        elem_type = self._elem_type
+
+        if issubclass(elem_type, Enum):
+            first, *rest = elem_type._member_map_.values()
+            return elem_type(first)
+
+        return elem_type()
 
     @_intrinsic
     def __setitem__(self, slice, arg):

@@ -971,14 +971,14 @@ class ConvertInstance:
             if isinstance(stmt, ir.Expression) and isinstance(stmt.result(), Temporary):
                 root = stmt.result()._root
 
-                if not root in used_temporaries:
+                if root not in used_temporaries:
                     return ir.CodeBlock([], None)
             elif isinstance(stmt, ir.VariableAssignment) and isinstance(
                 stmt._target, Temporary
             ):
                 root = stmt._target._root
 
-                if not root in used_temporaries:
+                if root not in used_temporaries:
                     return ir.CodeBlock([], None)
 
             return stmt
