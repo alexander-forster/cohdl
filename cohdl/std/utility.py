@@ -18,6 +18,7 @@ from cohdl._core import (
     _intrinsic,
     true,
     Null,
+    Full,
     static_assert,
     concurrent_context,
 )
@@ -79,6 +80,38 @@ async def as_awaitable(fn, /, *args, **kwargs):
         return await fn(*args, **kwargs)
     else:
         return fn(*args, **kwargs)
+
+
+#
+#
+#
+
+
+@_intrinsic
+def zeros(len: int):
+    return BitVector[len](Null)
+
+
+@_intrinsic
+def ones(len: int):
+    return BitVector[len](Full)
+
+
+@_intrinsic
+def width(inp: Bit | BitVector) -> int:
+    if instance_check(inp, Bit):
+        return 1
+    else:
+        return inp.width
+
+
+def one_hot(width: int, bit_pos: int | Unsigned) -> BitVector:
+    assert 0 <= bit_pos < width, "bit_pos out of range"
+    return (Unsigned[width](1) << bit_pos).bitvector
+
+
+def reverse_bits(inp: BitVector) -> BitVector:
+    return concat(*inp)
 
 
 #
@@ -314,12 +347,14 @@ class OutShiftRegister:
         else:
             self._data <<= Signal(Bit(True) @ data)
 
-    async def shift_all(self, target: Bit, shift_delayed=False):
+    async def shift_all(self, target: Bit | BitVector, shift_delayed=False):
+        count = target.width if instance_check(target, BitVector) else None
+
         if not shift_delayed:
-            target <<= self.shift()
+            target <<= self.shift(count)
 
         while not self.empty():
-            target <<= self.shift()
+            target <<= self.shift(count)
 
     def empty(self):
         if self._msb_first:
@@ -327,13 +362,22 @@ class OutShiftRegister:
         else:
             return not self._data.msb(rest=1)
 
-    def shift(self):
+    def shift(self, count: int | None = None):
+        shift_width = count if count is not None else 1
+        assert isinstance(count, int), "count must be a constant integer value"
+
         if self._msb_first:
-            self._data <<= self._data.lsb(rest=1) @ Bit(0)
-            return self._data.msb()
+            after_shift = self._data.lsb(rest=shift_width) @ zeros(shift_width)
+
+            # check, that the marker bit is never shifted out of the extended register
+            assert bool(after_shift), "invalid shift, register already empty"
+            self._data <<= after_shift
+            return self._data.msb(count)
         else:
-            self._data <<= Bit(0) @ self._data.msb(rest=1)
-            return self._data.lsb()
+            after_shift = zeros(shift_width) @ self._data.msb(rest=shift_width)
+            assert bool(after_shift), "invalid shift, register already empty"
+            self._data <<= after_shift
+            return self._data.lsb(count)
 
 
 class InShiftRegister:
@@ -346,7 +390,7 @@ class InShiftRegister:
         else:
             self._data = Signal(Bit(True) @ BitVector[len](Null))
 
-    async def shift_all(self, src: Bit, shift_delayed=False):
+    async def shift_all(self, src: Bit | BitVector, shift_delayed=False):
         if not shift_delayed:
             self.shift(src)
 
@@ -367,12 +411,15 @@ class InShiftRegister:
         else:
             return self._data.lsb().copy()
 
-    def shift(self, src: Bit):
-        assert not self.full()
+    def shift(self, src: Bit | BitVector):
+        shift_cnt = width(src)
+
         if self._msb_first:
-            self._data <<= self._data.lsb(rest=1) @ src
+            assert not self._data.msb(shift_cnt), "invalid shift, register already full"
+            self._data <<= self._data.lsb(rest=shift_cnt) @ src
         else:
-            self._data <<= src @ self._data.msb(rest=1)
+            assert not self._data.lsb(shift_cnt), "invalid shift, register already full"
+            self._data <<= src @ self._data.msb(rest=shift_cnt)
 
     def data(self):
         if self._msb_first:

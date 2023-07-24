@@ -47,8 +47,11 @@ from .utility import (
     subclass_check,
     iscouroutinefunction,
     as_awaitable,
-)
-from .utility import (
+    zeros,
+    ones,
+    width,
+    one_hot,
+    reverse_bits,
     const_cond,
     check_type,
     select,

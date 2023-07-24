@@ -73,6 +73,45 @@ async def as_awaitable(fn, /, *args, **kwargs):
 #
 #
 
+def zeros(len: int) -> BitVector:
+    """
+    Similar to matlab/numpy zeros.
+    Returns a BitVector literal of width `len` with all bits set to `0`.
+    """
+
+def ones(len: int) -> BitVector:
+    """
+    Similar to matlab/numpy ones.
+    Returns a BitVector literal of width `len` with all bits set to `1`.
+    """
+
+def width(inp: Bit | BitVector) -> int:
+    """
+    Determines the number of bits in `inp`.
+    Returns `1` if `inp` is a bit type and `inp.width` otherwise.
+    """
+
+def one_hot(width: int, bit_pos: int | Unsigned) -> BitVector:
+    """
+    Returns a BitVector of `width` bits where the single bit at index
+    `bit_pos` is set to `1`.
+    """
+
+def reverse_bits(inp: BitVector) -> BitVector:
+    """
+    Creates a new BitVector from the Bits in `inp` in reverse order.
+
+    ---
+
+    example:
+
+    `reverse_bits(BitVector[5]("10100")) == BitVector[5]("00101")`
+    """
+
+#
+#
+#
+
 def const_cond(arg) -> bool:
     """
     Asserts, that the argument is convertible to a compile
@@ -274,21 +313,35 @@ class OutShiftRegister:
         and will be overwritten if `shift` is called
         after `set_data` in the same clock cycle.
         """
-    async def shift_all(self, target: Bit, shift_delayed=True):
+    async def shift_all(
+        self, target: Signal[Bit] | Signal[BitVector], shift_delayed=False
+    ):
         """
-        Shift one bit per clock cycle into target until
-        the shift register is empty.
-        When `shift_delayed` is set to False shifting starts with
-        a delay of one clock cycle
+        On each clock cycle target is updated by shifting
+        the corresponding number of bits out of the shift register.
+        This coroutine returns once the register is empty.
+
+        When `shift_delayed` is set to True shifting starts with
+        a delay of one clock cycle.
         """
     def empty(self):
         """
         Returns True when all bits have been shifted out of the register
         """
-    def shift(self):
+    @overload
+    def shift(self) -> Bit:
         """
         Shifts the register by one bit
         and returns the state of the shifted out bit.
+
+        This method can only be called once per clock cycle
+        and may not be mixed with `shift_all`.
+        """
+    @overload
+    def shift(self, count: int) -> BitVector:
+        """
+        Shifts the register by `count` bits
+        and returns a vector of the shifted out bits.
 
         This method can only be called once per clock cycle
         and may not be mixed with `shift_all`.
@@ -301,10 +354,10 @@ class InShiftRegister:
         `msb_first` defines the order in which the bits will be
         shifted out of the register.
         """
-    async def shift_all(self, src: Bit, shift_delayed=False):
+    async def shift_all(self, src: Bit | BitVector, shift_delayed=False):
         """
         Shift the state of `src` into the shift register
-        until it is full.
+        on each clock cycle until it is full.
         When `shift_delayed` is set to True shifting starts with
         a delay of one clock cycle.
         """
@@ -321,9 +374,9 @@ class InShiftRegister:
         Returns True when `len` bits of data have been
         shifted into the register.
         """
-    def shift(self, src: Bit):
+    def shift(self, src: Bit | BitVector):
         """
-        Shifts one bit from `src` into the register.
+        Shifts the content of `src` into the register.
 
         This method can only be called once per clock cycle
         and may not be mixed with `shift_all`.
