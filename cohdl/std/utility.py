@@ -364,7 +364,9 @@ class OutShiftRegister:
 
     def shift(self, count: int | None = None):
         shift_width = count if count is not None else 1
-        assert isinstance(count, int), "count must be a constant integer value"
+        assert (
+            isinstance(shift_width, int) and shift_width > 0
+        ), "count must be a constant positive integer value"
 
         if self._msb_first:
             after_shift = self._data.lsb(rest=shift_width) @ zeros(shift_width)

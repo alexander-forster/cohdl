@@ -13,14 +13,6 @@ class Channel:
 
         self._signals = kwargs
 
-    @classmethod
-    def signal(cls, **kwargs):
-        return cls(
-            Signal(Bit, False),
-            Signal(Bit, False),
-            **{name: Signal(val) for name, val in kwargs.items()},
-        )
-
     async def send(self, **kwargs):
         for name, value in kwargs.items():
             self._signals[name] <<= value

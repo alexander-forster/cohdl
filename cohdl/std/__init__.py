@@ -7,8 +7,6 @@ from ._assignable_type import (
     make_variable,
 )
 
-from ._prescaler import Prescaler, moving_average, duty_cycle, ClockDivider
-from ._uart import UartReceiver, UartTransmitter
 
 from ._context import (
     concurrent,
