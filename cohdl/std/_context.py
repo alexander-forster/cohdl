@@ -509,7 +509,7 @@ def sequential(
 
 
 def concurrent_assign(target, source):
-    @concurrent(comment="my comment for concurrent_assign")
+    @concurrent()
     def logic():
         nonlocal target
         target <<= source

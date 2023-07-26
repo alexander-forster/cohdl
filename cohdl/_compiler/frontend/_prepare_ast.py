@@ -70,7 +70,7 @@ def _make_comparable(lhs, rhs):
     if isinstance(rhs, _type_qualifier.TypeQualifier) or is_primitive(rhs):
         return type(_type_qualifier.TypeQualifier.decay(rhs))(lhs), rhs
 
-    raise AssertionError(f"invalid comparisson between {lhs} and {rhs}")
+    raise AssertionError(f"invalid comparison between {lhs} and {rhs}")
 
 
 #
@@ -212,10 +212,12 @@ class PrepareAst:
             fn_def = FunctionDefinition.from_coroutine(result.coro)
 
             sub = self.subcall(fn_def, [], {})
-            assert sub.result() is None
+            assert (
+                sub.result() is None
+            ), "the coroutine handed to cohdl.coroutine_step should not return a value"
 
             # close coroutine to suppress
-            # RuntimeWarning: couroutine was never awaited
+            # RuntimeWarning: coroutine was never awaited
             result.coro.close()
 
             return out.Statemachine(sub._code, result.coro.__name__)
@@ -256,9 +258,15 @@ class PrepareAst:
         #
 
         if isinstance(result, _intrinsic._IsInstance):
-            assert not isinstance(result.type, _MergedBranch)
+            assert not isinstance(
+                result.type, _MergedBranch
+            ), f"type argument not runtime constant: could be any of {[branch.obj for branch in result.type.branches]}"
             if isinstance(result.type, tuple):
-                assert not any(isinstance(elem, _MergedBranch) for elem in result.type)
+                if any(isinstance(elem, _MergedBranch) for elem in result.type):
+                    for nr, elem in enumerate(result.type, start=1):
+                        assert not isinstance(
+                            elem, _MergedBranch
+                        ), f"type argument {nr} not runtime constant: could be any of {[branch.obj for branch in elem.branches]}"
 
             if isinstance(result.obj, _MergedBranch):
                 return out.Value(result.obj.isinstance(result.type), [])
@@ -541,7 +549,7 @@ class PrepareAst:
         return self._scope[name]
 
     def set_local(self, name, value):
-        assert self._scope[name] is _Unbound
+        assert self._scope[name] is _Unbound, f"name '{name}' already used in scope"
         self._scope[name] = value
 
     def unset_local(self, name: str):
@@ -656,6 +664,43 @@ class PrepareAst:
     def apply_impl(self, inp):
         last_inp = self._last_apply_inp
         self._last_apply_inp = inp
+
+        def translate_await(value_expr: out.Expression):
+            assert (
+                self.is_async()
+            ), "await expressions can only be used in async contexts"
+
+            result = value_expr.result()
+
+            if isinstance(value_expr, out.CohdlExpr):
+                assert isinstance(
+                    result, (_type_qualifier.TypeQualifier, _BooleanLiteral)
+                ), "`cohdl.expr` should always return a primitive type"
+                return out.Await(out.Value(result, [value_expr]), primitive=True)
+
+            if isinstance(result, (_type_qualifier.TypeQualifier, _BooleanLiteral)):
+                assert not isinstance(
+                    result, _type_qualifier.Temporary
+                ), "Temporaries can not be awaited, you can use the `await cohdl.expr(...)` pattern to fix this problem"
+
+                return out.Await(
+                    out.Value(result, []), primitive=True, expr_before=[value_expr]
+                )
+
+            assert inspect.iscoroutine(result)
+
+            fn_def = FunctionDefinition.from_coroutine(
+                result,
+            )
+
+            # close coroutine to suppress
+            # RuntimeWarning: coroutine was never awaited
+            result.close()
+
+            sub = self.subcall(fn_def, [], {})
+            sub.add_bound_statement(value_expr)
+
+            return out.Await(sub, primitive=False)
 
         if isinstance(inp, ast.Assign):
             value_expr = self.apply(inp.value)
@@ -1188,45 +1233,13 @@ class PrepareAst:
             return self.apply(inp.value)
 
         if isinstance(inp, ast.Await):
-            assert (
-                self.is_async()
-            ), "await expressions can only be used in async contexts"
-
-            value_expr = cast(out.Expression, self.apply(inp.value))
-            result = value_expr.result()
-
-            if isinstance(value_expr, out.CohdlExpr):
-                assert isinstance(
-                    result, (_type_qualifier.TypeQualifier, _BooleanLiteral)
-                ), "`cohdl.expr` should always return a primitive type"
-                return out.Await(out.Value(result, [value_expr]), primitive=True)
-
-            if isinstance(result, (_type_qualifier.TypeQualifier, _BooleanLiteral)):
-                assert not isinstance(
-                    result, _type_qualifier.Temporary
-                ), "Temporaries can not be awaited, you can use the `await cohdl.expr(...)` pattern to fix this problem"
-
-                return out.Await(
-                    out.Value(result, []), primitive=True, expr_before=[value_expr]
-                )
-
-            assert inspect.iscoroutine(result)
-
-            fn_def = FunctionDefinition.from_coroutine(
-                result,
-            )
-
-            # close coroutine to suppress
-            # RuntimeWarning: coroutine was never awaited
-            result.close()
-
-            sub = self.subcall(fn_def, [], {})
-            sub.add_bound_statement(value_expr)
-
-            return out.Await(sub, primitive=False)
+            return translate_await(self.apply(inp.value))
 
         if isinstance(inp, ast.While):
             assert self.is_async(), "while loops can only be used in async contexts"
+            assert (
+                len(inp.orelse) == 0
+            ), "while loops with else statement are not supported"
 
             test = cast(out.Expression, self.apply(inp.test))
 
@@ -1528,7 +1541,7 @@ class PrepareAst:
                     body = cast(out.CodeBlock, self.apply(case.body))
                     cases.append((cond, body))
                 else:
-                    raise AssertionError()
+                    raise AssertionError(f"unsupported match pattern '{case.pattern}'")
 
             return out.CondSelect(cases, default_body)
 
@@ -1621,8 +1634,9 @@ class PrepareAst:
 
             # special case for always expressions in sequential blocks
             if func_ref is always:
-                assert len(inp.args) == 1
-                assert len(inp.keywords) == 0
+                assert (
+                    len(inp.args) == 1 and len(inp.keywords) == 0
+                ), "cohdl.always expects a single positional argument and no keyword arguments"
 
                 arg_expr = self.apply(inp.args[0])
 
@@ -1634,8 +1648,9 @@ class PrepareAst:
                 assert isinstance(
                     last_inp, ast.Await
                 ), "cohdl.expr may only be used as a wrapper around the argument of await expressions"
-                assert len(inp.args) == 1
-                assert len(inp.keywords) == 0
+                assert (
+                    len(inp.args) == 1 and len(inp.keywords) == 0
+                ), "cohdl.expr expects a single positional argument and no keyword arguments"
 
                 arg_expr = self.apply(inp.args[0])
                 return out.CohdlExpr(arg_expr.result(), [arg_expr])
@@ -1688,8 +1703,9 @@ class PrepareAst:
                     obj_type = func_ref
 
                     if issubclass(obj_type, super):
-                        assert len(args) == 0
-                        assert len(kwargs) == 0
+                        assert len(args) == 0 and len(
+                            kwargs
+                        ), "only super() without arguments is supported in synthesizable contexts"
 
                         class_info = self.lookup_name("__class__")
                         obj_info = self.super_arg()
@@ -1702,7 +1718,9 @@ class PrepareAst:
 
                     # non default __new__ not (yet) supported
 
-                    assert _is_intrinsic(obj_type.__new__)
+                    assert _is_intrinsic(
+                        obj_type.__new__
+                    ), "cohdl does not support __new__ during synthesis. This can be fixed by marking __new__ as constexpr"
 
                     new_call = self.subcall(obj_type.__new__, [obj_type, *args], kwargs)
                     new_obj = new_call.result()
@@ -1809,6 +1827,86 @@ class PrepareAst:
                 ),
                 bound_statements=bound_stmt,
             )
+
+        if isinstance(inp, ast.With):
+            items = inp.items
+
+            exit_list = []
+
+            result_statements = []
+            first_target = None
+
+            for item in items:
+                context_expr = self.apply(item.context_expr)
+                result_statements.append(context_expr)
+                context = context_expr.result()
+
+                enter = type(context).__enter__
+                exit_list.append((context, type(context).__exit__))
+
+                call_expr = self.subcall(enter, [context], {})
+                result_statements.append(call_expr)
+
+                if item.optional_vars is not None:
+                    target = PrepareAst.Target(item.optional_vars, self)
+                    target.unpack(call_expr.result())
+
+                    if first_target is None:
+                        first_target = target
+
+            result_statements.append(self.apply(inp.body))
+
+            for context, fn in exit_list[::-1]:
+                result_statements.append(
+                    self.subcall(fn, [context, None, None, None], {})
+                )
+
+            if first_target is not None:
+                first_target.restore_locals()
+
+            return out.CodeBlock(result_statements)
+
+        if isinstance(inp, ast.AsyncWith):
+            assert (
+                self.is_async()
+            ), "async with expressions can only be used in async contexts"
+
+            items = inp.items
+
+            exit_list = []
+
+            result_statements = []
+            first_target = None
+
+            for item in items:
+                context_expr = self.apply(item.context_expr)
+                result_statements.append(context_expr)
+                context = context_expr.result()
+
+                enter = type(context).__aenter__
+                exit_list.append((context, type(context).__aexit__))
+
+                call_expr = translate_await(self.subcall(enter, [context], {}))
+                result_statements.append(call_expr)
+
+                if item.optional_vars is not None:
+                    target = PrepareAst.Target(item.optional_vars, self)
+                    target.unpack(call_expr.result())
+
+                    if first_target is None:
+                        first_target = target
+
+            result_statements.append(self.apply(inp.body))
+
+            for context, fn in exit_list[::-1]:
+                result_statements.append(
+                    translate_await(self.subcall(fn, [context, None, None, None], {}))
+                )
+
+            if first_target is not None:
+                first_target.restore_locals()
+
+            return out.CodeBlock(result_statements)
 
         raise AssertionError(f"invalid ast node {inp}")
 
