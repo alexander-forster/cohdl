@@ -5,6 +5,19 @@ from typing import TypeVar, Coroutine
 def _intrinsic(fn):
     return fn
 
+def comment(*lines: str) -> None:
+    """
+    Inserts a comment into the generated VHDL representation.
+
+    std.comment("Hello, world!", "A", "B") is translated into
+
+    `-- Hello, world!`
+
+    `-- A`
+
+    `-- B`
+    """
+
 Option = TypeVar("Option")
 Result = TypeVar("Result")
 

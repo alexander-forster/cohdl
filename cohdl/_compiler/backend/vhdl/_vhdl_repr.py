@@ -129,6 +129,15 @@ class Nop(Expression):
         return TextBlock([])
 
 
+class Comment(Statement):
+    def __init__(self, lines):
+        super().__init__()
+        self.lines = lines
+
+    def write(self, scope: VhdlScope):
+        return TextBlock([f"-- {line}" for line in self.lines])
+
+
 class Boolean(Expression):
     def __init__(self, arg: Expression):
         super().__init__(_Boolean())

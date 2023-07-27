@@ -20,6 +20,7 @@ from ._type_qualifier import (
 from ._context import sequential_context, concurrent_context, Block, Entity
 
 from ._intrinsic import (
+    comment,
     select_with,
     coroutine_step,
     reset_context,

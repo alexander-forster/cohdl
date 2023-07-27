@@ -9,6 +9,19 @@ from ._context import Duration, Context
 T = TypeVar("T")
 U = TypeVar("U")
 
+def comment(*lines: str) -> None:
+    """
+    Inserts a comment into the generated VHDL representation.
+
+    std.comment("Hello, world!", "A", "B") is translated into
+
+    `-- Hello, world!`
+
+    `-- A`
+
+    `-- B`
+    """
+
 class _TC(Generic[T]):
     def __getitem__(self, t: type[U]) -> _TC[U]: ...
     def __call__(self, arg) -> T | Temporary[T]:

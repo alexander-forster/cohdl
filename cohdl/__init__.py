@@ -30,6 +30,7 @@ from ._core import enum
 
 from ._core import reset_context, reset_pushed, sensitivity
 from ._core import (
+    comment,
     select_with,
     always,
     expr,

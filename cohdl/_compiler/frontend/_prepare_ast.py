@@ -26,6 +26,7 @@ from cohdl._core._intrinsic import (
     _ResetPushed,
     _BitSignalEvent,
     _BitSignalEventGroup,
+    _IntrinsicComment,
 )
 from cohdl._core import _intrinsic
 
@@ -377,6 +378,9 @@ class PrepareAst:
                     )
 
                 return out.Value(result.new_obj, bound)
+
+        if isinstance(result, _IntrinsicComment):
+            return out.Comment(result.lines)
 
         if result is NotImplemented:
             return out.Value(result, [])

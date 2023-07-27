@@ -112,6 +112,7 @@ _intrinsic(bool.__xor__)
 # dict methods
 #
 
+_intrinsic(dict)
 _intrinsic(dict.items)
 _intrinsic(dict.keys)
 _intrinsic(dict.values)
@@ -122,12 +123,14 @@ _intrinsic(dict.__getitem__)
 # tuple methods
 #
 
+_intrinsic(tuple)
 _intrinsic(tuple.__getitem__)
 
 #
 # list methods
 #
 
+_intrinsic(list)
 _intrinsic(list.__getitem__)
 
 #

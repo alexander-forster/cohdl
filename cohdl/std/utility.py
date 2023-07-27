@@ -15,16 +15,22 @@ from cohdl._core import (
     Unsigned,
     select_with,
     evaluated,
-    _intrinsic,
     true,
     Null,
     Full,
     static_assert,
     concurrent_context,
 )
+
 from cohdl._core._intrinsic import _intrinsic
 
+from cohdl._core._intrinsic import comment as cohdl_comment
+
 from ._context import Duration, Context
+
+
+def comment(*lines):
+    cohdl_comment(*lines)
 
 
 class _TC:

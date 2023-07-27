@@ -236,7 +236,12 @@ class CodeBlock(Statement):
         )
 
     def empty(self) -> bool:
-        return len(self._content) == 0
+        # comments are considered empty so they don't affect
+        # the special case where an await expression is the first
+        # statement in a sequential context
+        return len(self._content) == 0 or all(
+            isinstance(elem, Comment) for elem in self._content
+        )
 
     def addfront(self, stmt: Statement):
         if stmt is None:
@@ -266,6 +271,18 @@ class Nop(Statement):
 
     def copy(self):
         return Nop()
+
+
+class Comment(Statement):
+    def __init__(self, lines: list[str] = None):
+        super().__init__()
+        self.lines = lines if lines is not None else []
+
+    def visit_objects(self, operation: Callable):
+        pass
+
+    def copy(self):
+        return Comment([*self.lines])
 
 
 class Event:

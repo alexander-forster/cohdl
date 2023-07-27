@@ -40,6 +40,7 @@ from . import axi
 
 from . import utility
 from .utility import (
+    comment,
     tc,
     instance_check,
     subclass_check,

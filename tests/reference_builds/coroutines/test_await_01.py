@@ -20,6 +20,18 @@ class test_await_01(cohdl.Entity):
 
         @std.sequential(clk)
         async def proc_simple():
+            std.comment(
+                "test comment to check if it affects empty state before first await"
+            )
+            cohdl.comment(
+                "test comment to check if it affects empty state before first await"
+            )
+            std.comment(
+                "test comment to check if it affects empty state before first await"
+            )
+            cohdl.comment(
+                "test comment to check if it affects empty state before first await"
+            )
             await self.enable
             self.output <<= self.input
 

@@ -70,6 +70,9 @@ class _StmtAssembler:
         if isinstance(inp, ir.Nop):
             return vhdl.Nop()
 
+        if isinstance(inp, ir.Comment):
+            return vhdl.Comment(inp.lines)
+
         if isinstance(inp, ir.BinOp):
             return assign_temporary(
                 inp.result(),

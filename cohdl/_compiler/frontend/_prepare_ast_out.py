@@ -95,6 +95,12 @@ class Nop(Statement):
         return IndentBlock(title="Nop", content=self.dump_bound())
 
 
+class Comment(Statement):
+    def __init__(self, lines: list[str]):
+        super().__init__(False, None)
+        self.lines = lines
+
+
 class StarredValue(Expression):
     def __init__(self, result, bound_statements: list[Statement] | None = None):
         super().__init__(result, bound_statements)

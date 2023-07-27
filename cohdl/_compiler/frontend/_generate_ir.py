@@ -924,6 +924,12 @@ class IrGenerator:
 
             return open_blocks
 
+        if isinstance(inp, out.Comment):
+            for block in open_blocks:
+                block.append(ir.Comment(inp.lines))
+
+            return open_blocks
+
         raise AssertionError(f"cannot convert {inp}")
 
 

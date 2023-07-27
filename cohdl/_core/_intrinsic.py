@@ -76,6 +76,32 @@ def _has_intrinsic_replacement(fn):
 
 
 #
+# comment
+#
+
+
+class _IntrinsicComment:
+    def __init__(self, lines: list[str]):
+        self.lines = lines
+
+
+@_intrinsic
+def comment(*lines: str):
+    assert all(
+        isinstance(line, str) for line in lines
+    ), "all arguments of comment must be of type str"
+    pass
+
+
+@_intrinsic_replacement(comment)
+def _comment_replacement(*lines: str):
+    assert all(
+        isinstance(line, str) for line in lines
+    ), "all arguments of comment must be of type str"
+    return _IntrinsicComment(lines)
+
+
+#
 #
 # select
 #
