@@ -17,6 +17,8 @@ from cohdl import (
     AssignMode,
 )
 
+from ._prefix import _Prefix
+
 
 class Reset:
     def __init__(
@@ -342,6 +344,22 @@ def block(fn: Callable | None = None, /, comment=None, attributes: dict | None =
             fn()
 
 
+class _NopContextManager:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, type, value, traceback):
+        return None
+
+
+def _prefix_wrapper(prefix, fn):
+    def wrapped():
+        with prefix:
+            fn()
+
+    return wrapped
+
+
 def concurrent(
     fn: Callable | None = None,
     *,
@@ -349,6 +367,11 @@ def concurrent(
     attributes: dict | None = None,
     capture_lazy: bool = False,
 ):
+    parent_prefix = _Prefix._parent_prefix()
+
+    if parent_prefix is None:
+        parent_prefix = _NopContextManager()
+
     if attributes is None:
         attributes = {}
 
@@ -360,7 +383,7 @@ def concurrent(
 
         def wrapper(fn):
             cohdl.concurrent_context(
-                fn,
+                _prefix_wrapper(parent_prefix, fn),
                 name=fn.__name__,
                 capture_lazy=capture_lazy,
                 attributes=attributes,
@@ -370,7 +393,7 @@ def concurrent(
         return wrapper
 
     cohdl.concurrent_context(
-        fn,
+        _prefix_wrapper(parent_prefix, fn),
         name=fn.__name__,
         capture_lazy=capture_lazy,
         attributes=attributes,
@@ -388,6 +411,11 @@ def sequential(
     attributes: dict | None = None,
     capture_lazy: bool = False,
 ):
+    parent_prefix = _Prefix._parent_prefix()
+
+    if parent_prefix is None:
+        parent_prefix = _NopContextManager()
+
     is_coro = inspect.iscoroutinefunction(trigger)
 
     if attributes is None:
@@ -420,7 +448,8 @@ def sequential(
         wrapper.__name__ = trigger.__name__
 
         cohdl.sequential_context(
-            wrapper,
+            _prefix_wrapper(parent_prefix, wrapper),
+            name=trigger.__name__,
             capture_lazy=capture_lazy,
             attributes=attributes,
             source_location=SourceLocation.from_function(trigger),
@@ -452,7 +481,8 @@ def sequential(
             wrapper.__name__ = fn.__name__
 
             cohdl.sequential_context(
-                wrapper,
+                _prefix_wrapper(parent_prefix, wrapper),
+                name=fn.__name__,
                 capture_lazy=capture_lazy,
                 attributes=attributes,
                 source_location=SourceLocation.from_function(fn),
@@ -476,7 +506,8 @@ def sequential(
             wrapper.__name__ = fn.__name__
 
             cohdl.sequential_context(
-                wrapper,
+                _prefix_wrapper(parent_prefix, wrapper),
+                name=fn.__name__,
                 capture_lazy=capture_lazy,
                 attributes=attributes,
                 source_location=SourceLocation.from_function(fn),
@@ -499,7 +530,8 @@ def sequential(
             wrapper.__name__ = fn.__name__
 
             cohdl.sequential_context(
-                wrapper,
+                _prefix_wrapper(parent_prefix, wrapper),
+                name=fn.__name__,
                 capture_lazy=capture_lazy,
                 attributes=attributes,
                 source_location=SourceLocation.from_function(fn),

@@ -40,6 +40,7 @@ from . import axi
 
 from . import utility
 from .utility import (
+    nop,
     comment,
     tc,
     instance_check,
@@ -51,6 +52,7 @@ from .utility import (
     width,
     one_hot,
     reverse_bits,
+    is_qualified,
     const_cond,
     check_type,
     select,
@@ -67,3 +69,4 @@ from .utility import (
 )
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle
+from ._prefix import prefix, name

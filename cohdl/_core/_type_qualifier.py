@@ -1057,7 +1057,9 @@ class Signal(TypeQualifier):
     @_intrinsic_replacement(push.fset, assignment_spec=(0, 1))
     def _push_setter_replacement(self, value):
         # assign value to check wheather operation is allowed
-        assert self._default is not None, "pushed signals require default values"
+        assert (
+            self._default is not None
+        ), f"pushed signal requires default values (name hint='{self._name}')"
         inp_value = _decay(value)
         self._value._assign(inp_value)
         if is_primitive(inp_value):

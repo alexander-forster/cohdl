@@ -27,6 +27,11 @@ from cohdl._core._intrinsic import _intrinsic
 from cohdl._core._intrinsic import comment as cohdl_comment
 
 from ._context import Duration, Context
+from ._prefix import prefix, name
+
+
+def nop(*args, **kwargs):
+    pass
 
 
 def comment(*lines):
@@ -123,6 +128,10 @@ def reverse_bits(inp: BitVector) -> BitVector:
 #
 #
 #
+
+
+def is_qualified(arg):
+    return isinstance(arg, TypeQualifierBase)
 
 
 def const_cond(arg):
@@ -436,83 +445,203 @@ class InShiftRegister:
             return self._data.msb(rest=1).copy()
 
 
-def continuous_counter(ctx: Context, limit):
-    counter = Signal[Unsigned.upto(max_int(limit))](0)
+if False:
 
-    @ctx
-    def proc():
-        nonlocal counter
-        if counter >= limit:
-            counter <<= 0
-        else:
-            counter <<= counter + 1
+    def continuous_counter(ctx: Context, limit):
+        counter = Signal[Unsigned.upto(max_int(limit))](0)
 
-    return counter
+        @ctx
+        def proc():
+            nonlocal counter
+            if counter >= limit:
+                counter <<= 0
+            else:
+                counter <<= counter + 1
+
+        return counter
+
+    class ToggleSignal:
+        def __init__(
+            self,
+            ctx: Context,
+            off_duration: int | Unsigned | Duration,
+            on_duration: int | Unsigned | Duration,
+            initial_on=False,
+        ):
+            assert isinstance(initial_on, bool)
+
+            if isinstance(on_duration, Duration):
+                cnt_switch_on = on_duration.count_periods(ctx.clk().period())
+            else:
+                cnt_switch_on = on_duration
+
+            if isinstance(off_duration, Duration):
+                cnt_switch_off = off_duration.count_periods(ctx.clk().period())
+            else:
+                cnt_switch_off = off_duration
+
+            if isinstance(cnt_switch_on, Signal) or isinstance(cnt_switch_off, Signal):
+                max_counter_end = max_int(cnt_switch_off) + max_int(cnt_switch_on) - 1
+                counter_end = Signal[Unsigned.upto(max_counter_end)]()
+
+                @concurrent_context
+                def logic():
+                    counter_end.next = cnt_switch_off + cnt_switch_on - 1
+
+            else:
+                counter_end = cnt_switch_off + cnt_switch_on - 1
+
+            self._reset = Signal[Bit](False)
+
+            counter = continuous_counter(ctx.or_reset(self._reset), counter_end)
+
+            self._state = Signal[Bit]()
+            self._rising = Signal[Bit]()
+            self._falling = Signal[Bit]()
+
+            if initial_on:
+
+                @concurrent_context
+                def logic():
+                    self._state <<= counter < cnt_switch_on
+                    self._rising <<= counter == 0
+                    self._falling <<= counter == cnt_switch_on
+
+            else:
+
+                @concurrent_context
+                def logic():
+                    self._state <<= counter >= cnt_switch_off
+                    self._rising <<= counter == cnt_switch_off
+                    self._falling <<= counter == 0
+
+        def reset_signal(self):
+            return self._reset
+
+        def enable(self):
+            self._reset <<= False
+
+        def disable(self):
+            self._reset <<= True
+
+        def rising(self):
+            return self._rising
+
+        def falling(self):
+            return self._falling
+
+        def state(self):
+            return self._state
+
+
+def continuous_counter(ctx: Context, limit, *, on_change=nop):
+    if max_int(limit) == 0:
+
+        @ctx
+        def proc():
+            on_change(Unsigned[1](0))
+
+        return Signal[Unsigned[1]](0)
+    else:
+        counter = Signal[Unsigned.upto(max_int(limit))](0, name=name("counter"))
+
+        @ctx
+        def proc():
+            nonlocal counter
+            next_value = 0 if counter >= limit else (counter + 1)
+
+            counter <<= next_value
+            on_change(next_value)
+
+        return counter
 
 
 class ToggleSignal:
     def __init__(
         self,
         ctx: Context,
-        off_duration: int | Unsigned | Duration,
-        on_duration: int | Unsigned | Duration,
-        initial_on=False,
+        first_duration: int | Unsigned | Duration,
+        second_duration: int | Unsigned | Duration | None = None,
+        *,
+        default_state: bool = False,
+        first_state: bool = False,
+        require_enable: bool = False,
+        on_rising=None,
+        on_falling=None,
     ):
-        assert isinstance(initial_on, bool)
+        with prefix("toggle"):
+            assert not is_qualified(
+                default_state
+            ), "default_state must be runtime constant"
 
-        if isinstance(on_duration, Duration):
-            cnt_switch_on = on_duration.count_periods(ctx.clk().period())
-        else:
-            cnt_switch_on = on_duration
+            first = first_duration
+            second = second_duration if second_duration is not None else first
 
-        if isinstance(off_duration, Duration):
-            cnt_switch_off = off_duration.count_periods(ctx.clk().period())
-        else:
-            cnt_switch_off = off_duration
+            if isinstance(first, Duration):
+                cnt_first = first.count_periods(ctx.clk().period())
+            else:
+                cnt_first = first
 
-        if isinstance(cnt_switch_on, Signal) or isinstance(cnt_switch_off, Signal):
-            max_counter_end = max_int(cnt_switch_off) + max_int(cnt_switch_on) - 1
-            counter_end = Signal[Unsigned.upto(max_counter_end)]()
+            if isinstance(second, Duration):
+                cnt_second = second.count_periods(ctx.clk().period())
+            else:
+                cnt_second = second
 
-            @concurrent_context
-            def logic():
-                counter_end.next = cnt_switch_off + cnt_switch_on - 1
+            if is_qualified(cnt_first) or is_qualified(cnt_second):
+                max_counter_end = max_int(cnt_first) + max_int(cnt_second) - 1
+                CounterType = Unsigned.upto(max_counter_end)
+                counter_end = Signal[CounterType](name="counter_end")
 
-        else:
-            counter_end = cnt_switch_off + cnt_switch_on - 1
+                @concurrent_context
+                def logic():
+                    sum = tc[CounterType](cnt_first) + tc[CounterType](cnt_second)
+                    assert sum != 0
 
-        self._reset = Signal[Bit](False)
+                    # cast cnt_first and cnt_second to CounterType
+                    # to avoid unsigned overflow
+                    counter_end.next = sum - 1
 
-        counter = continuous_counter(ctx.or_reset(self._reset), counter_end)
+            else:
+                counter_end = cnt_first + cnt_second - 1
+                assert counter_end >= 0, "toggle period may not be zero"
 
-        self._state = Signal[Bit]()
-        self._rising = Signal[Bit]()
-        self._falling = Signal[Bit]()
+            self._reset_counter = Signal[Bit](require_enable, name=name("reset"))
 
-        if initial_on:
+            self._state = Signal[Bit](default_state, name=name("state"))
+            self._rising = Signal[Bit](False, name=name("rising"))
+            self._falling = Signal[Bit](False, name=name("falling"))
 
-            @concurrent_context
-            def logic():
-                self._state <<= counter < cnt_switch_on
-                self._rising <<= counter == 0
-                self._falling <<= counter == cnt_switch_on
+            def change_handler(next_cnt):
+                if const_cond(first_state):
+                    next_state = next_cnt < cnt_first
+                else:
+                    next_state = not (next_cnt < cnt_first)
 
-        else:
+                self._state <<= next_state
 
-            @concurrent_context
-            def logic():
-                self._state <<= counter >= cnt_switch_off
-                self._rising <<= counter == cnt_switch_off
-                self._falling <<= counter == 0
+                rising = not self._state and next_state
+                falling = self._state and not next_state
 
-    def reset_signal(self):
-        return self._reset
+                self._rising <<= rising
+                self._falling <<= falling
+
+                if on_rising is not None and rising:
+                    on_rising()
+                if on_falling is not None and falling:
+                    on_falling()
+
+            continuous_counter(
+                ctx.or_reset(self._reset_counter), counter_end, on_change=change_handler
+            )
+
+    def get_reset_signal(self):
+        return self._reset_counter
 
     def enable(self):
-        self._reset <<= False
+        self._reset_counter <<= False
 
     def disable(self):
-        self._reset <<= True
+        self._reset_counter <<= True
 
     def rising(self):
         return self._rising

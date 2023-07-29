@@ -1707,8 +1707,8 @@ class PrepareAst:
                     obj_type = func_ref
 
                     if issubclass(obj_type, super):
-                        assert len(args) == 0 and len(
-                            kwargs
+                        assert (
+                            len(args) == 0 and len(kwargs) == 0
                         ), "only super() without arguments is supported in synthesizable contexts"
 
                         class_info = self.lookup_name("__class__")

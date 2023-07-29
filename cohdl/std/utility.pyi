@@ -9,17 +9,21 @@ from ._context import Duration, Context
 T = TypeVar("T")
 U = TypeVar("U")
 
+def nop(*args, **kwargs) -> None:
+    """
+    A function that takes arbitrary arguments, does nothing and returns None.
+    Can be used as a default value for optional callback functions.
+    """
+
 def comment(*lines: str) -> None:
     """
     Inserts a comment into the generated VHDL representation.
 
     std.comment("Hello, world!", "A", "B") is translated into
 
-    `-- Hello, world!`
-
-    `-- A`
-
-    `-- B`
+    >>> -- Hello, world!
+    >>> -- A
+    >>> -- B
     """
 
 class _TC(Generic[T]):
@@ -58,13 +62,10 @@ def instance_check(val, type: type[T]) -> TypeGuard[T]:
     ---
     example:
 
-    `isinstance(Bit(), Bit) == True`
-
-    `instance_check(Bit(), Bit) == True`
-
-    `isinstance(Signal[Bit](), Bit) == False`
-
-    `instance_check(Signal[Bit](), Bit) == True`
+    >>> isinstance(Bit(), Bit) == True
+    >>> instance_check(Bit(), Bit) == True
+    >>> isinstance(Signal[Bit](), Bit) == False
+    >>> instance_check(Signal[Bit](), Bit) == True
     """
 
 def subclass_check(val, type) -> bool:
@@ -118,7 +119,7 @@ def reverse_bits(inp: BitVector) -> BitVector:
 
     example:
 
-    `reverse_bits(BitVector[5]("10100")) == BitVector[5]("00101")`
+    >>> reverse_bits(BitVector[5]("10100")) == BitVector[5]("00101")
     """
 
 #
@@ -147,8 +148,8 @@ class _CheckType(Generic[T]):
     def __getitem__(self, expected_type: type[U]) -> _CheckType[U]: ...
     def __call__(self, arg: T) -> T:
         """
-        std.check_type[T](arg)
-        checks, that the type of the given argument matches the given T
+        `std.check_type[T](arg)`
+        checks, that the type of the given argument matches the given `T`
         """
 
 class _Select(Generic[Result]):
@@ -157,21 +158,21 @@ class _Select(Generic[Result]):
         self, arg, branches: dict[Option, Result], default: Result | None = None
     ) -> Result:
         """
-        std.select[T](...) is a type checked wrapper around cohdl.select_with
+        `std.select[T](...)` is a type checked wrapper around `cohdl.select_with`
         equivalent to:
 
-        std.check_type[T](
-            cohdl.select_with(
-                ...
-            )
-        )
+        >>> std.check_type[T](
+        >>>     cohdl.select_with(
+        >>>         ...
+        >>>     )
+        >>> )
         """
 
 class _ChooseFirst(Generic[Result]):
     def __getitem__(self, expected_type: type[U]) -> _ChooseFirst[U]: ...
     def __call__(self, *args: tuple[Condition, Result], default: Result) -> Result:
         """
-        std.coose_first[T](...) takes an arbitrary number of arguments each of which is a
+        `std.coose_first[T](...)` takes an arbitrary number of arguments each of which is a
         tuple with two elements (CONDITION, VALUE). The function returns the first
         VALUE with a truthy CONDITION or default if no such CONDITION exists.
         """
@@ -180,12 +181,12 @@ class _Cond(Generic[T]):
     def __getitem__(self, expected_type: type[U]) -> _Cond[U]: ...
     def __call__(self, cond: bool, on_true: T, on_false: T) -> T:
         """
-        std.cond[T](cond, on_true, on_false) is a type checked wrapper around
+        `std.cond[T](cond, on_true, on_false)` is a type checked wrapper around
         an if expression equivalent to:
 
-        std.check_type[T](
-            on_true if cond else on_false
-        )
+        >>> std.check_type[T](
+        >>>     on_true if cond else on_false
+        >>> )
         """
 
 check_type = _CheckType()
@@ -209,13 +210,11 @@ def binary_fold(fn, first, *args, right_fold=False):
 
     ---
 
-    binary_fold(fn, 1, 2)
+    >>> binary_fold(fn, 1, 2)
+    >>> # == fn(1, 2)
 
-    `fn(1, 2)`
-
-    binary_fold(fn, 1, 2, 3, 4)
-
-    `fn(fn(fn(1, 2), 3), 4)`
+    >>> binary_fold(fn, 1, 2, 3, 4)
+    >>> # == fn(fn(fn(1, 2), 3), 4)
 
     ---
 
@@ -227,13 +226,11 @@ def binary_fold(fn, first, *args, right_fold=False):
     when `right_fold` is set to True the order in which arguments
     are passed to `fn`is reversed:
 
-    binary_fold(fn, 1, 2, 3):
+    >>> binary_fold(fn, 1, 2, 3):
+    >>> # == fn(fn(1, 2), 3)
 
-    `fn(fn(1, 2), 3)`
-
-    binary_fold(fn, 1, 2, 3, right_fold=True):
-
-    `fn(1, fn(2, 3))`
+    >>> binary_fold(fn, 1, 2, 3, right_fold=True):
+    >>> # == fn(1, fn(2, 3))
     """
 
 def concat(first, *args) -> BitVector:
@@ -252,9 +249,9 @@ def stretch(val: Bit | BitVector, factor: int) -> BitVector:
 
     example:
 
-    stretch(Bit('0'), 1)        -> BitVector("0")
-    stretch(Bit('1'), 2)        -> BitVector("11")
-    stretch(BitVector('10'), 3) -> BitVector("101010")
+    >>> stretch(Bit('0'), 1)        # -> BitVector("0")
+    >>> stretch(Bit('1'), 2)        # -> BitVector("11")
+    >>> stretch(BitVector('10'), 3) # -> BitVector("101010")
     """
 
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
@@ -400,26 +397,34 @@ class InShiftRegister:
         This call is only valid when the register is full.
         """
 
-def continuous_counter(ctx: Context, limit: int | Unsigned) -> Signal[Unsigned]:
+def continuous_counter(
+    ctx: Context, limit: int | Unsigned, *, on_change=nop
+) -> Signal[Unsigned]:
     """
     Returns a unsigned signal that is incremented on each tick of `ctx`.
     When `limit` is reached the counter continues from zero.
 
+    `on_change` is an optional callback function. It is invoked every time
+    the counter value is updated with the new counter value as the only argument.
+
     example:
 
-    `continuous_counter(ctx, 3)`
-
-    produces the sequence `0-1-2-3-0-1-2-...`
-
+    >>> cnt = std.continuous_counter(ctx, 3)
+    >>> # produces the sequence `0-1-2-3-0-1-2-...`
     """
 
 class ToggleSignal:
     def __init__(
         self,
         ctx: Context,
-        off_duration: int | Unsigned | Duration,
-        on_duration: int | Unsigned | Duration,
-        initial_on=False,
+        first_duration: int | Unsigned | Duration,
+        second_duration: int | Unsigned | Duration | None = None,
+        *,
+        default_state: bool = False,
+        first_state: bool = False,
+        initial_off: bool = False,
+        on_rising=None,
+        on_falling=None,
     ):
         """
         Defines a bit signal that toggles between `0` and `1` with a defined
@@ -428,16 +433,24 @@ class ToggleSignal:
         The duration parameters define how long the signal remains in each state.
         These values are relative to the clock tick of `ctx`. `int` and `Unsigned`
         parameters are interpreted as a number of clock ticks. When a `std.Duration`
-        is given the number of ticks is inferred from the clock of `ctx`
-        (so this only works if the clock as a defined frequency).
-        `off_duration` and `on_duration` can have different types.
+        is given, the number of ticks is inferred from the clock of `ctx`
+        (so this only works if the clock has a defined frequency).
+        `first_duration` and `second_duration` can have different types.
 
-        By default all toggle signals start out in the `0` state
-        and transition to `1` after the first `off_duration`. When `initial_on`
-        is set to True the signal starts out in the `1` state and transitions
-        to `0` after the first `on_duration`.
+        If only `first_duration` is given the value will be reused for
+        `second_duration` creating a signal with 50% duty cycle.
+
+        `default_state` defines the signal state during reset and when
+        the ToggleSignal is disabled.
+
+        `first_state` defines the state of the signal when starting after a reset.
+        I.e. `first_state=False` produces `XX0101...` whereas `first_state=True` produces `XX1010` where
+        `X` is the reset state defined by `default_state`.
+
+        By default the toggle signal starts as soon as the reset condition of `ctx` becomes false.
+        When `require_enable` is set to True it will wait until `enable` is called.
         """
-    def reset_signal(self) -> Signal[Bit]:
+    def get_reset_signal(self) -> Signal[Bit]:
         """
         Returns the signal used to reset the internal toggle mechanism.
         `enable` and `disable` are helper methods that set/reset this signal.

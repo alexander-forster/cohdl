@@ -86,6 +86,3 @@ async def testbench_class_01(dut: test_class_01):
 class Unittest(unittest.TestCase):
     def test_class_01(self):
         cocotb_util.run_cocotb_tests(test_class_01, __file__, self.__module__)
-
-
-std.VhdlCompiler.to_string(test_class_01)
