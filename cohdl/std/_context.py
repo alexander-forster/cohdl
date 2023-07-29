@@ -752,6 +752,7 @@ class Context:
                     )
                     self._exit_context()
 
+            context_fn.__name__ = fn.__name__
             return sequential(self._clk, self._reset, step_cond=self._step_cond)(
                 context_fn
             )

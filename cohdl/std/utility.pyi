@@ -126,6 +126,11 @@ def reverse_bits(inp: BitVector) -> BitVector:
 #
 #
 
+def is_qualified(arg) -> bool:
+    """
+    Return true if `arg` is a type qualified value (a Port/Signal, Variable or Temporary).
+    """
+
 def const_cond(arg) -> bool:
     """
     Asserts, that the argument is convertible to a compile
@@ -264,9 +269,18 @@ def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
     `result_bit = new_bit if mask_bit else old_bit`
     """
 
-def as_bitvector(inp: Bit) -> BitVector[0:0]:
+def as_bitvector(inp: BitVector | Bit | str) -> BitVector:
     """
-    returns a BitVector of length one with the same state as the given input
+    Returns a BitVector constructed from the argument.
+
+    When `inp` is of possibly qualifed type BitVector the result
+    is a copy of the input cast to BitVector.
+
+    When `inp` is of possibly qualifed type Bit the result is
+    a vector of length one with the same state as the bit.
+
+    When `inp` is of type str the result is a bitvector literal
+    with the same length as inp.
     """
 
 #

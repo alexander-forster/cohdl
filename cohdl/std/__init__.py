@@ -60,6 +60,11 @@ from .utility import (
     cond,
     check_return,
     wait_for,
+    binary_fold,
+    concat,
+    stretch,
+    apply_mask,
+    as_bitvector,
     max_int,
     int_log_2,
     InShiftRegister,
@@ -70,3 +75,5 @@ from .utility import (
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle
 from ._prefix import prefix, name
+from . import spi
+from . import bitfield
