@@ -26,7 +26,7 @@ from cohdl.utility import IdMap, IdSet
 
 class _IdMapIdentityDefault(IdMap):
     """
-    child class if IdMap, that returns the argument of __getitem__ unchanges,
+    child class of IdMap, that returns the argument of __getitem__ unchanged,
     if no corresponding entry is found
     """
 
@@ -993,6 +993,45 @@ class ConvertInstance:
 
         return ctx
 
+    @staticmethod
+    def cleanup_bool_cast(ctx: ir.Context):
+        # The previous stages of the compiler produce some
+        # redundant casts from Temporary[bool] to Temporary[bool].
+        # This function removes these casts and replaces all uses
+        # of the cast result with the cast input.
+        # This is a purely cosmetic operation to make the generated
+        # HDL more readable.
+
+        replacement_map = IdMap()
+
+        def search_unneeded_bool_casts(stmt):
+            if isinstance(stmt, ir.Boolean):
+                source = stmt._arg
+                target = stmt._result
+                if (
+                    isinstance(source, Temporary)
+                    and isinstance(target, Temporary)
+                    and source._root is source
+                    and target._root is target
+                    and source.type is _boolean.boolean
+                    and target.type is _boolean.boolean
+                ):
+                    replacement_map[target] = source
+                    return ir.Nop()
+
+            return stmt
+
+        ctx.visit(search_unneeded_bool_casts)
+
+        def replace_temporaries(obj, access):
+            if obj in replacement_map:
+                return replacement_map[obj]
+
+            return obj
+
+        ctx.visit_referenced_objects(replace_temporaries)
+        return ctx
+
     #
     #
     #
@@ -1061,6 +1100,8 @@ class ConvertInstance:
 
             if result.attributes.get("cleanup_unused", True):
                 result = ConvertInstance.cleanup_unused(result)
+            if result.attributes.get("cleanup_bool_cast", True):
+                result = ConvertInstance.cleanup_bool_cast(result)
             return result
 
         raise AssertionError(f"cannot convert {inp}")
