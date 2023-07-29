@@ -422,7 +422,7 @@ class ToggleSignal:
         *,
         default_state: bool = False,
         first_state: bool = False,
-        initial_off: bool = False,
+        require_enable: bool = False,
         on_rising=None,
         on_falling=None,
     ):
@@ -449,6 +449,10 @@ class ToggleSignal:
 
         By default the toggle signal starts as soon as the reset condition of `ctx` becomes false.
         When `require_enable` is set to True it will wait until `enable` is called.
+
+        `on_rising` and `on_falling` are optional callback functions. They are invoked
+        when ToggleSignal updates the internal state (i.e. in the clock cycle before
+        the state change becomes visible to other sequential contexts).
         """
     def get_reset_signal(self) -> Signal[Bit]:
         """
