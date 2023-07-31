@@ -788,13 +788,13 @@ class IrGenerator:
                                 )
                             )
                     else:
-                        default_body = ir.CodeBlock([], parent=block)
-                        converted = self.apply(default, open_blocks=[default_body])
-
-                        assert len(converted) == 1
-                        assert converted[0] is default_body
-
                         for new_block in new_blocks:
+                            default_body = ir.CodeBlock([], parent=block)
+                            converted = self.apply(default, open_blocks=[default_body])
+
+                            assert len(converted) == 1
+                            assert converted[0] is default_body
+
                             ir_bodies = gen_bodies(new_block)
 
                             new_block.append(
@@ -961,6 +961,107 @@ class ConvertInstance:
         self._entity_templates[source] = result
 
     @staticmethod
+    def detect_uninitialized_temporaries(ctx: ir.Context):
+        invalid_temporaries = set()
+
+        def check_used_temporaries(obj, access: AccessFlags):
+            # return obj
+            if access is AccessFlags.READ:
+                if isinstance(obj, Temporary):
+                    print(obj)
+                    assert (
+                        id(obj._root) not in invalid_temporaries
+                    ), f"@ {id(obj._root)}"
+
+            return obj
+
+        def search_invalid_temporaries(code: ir.CodeBlock):
+            nonlocal invalid_temporaries
+
+            local_temporaries = set()
+
+            for stmt in code._content:
+                if isinstance(stmt, ir.If):
+                    # print("----- IF")
+                    check_used_temporaries(stmt._test, AccessFlags.READ)
+
+                    # Find all temporaries defined in body and mark them
+                    # as invalid because they might not be defined
+                    body_temporaries = search_invalid_temporaries(stmt._body)
+                    invalid_temporaries |= body_temporaries
+
+                    # Find all temporaries defined in else branch and mark
+                    # them as invalid because they might not be defined.
+                    else_temporaries = search_invalid_temporaries(stmt._orelse)
+                    invalid_temporaries |= else_temporaries
+
+                    always_defined = body_temporaries & else_temporaries
+
+                    # When a temporary is defined in both block
+                    # if is always defined and thus valid.
+                    invalid_temporaries.difference_update(always_defined)
+                    local_temporaries |= always_defined
+
+                    # print("----- FI")
+                elif isinstance(stmt, ir.CodeBlock):
+                    local_temporaries |= search_invalid_temporaries(stmt)
+                elif isinstance(stmt, ir.CaseWhen):
+                    # print("----- CASE WHEN")
+                    check_used_temporaries(stmt._value, AccessFlags.READ)
+
+                    always_defined = None
+
+                    for branch_cond, branch_code in stmt._branches:
+                        # print("----- BRANCH")
+                        check_used_temporaries(branch_cond, AccessFlags.READ)
+                        branch_temporaries = search_invalid_temporaries(branch_code)
+                        invalid_temporaries |= branch_temporaries
+
+                        if always_defined is None:
+                            always_defined = branch_temporaries
+                        else:
+                            always_defined.difference_update(branch_temporaries)
+
+                    # print("----- DEFAULT")
+                    if stmt._default is not None:
+                        default_temporaries = search_invalid_temporaries(stmt._default)
+                        invalid_temporaries |= default_temporaries
+
+                        if always_defined is None:
+                            always_defined = branch_temporaries
+                        else:
+                            always_defined.difference_update(branch_temporaries)
+
+                    invalid_temporaries.difference_update(always_defined)
+                    local_temporaries |= always_defined
+
+                    # print("----- ESAC")
+                else:
+                    print("      ", stmt)
+                    ir._visit_referenced_objects(stmt, check_used_temporaries)
+
+                    if isinstance(stmt, ir.Expression) and isinstance(
+                        stmt._result, Temporary
+                    ):
+                        # print("expr:  ", id(stmt._result))
+                        root_id = id(stmt._result._root)
+
+                        local_temporaries.add(root_id)
+                        invalid_temporaries.discard(root_id)
+
+                    elif isinstance(stmt, ir.VariableAssignment) and isinstance(
+                        stmt._target, Temporary
+                    ):
+                        # print("local: ", id(stmt._target))
+                        root_id = id(stmt._target._root)
+                        local_temporaries.add(root_id)
+                        invalid_temporaries.discard(root_id)
+
+            return local_temporaries
+
+        search_invalid_temporaries(ctx.code())
+
+    @staticmethod
     def cleanup_unused(ctx: ir.Context):
         used_temporaries = IdSet()
 
@@ -1097,6 +1198,8 @@ class ConvertInstance:
 
         if isinstance(inp, out.Sequential):
             result = IrGenerator.convert_sequential(inp)
+
+            ConvertInstance.detect_uninitialized_temporaries(result)
 
             if result.attributes.get("cleanup_unused", True):
                 result = ConvertInstance.cleanup_unused(result)

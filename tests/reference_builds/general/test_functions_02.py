@@ -110,7 +110,6 @@ async def testbench_function_simple(dut: test_function_simple):
     for a in ab_gen.all():
         for b in ab_gen.all():
             for cond in cond_gen.all():
-
                 if cond:
                     early_return = a
                     early_return_2 = a
