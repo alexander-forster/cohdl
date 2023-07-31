@@ -322,11 +322,16 @@ async def wait_for(duration: Duration) -> None:
     """
 
 class OutShiftRegister:
-    def __init__(self, src: BitVector, msb_first=False):
+    def __init__(self, src: BitVector, msb_first=False, unchecked=False):
         """
         Initializes a shift register with the current state of `src`.
         `msb_first` defines the order in which the bits will be
         shifted out of the register.
+
+        When `unchecked` is set to True no assertions for shifts
+        from empty registers are generated. Instead zeros will be
+        shifted out. The methods `shift_all` and `empty` cannot be
+        used when this option is set.
         """
     def set_data(self, data: BitVector):
         """
@@ -372,11 +377,16 @@ class OutShiftRegister:
         """
 
 class InShiftRegister:
-    def __init__(self, len: int, msb_first=False):
+    def __init__(self, len: int, msb_first=False, unchecked=False):
         """
         Initializes an empty shift register of length `len`.
         `msb_first` defines the order in which the bits will be
         shifted out of the register.
+
+        When `unchecked` is set to True no assertions for shifts
+        into full registers are generated. Instead old bits will be
+        shifted out. The methods `shift_all` and `full` cannot be
+        used when this options is set.
         """
     async def shift_all(self, src: Bit | BitVector, shift_delayed=False):
         """

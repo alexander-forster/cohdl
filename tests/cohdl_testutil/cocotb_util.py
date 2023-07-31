@@ -399,8 +399,9 @@ class SequentialTest:
     async def delta(self):
         await step()
 
-    async def tick(self):
-        await RisingEdge(self.clk)
+    async def tick(self, cnt=1):
+        for _ in range(cnt):
+            await RisingEdge(self.clk)
         await step()
 
     async def check_next_tick(

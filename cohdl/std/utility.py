@@ -352,22 +352,33 @@ async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = Fa
 
 
 class OutShiftRegister:
-    def __init__(self, src: BitVector, msb_first=False):
+    def __init__(self, src: BitVector, msb_first=False, unchecked=False):
+        self._unchecked = unchecked
         self._msb_first = msb_first
 
-        if msb_first:
-            self._data = Signal(src @ Bit(True), name="shift_out")
+        if unchecked:
+            self._data = Signal(src, name=name("out_shift_reg"))
         else:
-            self._data = Signal(Bit(True) @ src, name="shift_out")
+            if msb_first:
+                self._data = Signal(src @ Bit(True), name=name("out_shift_out"))
+            else:
+                self._data = Signal(Bit(True) @ src, name=name("out_shift_out"))
 
     def set_data(self, data):
-        assert len(data) == len(self._data) - 1
-        if self._msb_first:
-            self._data <<= Signal(data @ Bit(True))
+        if self._unchecked:
+            self._data <<= data
         else:
-            self._data <<= Signal(Bit(True) @ data)
+            assert len(data) == len(self._data) - 1
+            if self._msb_first:
+                self._data <<= Signal(data @ Bit(True))
+            else:
+                self._data <<= Signal(Bit(True) @ data)
 
     async def shift_all(self, target: Bit | BitVector, shift_delayed=False):
+        static_assert(
+            not self._unchecked,
+            "the shift_all method cannot be used on unchecked shift registers",
+        )
         count = target.width if instance_check(target, BitVector) else None
 
         if not shift_delayed:
@@ -377,6 +388,10 @@ class OutShiftRegister:
             target <<= self.shift(count)
 
     def empty(self):
+        static_assert(
+            not self._unchecked,
+            "the empty method cannot be used on unchecked shift registers",
+        )
         if self._msb_first:
             return not self._data.lsb(rest=1)
         else:
@@ -392,27 +407,44 @@ class OutShiftRegister:
             after_shift = self._data.lsb(rest=shift_width) @ zeros(shift_width)
 
             # check, that the marker bit is never shifted out of the extended register
-            assert bool(after_shift), "invalid shift, register already empty"
+            assert self._unchecked or bool(
+                after_shift
+            ), "invalid shift, register already empty"
             self._data <<= after_shift
             return self._data.msb(count)
         else:
             after_shift = zeros(shift_width) @ self._data.msb(rest=shift_width)
-            assert bool(after_shift), "invalid shift, register already empty"
+            assert self._unchecked or bool(
+                after_shift
+            ), "invalid shift, register already empty"
             self._data <<= after_shift
             return self._data.lsb(count)
 
 
 class InShiftRegister:
-    def __init__(self, len: int, msb_first=False):
+    def __init__(self, len: int, msb_first=False, unchecked=False):
+        self._unchecked = unchecked
         self._msb_first = msb_first
         self._len = len
 
-        if msb_first:
-            self._data = Signal(BitVector[len](Null) @ Bit(True))
+        if unchecked:
+            self._data = Signal[BitVector[len]](Null, name=name("in_shift_reg"))
         else:
-            self._data = Signal(Bit(True) @ BitVector[len](Null))
+            if msb_first:
+                self._data = Signal(
+                    BitVector[len](Null) @ Bit(True), name=name("in_shift_reg")
+                )
+            else:
+                self._data = Signal(
+                    Bit(True) @ BitVector[len](Null), name=name("in_shift_reg")
+                )
 
     async def shift_all(self, src: Bit | BitVector, shift_delayed=False):
+        static_assert(
+            not self._unchecked,
+            "the shift_all method cannot be used on unchecked shift registers",
+        )
+
         if not shift_delayed:
             self.shift(src)
 
@@ -422,12 +454,20 @@ class InShiftRegister:
         return self.data()
 
     def clear(self):
-        if self._msb_first:
-            self._data <<= BitVector[self._len](Null) @ Bit(True)
+        if self._unchecked:
+            self._data <<= Null
         else:
-            self._data <<= Bit(True) @ BitVector[self._len](Null)
+            if self._msb_first:
+                self._data <<= BitVector[self._len](Null) @ Bit(True)
+            else:
+                self._data <<= Bit(True) @ BitVector[self._len](Null)
 
     def full(self):
+        static_assert(
+            not self._unchecked,
+            "the full method cannot be used on unchecked shift registers",
+        )
+
         if self._msb_first:
             return self._data.msb().copy()
         else:
@@ -437,17 +477,24 @@ class InShiftRegister:
         shift_cnt = width(src)
 
         if self._msb_first:
-            assert not self._data.msb(shift_cnt), "invalid shift, register already full"
+            assert self._unchecked or not self._data.msb(
+                shift_cnt
+            ), "invalid shift, register already full"
             self._data <<= self._data.lsb(rest=shift_cnt) @ src
         else:
-            assert not self._data.lsb(shift_cnt), "invalid shift, register already full"
+            assert self._unchecked or not self._data.lsb(
+                shift_cnt
+            ), "invalid shift, register already full"
             self._data <<= src @ self._data.msb(rest=shift_cnt)
 
     def data(self):
-        if self._msb_first:
-            return self._data.lsb(rest=1).copy()
+        if self._unchecked:
+            return self._data.copy()
         else:
-            return self._data.msb(rest=1).copy()
+            if self._msb_first:
+                return self._data.lsb(rest=1).copy()
+            else:
+                return self._data.msb(rest=1).copy()
 
 
 def continuous_counter(ctx: Context, limit, *, on_change=nop):

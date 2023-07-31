@@ -248,7 +248,7 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
 
         assert (
             self._width == other._width
-        ), f"width missmatch in vector assignment ({self._width} != {other._width})"
+        ), f"width mismatch in vector assignment (target-width({self._width}) != source-width({other._width}))"
 
         self._value.apply_zip(lambda bit, other: bit._assign(other), other._value)
 

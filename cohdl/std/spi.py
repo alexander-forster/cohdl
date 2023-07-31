@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-from cohdl._core import (
-    Bit,
-    BitVector,
-    Signal,
-    Unsigned,
-    Null,
-    Full,
-)
+from cohdl._core import Bit, BitVector, Signal, Unsigned, Null, Full, TypeQualifierBase
 
-from ._context import Context, Duration, concurrent_eval
+from ._context import Context, Duration, Frequency, concurrent_eval, concurrent_assign
 from .utility import (
     is_qualified,
     instance_check,
@@ -63,12 +56,27 @@ class _SpiTransaction:
     def __exit__(self, type, value, traceback):
         self._master._end_transaction()
 
+    async def send_data(self, data: BitVector | str):
+        await self._master._send_data(data, _no_wait=True)
+
     async def read_data(self, len: int):
-        return self._master._read_data(len)
+        return await self._master._read_data(len)
 
 
 class SpiMaster:
-    def __init__(self, ctx: Context, spi: Spi, clk_period: Unsigned | int | Duration):
+    def __init__(
+        self,
+        ctx: Context,
+        spi: Spi,
+        *,
+        clk_period: Unsigned | int | Duration | None = None,
+        clk_frequency: Frequency | None = None,
+    ):
+        assert clk_period is None or clk_frequency is None
+
+        if clk_period is None:
+            clk_period = clk_frequency.period()
+
         self._prefix = prefix("spi")
 
         with self._prefix:
@@ -92,79 +100,104 @@ class SpiMaster:
                 first_state=spi.mode.cpol ^ spi.mode.cpha,
             )
 
+            self._cs = Signal[type(TypeQualifierBase.decay(self.spi.chip_select))](Full)
+
             concurrent_eval(self.spi.sclk, self._toggle.state)
+            concurrent_assign(self.spi.chip_select, self._cs)
 
     def _shift_edge(self):
         if self.spi.mode.cpol == self.spi.mode.cpha:
-            return self._toggle.rising()
-        else:
             return self._toggle.falling()
+        else:
+            return self._toggle.rising()
 
     def _sample_edge(self):
         if self.spi.mode.cpol == self.spi.mode.cpha:
-            return self._toggle.falling()
-        else:
             return self._toggle.rising()
+        else:
+            return self._toggle.falling()
 
     def _start_transaction(self, cs: Bit | BitVector | None):
         if cs is None:
-            assert instance_check(self.spi.chip_select, Bit)
-            self.spi.chip_select <<= False
+            assert instance_check(self._cs, Bit)
+            self._cs <<= False
         else:
-            self.spi.chip_select <<= cs
+            self._cs <<= cs
 
         self._toggle.enable()
 
     def _end_transaction(self):
         self._toggle.disable()
-        self.spi.chip_select <<= Full
+        self._cs <<= Full
 
-    async def _send_data(self, data: BitVector):
-        data_tx = OutShiftRegister(data)
+    async def _send_data(self, data: BitVector, *, _no_wait=False):
+        data_tx = OutShiftRegister(data, msb_first=True)
 
         shift_width = (
             None if instance_check(self.spi.mosi, Bit) else self.spi.mosi.width
         )
 
-        self.spi.mosi <<= data_tx.shift(shift_width)
+        if not _no_wait and self.spi.mode.cpha:
+            await self._shift_edge()
 
-        if self.spi.mode.cpha:
-            await self._sample_edge()
+        self.spi.mosi <<= data_tx.shift(shift_width)
 
         while not data_tx.empty():
             await self._shift_edge()
             self.spi.mosi <<= data_tx.shift(shift_width)
 
         await self._shift_edge()
+
         self.spi.mosi <<= Null
 
     async def _read_data(self, len: int):
-        data_rx = InShiftRegister(len)
+        data_rx = InShiftRegister(len, msb_first=True)
 
         while not data_rx.full():
             await self._sample_edge()
             data_rx.shift(self.spi.miso)
-
+        await self._shift_edge()
         return data_rx.data()
 
     async def transaction(
-        self,
-        send_data,
-        receive_len: int | None = None,
-        cs: Bit | BitVector | None = None,
+        self, send_data: BitVector, receive_len: int = 0, receive_offset=0, cs=None
     ):
+        total_len = len(send_data) + receive_len + receive_offset
+        assert not is_qualified(
+            total_len
+        ), "receive_len and receive_offset must be runtime constant"
+        assert len(send_data) >= -receive_offset
+        assert len(send_data) <= total_len
+
+        shift_width = (
+            None if instance_check(self.spi.mosi, Bit) else self.spi.mosi.width
+        )
+
         self._start_transaction(cs)
 
-        await self._send_data(as_bitvector(send_data))
+        cnt = Signal[Unsigned.upto(total_len)](total_len)
+        shift_out = OutShiftRegister(send_data, msb_first=True, unchecked=True)
 
-        if receive_len is None:
-            result = await self._read_data(receive_len)
-        else:
-            result = None
+        if receive_len != 0:
+            shift_in = InShiftRegister(receive_len, msb_first=True, unchecked=True)
+
+        self.spi.mosi <<= shift_out.shift(shift_width)
+
+        while cnt:
+            cnt <<= cnt - 1
+            await self._sample_edge()
+
+            if receive_len != 0:
+                shift_in.shift(self.spi.miso)
+
+            await self._shift_edge()
+            self.spi.mosi <<= shift_out.shift(shift_width)
 
         self._end_transaction()
 
-        return result
+        if receive_len != 0:
+            return shift_in.data()
+        return None
 
     async def transaction_context(
         self, send_data, cs: Bit | BitVector | None = None
