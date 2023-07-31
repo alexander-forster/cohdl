@@ -965,13 +965,22 @@ class ConvertInstance:
         invalid_temporaries = set()
 
         def check_used_temporaries(obj, access: AccessFlags):
-            # return obj
             if access is AccessFlags.READ:
                 if isinstance(obj, Temporary):
-                    print(obj)
+                    # This assertion ensures, that all temporaries are initialized
+                    # before they are used. Check your code for temporaries,
+                    # that are defined in a if or match statement and used outside of it.
+                    #
+                    # In the following example the temporary 'var' is invalid at the location
+                    # of the assignment to 'some_output' because it is only initialized when
+                    # 'some_signal' is true.
+                    #
+                    # >>> if some_signal:
+                    # >>>     var = inp_a | inp_b
+                    # >>> some_output <<= var        # error occurs in this line
                     assert (
                         id(obj._root) not in invalid_temporaries
-                    ), f"@ {id(obj._root)}"
+                    ), "temporary might not be initialized"
 
             return obj
 
@@ -982,7 +991,6 @@ class ConvertInstance:
 
             for stmt in code._content:
                 if isinstance(stmt, ir.If):
-                    # print("----- IF")
                     check_used_temporaries(stmt._test, AccessFlags.READ)
 
                     # Find all temporaries defined in body and mark them
@@ -1002,17 +1010,14 @@ class ConvertInstance:
                     invalid_temporaries.difference_update(always_defined)
                     local_temporaries |= always_defined
 
-                    # print("----- FI")
                 elif isinstance(stmt, ir.CodeBlock):
                     local_temporaries |= search_invalid_temporaries(stmt)
                 elif isinstance(stmt, ir.CaseWhen):
-                    # print("----- CASE WHEN")
                     check_used_temporaries(stmt._value, AccessFlags.READ)
 
                     always_defined = None
 
                     for branch_cond, branch_code in stmt._branches:
-                        # print("----- BRANCH")
                         check_used_temporaries(branch_cond, AccessFlags.READ)
                         branch_temporaries = search_invalid_temporaries(branch_code)
                         invalid_temporaries |= branch_temporaries
@@ -1022,7 +1027,6 @@ class ConvertInstance:
                         else:
                             always_defined.difference_update(branch_temporaries)
 
-                    # print("----- DEFAULT")
                     if stmt._default is not None:
                         default_temporaries = search_invalid_temporaries(stmt._default)
                         invalid_temporaries |= default_temporaries
@@ -1035,15 +1039,12 @@ class ConvertInstance:
                     invalid_temporaries.difference_update(always_defined)
                     local_temporaries |= always_defined
 
-                    # print("----- ESAC")
                 else:
-                    print("      ", stmt)
                     ir._visit_referenced_objects(stmt, check_used_temporaries)
 
                     if isinstance(stmt, ir.Expression) and isinstance(
                         stmt._result, Temporary
                     ):
-                        # print("expr:  ", id(stmt._result))
                         root_id = id(stmt._result._root)
 
                         local_temporaries.add(root_id)
@@ -1052,7 +1053,6 @@ class ConvertInstance:
                     elif isinstance(stmt, ir.VariableAssignment) and isinstance(
                         stmt._target, Temporary
                     ):
-                        # print("local: ", id(stmt._target))
                         root_id = id(stmt._target._root)
                         local_temporaries.add(root_id)
                         invalid_temporaries.discard(root_id)
