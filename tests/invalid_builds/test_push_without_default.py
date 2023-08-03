@@ -47,19 +47,19 @@ class SynthesizableTester(unittest.TestCase):
 
         self.assertRaises(
             AssertionError,
-            std.VhdlCompiler._to_ir,
+            std.VhdlCompiler.to_ir,
             a,
         )
 
         self.assertRaises(
             AssertionError,
-            std.VhdlCompiler._to_ir,
+            std.VhdlCompiler.to_ir,
             b,
         )
 
         self.assertRaises(
             AssertionError,
-            std.VhdlCompiler._to_ir,
+            std.VhdlCompiler.to_ir,
             c,
         )
 
@@ -67,6 +67,6 @@ class SynthesizableTester(unittest.TestCase):
         # check, that the compilation works if a default value is provided
         a, b, c = gen_classes(False)
 
-        std.VhdlCompiler._to_ir(a)
-        std.VhdlCompiler._to_ir(b)
-        std.VhdlCompiler._to_ir(c)
+        std.VhdlCompiler.to_ir(a)
+        std.VhdlCompiler.to_ir(b)
+        std.VhdlCompiler.to_ir(c)

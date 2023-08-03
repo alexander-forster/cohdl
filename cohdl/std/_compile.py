@@ -6,10 +6,6 @@ from cohdl._compiler.backend import generate_vhdl
 
 class VhdlCompiler:
     @classmethod
-    def _to_ir(cls, entity):
-        return generate_internal_representation(entity)
-
-    @classmethod
     def to_ir(cls, entity):
         return generate_internal_representation(entity)
 

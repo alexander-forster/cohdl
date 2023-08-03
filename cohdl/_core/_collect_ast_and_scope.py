@@ -158,29 +158,14 @@ class ScopeRef(_ScopeBase):
         return self._scope
 
 
-class LazyScopeRef(_ScopeBase):
-    def __init__(
-        self,
-        local_names: Iterable[str],
-        nonlocal_names: Iterable[str],
-        global_dict: dict,
-        nonlocal_dict: dict,
-    ):
-        self._local_names = local_names
-        self._nonlocal_names = nonlocal_names
-        self._global_dict = global_dict
-        self._nonlocal_dict = nonlocal_dict
-
-    def capture(self) -> dict[str, Any]:
-        return self._capture_env(
-            self._local_names,
-            self._nonlocal_names,
-            self._global_dict,
-            self._nonlocal_dict,
-        )
-
-
 class FunctionDefinition:
+    # A mapping over all previously parsed function definitions.
+    # The id() of function objects is used as a key.
+    # The values are tuples of FunctionDefinition and the function
+    # object to prevent possible key collisions after garbage collection
+    # of the function.
+    _known_definitions: dict[int, tuple[FunctionDefinition, Any]] = {}
+
     @staticmethod
     def from_ast_body(
         fn: list[ast.stmt],
@@ -225,7 +210,6 @@ class FunctionDefinition:
         name: str,
         global_dict: dict,
         nonlocal_dict: dict,
-        capture_lazy: bool = False,
         self_arg=_Unbound,
         default_converter=lambda x: x,
         captured_defaults: dict
@@ -255,14 +239,9 @@ class FunctionDefinition:
 
         names = _ClassifyNames(fn_args, fn_def.body)
 
-        if capture_lazy:
-            scope_ref = LazyScopeRef(
-                names.local_names, names.nonlocals(), global_dict, nonlocal_dict
-            )
-        else:
-            scope_ref = ScopeRef(
-                names.local_names, names.nonlocals(), global_dict, nonlocal_dict
-            )
+        scope_ref = ScopeRef(
+            names.local_names, names.nonlocals(), global_dict, nonlocal_dict
+        )
 
         if captured_defaults is None:
             defaults = fn_def.args.defaults
@@ -320,8 +299,11 @@ class FunctionDefinition:
         )
 
     @staticmethod
-    def from_coroutine(coroutine, capture_lazy: bool = False):
+    def from_coroutine(coroutine):
         assert inspect.iscoroutine(coroutine)
+
+        if id(coroutine) in FunctionDefinition._known_definitions:
+            return FunctionDefinition._known_definitions[id(coroutine)][0]
 
         def parse_source(source):
             parsed = ast.parse(textwrap.dedent(source))
@@ -346,7 +328,6 @@ class FunctionDefinition:
         result = FunctionDefinition.from_ast_fn(
             body,
             name,
-            capture_lazy=capture_lazy,
             global_dict=global_dict,
             nonlocal_dict=locals_dict,
             self_arg=self_arg,
@@ -376,13 +357,18 @@ class FunctionDefinition:
         if result._kwarg is not None:
             kwargs.update(locals_dict[result._kwarg])
 
-        return result.bind_args(args, kwargs)
+        result = result.bind_args(args, kwargs)
+
+        FunctionDefinition._known_definitions[id(coroutine)] = (result, coroutine)
+
+        return result
 
     @staticmethod
-    def from_callable(
-        callable, capture_lazy: bool = False, default_converter=lambda x: x
-    ):
+    def from_callable(callable, default_converter=lambda x: x):
         assert not inspect.iscoroutine(callable)
+
+        if id(callable) in FunctionDefinition._known_definitions:
+            return FunctionDefinition._known_definitions[id(callable)][0]
 
         def parse_source(source):
             parsed = ast.parse(textwrap.dedent(source))
@@ -443,10 +429,9 @@ class FunctionDefinition:
         code = fn.__code__
         location = SourceLocation(code.co_filename, code.co_firstlineno)
 
-        return FunctionDefinition.from_ast_fn(
+        result = FunctionDefinition.from_ast_fn(
             body,
             name,
-            capture_lazy=capture_lazy,
             global_dict=global_dict,
             nonlocal_dict=closure_vars.nonlocals,
             self_arg=self_arg,
@@ -454,6 +439,10 @@ class FunctionDefinition:
             captured_defaults=captured_defaults,
             location=location,
         )
+
+        FunctionDefinition._known_definitions[id(callable)] = [result, callable]
+
+        return result
 
     def __init__(
         self,

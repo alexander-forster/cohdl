@@ -385,9 +385,9 @@ def concurrent(
             cohdl.concurrent_context(
                 _prefix_wrapper(parent_prefix, fn),
                 name=fn.__name__,
-                capture_lazy=capture_lazy,
                 attributes=attributes,
                 source_location=SourceLocation.from_function(fn),
+                captured_functions=None if capture_lazy else [fn],
             )
 
         return wrapper
@@ -395,14 +395,14 @@ def concurrent(
     cohdl.concurrent_context(
         _prefix_wrapper(parent_prefix, fn),
         name=fn.__name__,
-        capture_lazy=capture_lazy,
         attributes=attributes,
         source_location=SourceLocation.from_function(fn),
+        captured_functions=None if capture_lazy else [fn],
     )
 
 
 def sequential(
-    trigger,
+    trigger=None,
     /,
     reset=None,
     *,
@@ -411,6 +411,20 @@ def sequential(
     attributes: dict | None = None,
     capture_lazy: bool = False,
 ):
+    if trigger is None:
+
+        def wrapper(fn):
+            sequential(
+                fn,
+                reset=reset,
+                step_cond=step_cond,
+                comment=comment,
+                attributes=attributes,
+                capture_lazy=capture_lazy,
+            )
+
+        return wrapper
+
     parent_prefix = _Prefix._parent_prefix()
 
     if parent_prefix is None:
@@ -430,10 +444,10 @@ def sequential(
 
     if inspect.isfunction(trigger) or is_coro:
         if is_coro:
-            coro = trigger()
+            callable = coro = trigger()
             fn = None
         else:
-            fn = trigger
+            callable = fn = trigger
             coro = None
 
         def wrapper():
@@ -450,9 +464,9 @@ def sequential(
         cohdl.sequential_context(
             _prefix_wrapper(parent_prefix, wrapper),
             name=trigger.__name__,
-            capture_lazy=capture_lazy,
             attributes=attributes,
             source_location=SourceLocation.from_function(trigger),
+            captured_functions=None if capture_lazy else [callable],
         )
 
         return trigger
@@ -461,9 +475,10 @@ def sequential(
         is_coro = inspect.iscoroutinefunction(fn)
 
         if is_coro:
-            coro = fn()
+            callable = coro = fn()
         else:
             coro = None
+            callable = fn
 
         if reset is None:
 
@@ -483,9 +498,9 @@ def sequential(
             cohdl.sequential_context(
                 _prefix_wrapper(parent_prefix, wrapper),
                 name=fn.__name__,
-                capture_lazy=capture_lazy,
                 attributes=attributes,
                 source_location=SourceLocation.from_function(fn),
+                captured_functions=None if capture_lazy else [callable],
             )
 
         elif reset.is_async():
@@ -508,9 +523,9 @@ def sequential(
             cohdl.sequential_context(
                 _prefix_wrapper(parent_prefix, wrapper),
                 name=fn.__name__,
-                capture_lazy=capture_lazy,
                 attributes=attributes,
                 source_location=SourceLocation.from_function(fn),
+                captured_functions=None if capture_lazy else [callable],
             )
 
         else:
@@ -532,9 +547,9 @@ def sequential(
             cohdl.sequential_context(
                 _prefix_wrapper(parent_prefix, wrapper),
                 name=fn.__name__,
-                capture_lazy=capture_lazy,
                 attributes=attributes,
                 source_location=SourceLocation.from_function(fn),
+                captured_functions=None if capture_lazy else [callable],
             )
 
     return helper

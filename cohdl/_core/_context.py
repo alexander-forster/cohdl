@@ -6,6 +6,7 @@ from ._type_qualifier import Port, Generic
 from ._collect_ast_and_scope import FunctionDefinition, InstantiatedFunction
 from ._source_location import SourceLocation
 import enum
+import inspect
 
 #
 #
@@ -227,15 +228,13 @@ class Context:
         fn: Callable,
         context_type: ContextType,
         name: str | None,
-        capture_lazy: bool,
         attributes: dict,
         source_loc: SourceLocation | None = None,
     ):
         self._fn = fn
         self._name = fn.__name__ if name is None else name
-        self._fn_def = FunctionDefinition.from_callable(fn, capture_lazy=capture_lazy)
+        self._fn_def = FunctionDefinition.from_callable(fn)
         self._context_type = context_type
-        self._capture_lazy = capture_lazy
         self._attributes = attributes
 
         self._source_loc = (
@@ -264,25 +263,32 @@ def sequential_context(
     fn,
     *,
     name=None,
-    capture_lazy=False,
     attributes: dict | None = None,
     source_location: SourceLocation | None = None,
+    captured_functions: list | None = None,
 ):
+    if captured_functions is not None:
+        for captured in captured_functions:
+            if inspect.iscoroutine(captured):
+                FunctionDefinition.from_coroutine(captured)
+            else:
+                FunctionDefinition.from_callable(captured)
+
     attributes = {} if attributes is None else attributes
-    return Context(
-        fn, ContextType.SEQUENTIAL, name, capture_lazy, attributes, source_location
-    )
+    return Context(fn, ContextType.SEQUENTIAL, name, attributes, source_location)
 
 
 def concurrent_context(
     fn,
     *,
     name=None,
-    capture_lazy=False,
     attributes: dict | None = None,
     source_location: SourceLocation | None = None,
+    captured_functions: list | None = None,
 ):
+    if captured_functions is not None:
+        for captured in captured_functions:
+            FunctionDefinition.from_callable(captured)
+
     attributes = {} if attributes is None else attributes
-    return Context(
-        fn, ContextType.CONCURRENT, name, capture_lazy, attributes, source_location
-    )
+    return Context(fn, ContextType.CONCURRENT, name, attributes, source_location)

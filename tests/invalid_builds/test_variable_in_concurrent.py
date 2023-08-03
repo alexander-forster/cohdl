@@ -42,21 +42,20 @@ class VariableInConcurrent_3(cohdl.Entity):
 
 class SynthesizableTester(unittest.TestCase):
     def test_variable_in_concurrent(self):
-
         self.assertRaises(
             AssertionError,
-            std.VhdlCompiler._to_ir,
+            std.VhdlCompiler.to_ir,
             VariableInConcurrent_1,
         )
 
         self.assertRaises(
             AssertionError,
-            std.VhdlCompiler._to_ir,
+            std.VhdlCompiler.to_ir,
             VariableInConcurrent_2,
         )
 
         self.assertRaises(
             AssertionError,
-            std.VhdlCompiler._to_ir,
+            std.VhdlCompiler.to_ir,
             VariableInConcurrent_3,
         )
