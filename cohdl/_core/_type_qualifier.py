@@ -1048,7 +1048,7 @@ class Signal(TypeQualifier):
 
     @push.setter
     def push(self, value):
-        assert self._default is not None, "pushed signals require default values"
+        assert self._default is not None, "pushed signal requires default value"
         self._value._assign(_decay(value))
 
     _intrinsic(push.fget)
@@ -1059,7 +1059,7 @@ class Signal(TypeQualifier):
         # assign value to check wheather operation is allowed
         assert (
             self._default is not None
-        ), f"pushed signal requires default values (name hint='{self._name}')"
+        ), f"pushed signal requires default value (name hint='{self._name}')"
         inp_value = _decay(value)
         self._value._assign(inp_value)
         if is_primitive(inp_value):

@@ -19,7 +19,7 @@ def expr(expr, /):
 
     ---
     `await (a | b)`
-    not allowed because await acts on the result of a|b
+    is not allowed because await acts on the result of a|b
     and not the expression itself
 
     ---
@@ -31,7 +31,7 @@ def expr_fn(fn, /):
     """
     When a function is decorated with `expr_fn` each call acts as if it
     were wrapped in a call to `expr`. This has no effect except when
-    the result is used as the argument of await expressions.
+    the result is used as the argument of an await expression.
     """
 
 def evaluated() -> bool:

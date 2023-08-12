@@ -60,6 +60,7 @@ from .utility import (
     cond,
     check_return,
     wait_for,
+    wait_forever,
     binary_fold,
     concat,
     stretch,
@@ -67,10 +68,13 @@ from .utility import (
     as_bitvector,
     max_int,
     int_log_2,
+    is_pow_two,
     InShiftRegister,
     OutShiftRegister,
     continuous_counter,
     ToggleSignal,
+    SyncFlag,
+    Fifo,
 )
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle

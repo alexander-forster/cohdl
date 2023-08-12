@@ -199,9 +199,39 @@ class SpiMaster:
             return shift_in.data()
         return None
 
+    async def parallel_transaction(
+        self, send_data: BitVector, shift_cnt: int | Unsigned, cs=None
+    ):
+        shift_width = (
+            None if instance_check(self.spi.mosi, Bit) else self.spi.mosi.width
+        )
+
+        self._start_transaction(cs)
+
+        cnt = Signal[Unsigned.upto(max_int(shift_cnt))](shift_cnt)
+        shift_out = OutShiftRegister(send_data, msb_first=True, unchecked=True)
+        shift_in = InShiftRegister(send_data.width, msb_first=True, unchecked=True)
+
+        self.spi.mosi <<= shift_out.shift(shift_width)
+
+        while cnt:
+            cnt <<= cnt - 1
+            await self._sample_edge()
+
+            shift_in.shift(self.spi.miso)
+
+            await self._shift_edge()
+            self.spi.mosi <<= shift_out.shift(shift_width)
+
+        self._end_transaction()
+
+        return shift_in.data()
+
     async def transaction_context(
-        self, send_data, cs: Bit | BitVector | None = None
+        self, send_data=None, cs: Bit | BitVector | None = None
     ) -> _SpiTransaction:
         self._start_transaction(cs)
-        await self._send_data(as_bitvector(send_data))
+
+        if send_data is not None:
+            await self._send_data(as_bitvector(send_data))
         return _SpiTransaction(self)

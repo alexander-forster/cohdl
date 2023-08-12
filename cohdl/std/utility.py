@@ -13,20 +13,23 @@ from cohdl._core import (
     Bit,
     BitVector,
     Unsigned,
+    Array,
     select_with,
     evaluated,
     true,
+    false,
     Null,
     Full,
     static_assert,
     concurrent_context,
+    expr_fn,
 )
 
 from cohdl._core._intrinsic import _intrinsic
 
 from cohdl._core._intrinsic import comment as cohdl_comment
 
-from ._context import Duration, Context
+from ._context import Duration, Context, concurrent
 from ._prefix import prefix, name
 
 
@@ -320,6 +323,11 @@ def int_log_2(inp: int) -> int:
 
 
 @_intrinsic
+def is_pow_two(inp: int):
+    return inp.bit_count() == 1
+
+
+@_intrinsic
 def _is_one(val):
     x = isinstance(val, int) and val == 1
     return x
@@ -349,6 +357,10 @@ async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = Fa
         counter = Signal[Unsigned.upto(max_int(cnt - 1))](cnt - 1)
         while counter:
             counter <<= counter - 1
+
+
+async def wait_forever():
+    await false
 
 
 class OutShiftRegister:
@@ -614,3 +626,92 @@ class ToggleSignal:
 
     def state(self):
         return self._state
+
+
+_prefix_name = name
+
+
+class SyncFlag:
+    def __init__(self, *, name="sync_flag"):
+        with prefix(name):
+            self._tx = Signal[Bit](False, name=_prefix_name("tx"))
+            self._rx = Signal[Bit](False, name=_prefix_name("rx"))
+
+    def set(self):
+        self._tx <<= ~self._rx
+
+    def clear(self):
+        self._rx <<= self._tx
+
+    @expr_fn
+    def is_set(self):
+        return self._tx != self._rx
+
+    @expr_fn
+    def is_clear(self):
+        return self._tx == self._rx
+
+    async def receive(self):
+        await self.is_set()
+        self._rx <<= self._tx
+        return self._tx != self._rx
+
+    async def __aenter__(self):
+        await self.is_set()
+
+    async def __aexit__(self, val, type, traceback):
+        self.clear()
+
+
+#
+#
+#
+
+
+class Fifo:
+    def _next_index(self, index):
+        if is_pow_two(self._max_index + 1):
+            return index + 1
+        else:
+            return index + 1 if index != self._max_index else 0
+
+    def __init__(self, elem_width: int, depth: int, name="fifo"):
+        with prefix(name):
+            self._mem = Signal[Array[BitVector[elem_width], depth]](
+                name=_prefix_name("mem")
+            )
+            self._max_index = depth - 1
+
+            self._write_index = Signal[Unsigned.upto(self._max_index)](
+                0, name=_prefix_name("wr_index")
+            )
+            self._read_index = Signal[Unsigned.upto(self._max_index)](
+                0, name=_prefix_name("rd_index")
+            )
+
+            self._empty = Signal[Bit](name=_prefix_name("empty"))
+            self._full = Signal[Bit](name=_prefix_name("full"))
+
+        @concurrent
+        def logic():
+            self._empty <<= self._write_index == self._read_index
+            self._full <<= self._next_index(self._write_index) == self._read_index
+
+    def push(self, data: BitVector):
+        assert not self._full, "writing to full fifo"
+        self._mem[self._write_index] <<= data
+        self._write_index <<= self._next_index(self._write_index)
+
+    def pop(self) -> BitVector:
+        assert not self._empty, "reading from empty fifo"
+        self._read_index <<= self._next_index(self._read_index)
+        return self._mem[self._read_index]
+
+    def front(self):
+        return self._mem[self._read_index]
+
+    def empty(self):
+        return self._empty
+
+    def full(self):
+        return self._full

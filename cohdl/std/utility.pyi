@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import TypeVar, Generic, TypeGuard, overload
+from typing import TypeVar, Generic, TypeGuard, overload, NoReturn
 
-from cohdl._core import Bit, BitVector, Temporary, Unsigned, Signal
+from cohdl._core import Bit, BitVector, Temporary, Unsigned, Signal, expr_fn
 
 from ._context import Duration, Context
 
@@ -300,6 +300,11 @@ def int_log_2(inp: int) -> int:
     Asserts, that `inp` is of type int and a power of 2.
     """
 
+def is_pow_two(inp: int):
+    """
+    check if `inp` is an integer power of two
+    """
+
 @overload
 async def wait_for(duration: int | Unsigned, *, allow_zero: bool = False) -> None:
     """
@@ -319,6 +324,14 @@ async def wait_for(duration: Duration) -> None:
     of the enclosing synthesizable context and calculates the needed number
     of wait cycles from it. Because of that this function can only be
     used in contexts defined with std.Context.
+    """
+
+async def wait_forever() -> NoReturn:
+    """
+    stop execution of the coroutine
+
+    This will introduce a statemachine state with no exit path.
+    The only way to leave this function is a reset of the enclosing context.
     """
 
 class OutShiftRegister:
@@ -504,4 +517,117 @@ class ToggleSignal:
         """
         Returns a bit signal that is `1` for a single clock cycle after
         each transition of the toggled signal from `1` to `0`.
+        """
+
+class SyncFlag:
+    """
+    SyncFlag is used to send single bit notifications between two clocked
+    contexts.
+
+    ---
+    Example:
+
+    >>> # in sender context
+    >>> flag.set()
+    >>> # optionally wait until flag is cleared by receiver
+    >>> await flag.is_clear()
+    >>>
+    >>> # in receiver context
+    >>> # wait until flag is set and clear it
+    >>> await flag.receive()
+
+    ---
+
+    SyncFlag can be used as the argument of an `async with` statement.
+    The process will wait until the flag becomes set and automatically clears it once
+    the with-scope is left.
+
+    >>> flag = SyncFlag()
+    >>> async with flag:
+    >>>     ...
+
+    is equivalent to
+
+    >>> flag = SyncFlag()
+    >>> await flag.is_set()
+    >>> ...
+    >>> flag.clear()
+    """
+
+    def set(self) -> None:
+        """
+        Set the flag. This has no effect when it is already set.
+
+        This method is used in the sender context.
+        """
+    def clear(self) -> None:
+        """
+        Clear the flag. This has no effect  when it is already clear.
+
+        This method should be used in the receiver context
+        after a received `set` was processed.
+        """
+    @expr_fn
+    def is_set(self) -> bool:
+        """
+        Check if the flag is set.
+
+        Note: This method is marked as `expr_fn` and thus awaitable when used as the
+        argument of an await expression.
+        """
+    @expr_fn
+    def is_clear(self) -> bool:
+        """
+        Check if the flag is clear. (opposite of is_set)
+
+        Note: This method is marked as `expr_fn` and thus awaitable when used as the
+        argument of an await expression.
+        """
+    async def receive(self) -> None:
+        """
+        Wait until the SyncFlag is set and immediately clear it.
+        """
+    async def __aenter__(self) -> None: ...
+    async def __aexit__(self, val, type, traceback) -> None: ...
+
+#
+#
+#
+
+class Fifo:
+    def __init__(self, elem_width: int, depth: int):
+        """
+        construct a new Fifo containing BitVectors of width `elem_width`
+
+        `depth` defines the size of the internal array.
+        The Fifo can hold at most `depth`-1 elements.
+        """
+    def push(self, data: BitVector):
+        """
+        push one element onto the Fifo
+
+        may only be called once per clock cycle
+        may not be called on a full Fifo
+        """
+    def pop(self) -> BitVector:
+        """
+        remove one element from the Fifo
+        returns the removed element
+
+        may not be called on an empty Fifo
+        """
+    def front(self) -> BitVector:
+        """
+        Returns the state of element at the front of the Fifo
+        i.e. the next value returned by `pop` without removing it.
+
+        The result is undefined while the Fifo is empty
+        """
+    def empty(self) -> Bit:
+        """
+        check if fifo is empty
+        """
+    def full(self) -> Bit:
+        """
+        check if fifo is full
         """

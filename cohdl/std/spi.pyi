@@ -100,7 +100,7 @@ class SpiMaster:
         """
     async def transaction_context(
         self,
-        send_data: BitVector | str,
+        send_data: BitVector | str | None = None,
         cs: Bit | BitVector = Bit(0),
     ) -> _SpiTransaction:
         """
