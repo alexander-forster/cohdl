@@ -1861,9 +1861,20 @@ class PrepareAst:
             result_statements.append(self.apply(inp.body))
 
             for context, fn in exit_list[::-1]:
-                result_statements.append(
-                    self.subcall(fn, [context, None, None, None], {})
-                )
+                returns_always = 0
+                for stmt in result_statements:
+                    stmt: out.Statement
+                    if stmt.returns():
+                        returns_always = returns_always or stmt.returns_always()
+                        for return_path in stmt._return_paths:
+                            return_path._final_bound_statements.append(
+                                self.subcall(fn, [context, None, None, None], {})
+                            )
+
+                if not returns_always:
+                    result_statements.append(
+                        self.subcall(fn, [context, None, None, None], {})
+                    )
 
             if first_target is not None:
                 first_target.restore_locals()
@@ -1903,9 +1914,24 @@ class PrepareAst:
             result_statements.append(self.apply(inp.body))
 
             for context, fn in exit_list[::-1]:
-                result_statements.append(
-                    translate_await(self.subcall(fn, [context, None, None, None], {}))
-                )
+                returns_always = 0
+                for stmt in result_statements:
+                    stmt: out.Statement
+                    if stmt.returns():
+                        returns_always = returns_always or stmt.returns_always()
+                        for return_path in stmt._return_paths:
+                            return_path._final_bound_statements.append(
+                                translate_await(
+                                    self.subcall(fn, [context, None, None, None], {})
+                                )
+                            )
+
+                if not returns_always:
+                    result_statements.append(
+                        translate_await(
+                            self.subcall(fn, [context, None, None, None], {})
+                        )
+                    )
 
             if first_target is not None:
                 first_target.restore_locals()

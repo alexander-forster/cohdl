@@ -265,26 +265,16 @@ class IrGenerator:
                 result_blocks = []
 
                 for block in open_blocks:
-                    code_body = ir.CodeBlock([], parent=block)
-                    code_orelse = ir.CodeBlock([], parent=block)
+                    code_body = ir.CodeBlock([], parent=None)
+                    code_orelse = ir.CodeBlock([], parent=None)
 
                     block.append(ir.If(test.result(), code_body, code_orelse))
 
-                    open_body = self.apply(body, open_blocks=[code_body])
-                    open_orelse = self.apply(orelse, open_blocks=[code_orelse])
-
-                    if body.returns() and orelse.returns():
-                        # do nothing, statements after if will be discarded since they are not reachable
-                        # Call handles open blocks
-                        pass
-                    elif body.returns():
-                        # add code after if statement to orelse but not to body block
-                        # continue with body after body of containing function ends
-                        result_blocks.extend(open_orelse)
-                    else:
-                        # add code after if statement to body but not to orelse block
-                        # continue with orelse after body of containing function ends
-                        result_blocks.extend(open_body)
+                    # add all open codeblocks (code blocks that are not completely translated) from
+                    # both if-branches to the result list
+                    # code blocks that end in a return statement are filtered out since they are not returned by apply
+                    result_blocks.extend(self.apply(body, open_blocks=[code_body]))
+                    result_blocks.extend(self.apply(orelse, open_blocks=[code_orelse]))
 
                 return result_blocks
 
@@ -422,6 +412,12 @@ class IrGenerator:
             return result
 
         if isinstance(inp, out.Return):
+            final = inp._final_bound_statements
+
+            if len(final) != 0:
+                # translate possible __exit__ block introduced by with/async with statement
+                open_blocks = self.apply(inp._final_bound_statements, open_blocks)
+
             IrGenerator.returned_blocks.extend(open_blocks)
 
             # nothing to add to  blocks until end of Call
@@ -1005,7 +1001,7 @@ class ConvertInstance:
 
                     always_defined = body_temporaries & else_temporaries
 
-                    # When a temporary is defined in both block
+                    # When a temporary is defined in both blocks
                     # if is always defined and thus valid.
                     invalid_temporaries.difference_update(always_defined)
                     local_temporaries |= always_defined

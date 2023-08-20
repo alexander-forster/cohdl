@@ -204,11 +204,11 @@ class CodeBlock(Statement):
             if all(block is first for block in rest):
                 return first
 
-            blocks = [block._parent for block in blocks]
-
             if level == 0:
                 return None
             level -= 1
+
+            blocks = [block._parent for block in blocks]
 
     def visit(self, operation):
         self._content = [stmt.visit(operation) for stmt in self._content]
@@ -283,6 +283,9 @@ class Comment(Statement):
 
     def copy(self):
         return Comment([*self.lines])
+
+    def dump(self) -> IndentBlock:
+        return IndentBlock(title="Comment", content=[*self.lines])
 
 
 class Event:
@@ -1120,7 +1123,7 @@ class StatemachineContext:
                         # state it is valid in
                         assert (
                             access is AccessFlags.WRITE
-                        ), f"Temporary objects my not be shared between states"
+                        ), f"Temporary objects my not be shared between states (in {self._name})"
                         used_temporaries[obj._root] = True
                 return obj
 

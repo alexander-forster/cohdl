@@ -430,8 +430,6 @@ def test_fixed_math(t: TestWriter):
                         std.FixedOverflowStyle.WRAP,
                         std.FixedOverflowStyle.SATURATE,
                     ):
-                        print(la, ra, " : ", lb, rb, width, offset)
-
                         t.result(
                             t.resize(sig, lb, rb, round, overflow),
                             width,
@@ -471,9 +469,6 @@ async def testbench_simple(dut):
             val_cohdl = getattr(dut, c).value
 
             if val_cohdl != val_vhdl:
-                print(
-                    f"ERR: {dut.vhdl_inp_a.value=} {b=}   | {val_vhdl=}  , {val_cohdl=}  | ({v})"
-                )
                 assert val_cohdl == val_vhdl
 
 

@@ -311,8 +311,8 @@ async def wait_for(duration: int | Unsigned, *, allow_zero: bool = False) -> Non
     wait for a given number of ticks
 
     To avoid a runtime check and logic duplication for the rarely needed
-    case of waiting zero ticks, `duration` wait_for does not allow
-    a value of 0. This can be changed using `allow_zero`.
+    case of waiting zero ticks, `duration` does not allow
+    a value of 0. This can be changed by setting `allow_zero` to true.
     """
 
 @overload

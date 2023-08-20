@@ -1,5 +1,7 @@
 from __future__ import annotations
 from ._assignable_type import AssignableType
+from cohdl._core._intrinsic import _intrinsic
+from cohdl._core import evaluated
 
 import cohdl
 import typing
@@ -20,6 +22,7 @@ class Field:
     class Bit:
         offset: int
 
+        @_intrinsic
         def __new__(cls, source):
             return source[cls.offset]
 
@@ -33,6 +36,7 @@ class Field:
         start: int
         stop: int
 
+        @_intrinsic
         def __new__(cls, source):
             return source[cls.start : cls.stop].bitvector
 
@@ -127,15 +131,37 @@ def bitfield(cls_=None, *, offset=0):
                 else:
                     self._input_vector._assign_(source, mode)
 
+            def _assign(self, source):
+                if isinstance(source, _BitfieldClass):
+                    assert isinstance(source, type(self))
+
+                    for name in fields:
+                        getattr(self, name)._assign(getattr(source, name))
+
+                    for name_ in subbitfields:
+                        getattr(self, name_)._assign(getattr(source, name_))
+                elif isinstance(source, dict):
+                    for name, value in source.items():
+                        getattr(self, name)._assign(value)
+                else:
+                    self._input_vector._assign(source)
+
             @classmethod
             def _init_qualified_(cls, TypeQualifyer, **defaults):
                 assert fixed_width is not None
 
-                initial = cohdl.BitVector[fixed_width]()
+                if not evaluated():
+                    initial = cohdl.BitVector[fixed_width]()
 
-                if len(defaults) != 0:
-                    inital_view = cls(initial)
-                    inital_view._assign_(defaults)
+                    if len(defaults) != 0:
+                        inital_view = cls(initial)
+                        inital_view._assign(defaults)
+                else:
+                    initial = cohdl.Variable[cohdl.BitVector[fixed_width]]()
+
+                    if len(defaults) != 0:
+                        inital_view = cls(initial)
+                        inital_view._assign_(defaults, cohdl.AssignMode.VALUE)
 
                 return cls(TypeQualifyer(initial))
 

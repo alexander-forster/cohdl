@@ -100,6 +100,9 @@ class Comment(Statement):
         super().__init__(False, None)
         self.lines = lines
 
+    def dump(self) -> IndentBlock:
+        return IndentBlock(title="Comment", content=[*self.lines])
+
 
 class StarredValue(Expression):
     def __init__(self, result, bound_statements: list[Statement] | None = None):
@@ -257,7 +260,7 @@ class Boolean(Expression):
         return self._value
 
     def dump(self):
-        return IndentBlock(title="Boolean")
+        return IndentBlock(title="Boolean", content=[])
 
 
 class If(Statement):
@@ -436,6 +439,11 @@ class Return(Statement):
     def __init__(self, expr: Expression):
         self._hook = _ValueBranchHook(name="return")
         self._branch = _ValueBranch(self._hook, expr.result())
+
+        # used by context managers
+        # separate from normal _bound_statements
+        # because __exit__ code must run after return value redirect
+        self._final_bound_statements = []
 
         super().__init__(
             returns_always=True, return_paths=[self], bound_statements=[expr]

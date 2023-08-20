@@ -111,4 +111,13 @@ class _NullFullType:
 
 
 Null = _NullFullType()
+"""
+magic value that can be assigned to Bit/BitVector types
+to set all bits to `0`
+"""
+
 Full = _NullFullType()
+"""
+magic value that can be assigned to Bit/BitVector types
+to set all bits to `1`
+"""
