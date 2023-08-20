@@ -689,16 +689,20 @@ class SequentialContext:
         cond: Bit | None = None,
         *,
         expr=None,
-        active_low: bool | None = None,
+        active_low: bool = False,
         is_async: bool | None = None,
     ):
         combined_reset = Signal[Bit]()
 
         if cond is not None:
-            assert expr is None
+            assert (
+                expr is None
+            ), "the arguments `cond` and `expr` are mutually exclusive"
             expr = lambda: cond
         else:
-            assert expr is not None
+            assert (
+                expr is not None
+            ), "the arguments `cond` and `expr` are mutually exclusive"
 
         if self._reset is None:
 
@@ -708,15 +712,18 @@ class SequentialContext:
                 combined_reset <<= expr()
 
         else:
-            active_low = (
-                active_low if active_low is not None else self._reset.is_active_low()
-            )
             is_async = is_async if is_async is not None else self._reset.is_async()
 
             @concurrent
             def logic():
                 nonlocal combined_reset
-                combined_reset <<= self._reset.active_high_signal() or expr()
+
+                if active_low:
+                    # combined is in reset state (low) when one of the inputs is in reset state
+                    combined_reset <<= self._reset.active_low_signal() and expr()
+                else:
+                    # combined is in reset state (high) when one of the inputs is in reset state
+                    combined_reset <<= self._reset.active_high_signal() or expr()
 
         return SequentialContext(
             self._clk,
@@ -728,16 +735,20 @@ class SequentialContext:
         cond: Bit | None = None,
         *,
         expr=None,
-        active_low: bool | None = None,
+        active_low: bool = False,
         is_async: bool | None = None,
     ):
         combined_reset = Signal[Bit]()
 
         if cond is not None:
-            assert expr is None
+            assert (
+                expr is None
+            ), "the arguments `cond` and `expr` are mutually exclusive"
             expr = lambda: cond
         else:
-            assert expr is not None
+            assert (
+                expr is not None
+            ), "the arguments `cond` and `expr` are mutually exclusive"
 
         if self._reset is None:
 
@@ -747,15 +758,16 @@ class SequentialContext:
                 combined_reset <<= expr()
 
         else:
-            active_low = (
-                active_low if active_low is not None else self._reset.is_active_low()
-            )
             is_async = is_async if is_async is not None else self._reset.is_async()
 
             @concurrent
             def logic():
                 nonlocal combined_reset
-                combined_reset <<= self._reset.active_high_signal() and expr()
+
+                if active_low:
+                    combined_reset <<= self._reset.active_low_signal() or expr()
+                else:
+                    combined_reset <<= self._reset.active_high_signal() and expr()
 
         return SequentialContext(
             self._clk,

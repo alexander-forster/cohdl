@@ -363,74 +363,80 @@ class SequentialContext:
         self,
         cond: Bit | None = None,
         *,
-        active_low: bool | None = None,
+        active_low: bool = False,
         is_async: bool | None = None,
     ) -> SequentialContext:
         """
-        Returns a copy of self with the reset condition set to the
-        result of ORing `cond` with self.reset().
+        Returns a copy of `self` with the reset condition set to the
+        result of ORing `cond` with the reset condition of `self`.
 
-        If self.reset() is None `cond` is used as the sole reset condition.
+        If `self.reset()` is None `cond` is used as the sole reset condition.
 
-        When `async_low` and/or `is_async` are specified they
-        define the reset behavior of the new context.
-        Otherwise these values are inherited from self.reset().
+        `active_low` determines, which state of `cond` is interpreted as a reset
+        condition and is inherited by the returned context.
+
+        When `is_async` is specified it defines the reset behavior of the new
+        context, otherwise this value is inherited from the parent.
         """
     @overload
     def or_reset(
         self,
         *,
         expr=None,
-        active_low: bool | None = None,
+        active_low: bool = False,
         is_async: bool | None = None,
     ) -> SequentialContext:
         """
-        Returns a copy of self with the reset condition set to the
-        result of ORing `expr()` with self.reset().
-        `expr` is a callable taking no arguments and evaluated in a concurrent context.
+        Returns a copy of `self` with the reset condition set to the
+        result of ORing `expr()` with the reset condition of `self`.
 
-        If self.reset() is None `expr()` is used as the sole reset condition.
+        If `self.reset()` is None `expr()` is used as the sole reset condition.
 
-        When `async_low` and/or `is_async` are specified they
-        define the reset behavior of the new context.
-        Otherwise these values are inherited from self.reset().
+        `active_low` determines, which state of `cond` is interpreted as a reset
+        condition and is inherited by the returned context.
+
+        When `is_async` is specified it defines the reset behavior of the new
+        context, otherwise this value is inherited from the parent.
         """
     @overload
     def and_reset(
         self,
         cond: Bit | None = None,
         *,
-        active_low: bool | None = None,
+        active_low: bool = False,
         is_async: bool | None = None,
     ) -> SequentialContext:
         """
-        Returns a copy of self with the reset condition set to the
-        result of ANDing `cond` with self.reset().
+        Returns a copy of `self` with the reset condition set to the
+        result of ANDing `cond` with the reset condition of `self`.
 
-        If self.reset() is None `cond` is used as the sole reset condition.
+        If `self.reset()` is None `cond` is used as the sole reset condition.
 
-        When `async_low` and/or `is_async` are specified they
-        define the reset behavior of the new context.
-        Otherwise these values are inherited from self.reset().
+        `active_low` determines, which state of `cond` is interpreted as a reset
+        condition and is inherited by the returned context.
+
+        When `is_async` is specified it defines the reset behavior of the new
+        context, otherwise this value is inherited from the parent.
         """
     @overload
     def and_reset(
         self,
         *,
         expr=None,
-        active_low: bool | None = None,
+        active_low: bool = False,
         is_async: bool | None = None,
     ) -> SequentialContext:
         """
-        Returns a copy of self with the reset condition set to the
-        result of ANDing `expr()` with self.reset().
-        `expr` is a callable taking no arguments and evaluated in a concurrent context.
+        Returns a copy of `self` with the reset condition set to the
+        result of ANDing `expr()` with the reset condition of `self`.
 
-        If self.reset() is None `expr()` is used as the sole reset condition.
+        If `self.reset()` is None `expr()` is used as the sole reset condition.
 
-        When `async_low` and/or `is_async` are specified they
-        define the reset behavior of the new context.
-        Otherwise these values are inherited from self.reset().
+        `active_low` determines, which state of `cond` is interpreted as a reset
+        condition and is inherited by the returned context.
+
+        When `is_async` is specified it defines the reset behavior of the new
+        context, otherwise this value is inherited from the parent.
         """
     def __call__(self, fn=None, *, executors: list[Executor] | None = None):
         """
