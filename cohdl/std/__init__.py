@@ -19,6 +19,7 @@ from ._context import (
     Period,
     Duration,
     Context,
+    SequentialContext,
     concurrent_assign,
     concurrent_call,
     concurrent_eval,

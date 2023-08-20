@@ -24,7 +24,7 @@ class test_wait_for(cohdl.Entity):
 
         zero_val = Signal[Unsigned[3]](0)
 
-        @std.Context(raw_clk)
+        @std.SequentialContext(raw_clk)
         async def proc_raw():
             await self.start
             self.output_a <<= True
@@ -35,7 +35,7 @@ class test_wait_for(cohdl.Entity):
             await std.wait_for(5)
             self.output_a <<= False
 
-        @std.Context(timed_clk)
+        @std.sequential(timed_clk)
         async def proc_timed():
             await self.start
             self.output_b <<= True
@@ -46,7 +46,7 @@ class test_wait_for(cohdl.Entity):
             await std.wait_for(std.us(0.005))
             self.output_b <<= False
 
-        @std.Context(raw_clk)
+        @std.sequential(raw_clk)
         async def proc_var():
             await self.start
             self.output_c <<= True

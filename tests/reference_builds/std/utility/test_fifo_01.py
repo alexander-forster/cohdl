@@ -24,7 +24,7 @@ class test_fifo_01(cohdl.Entity):
     full = Port.output(Bit)
 
     def architecture(self):
-        ctx = std.Context(std.Clock(self.clk), std.Reset(self.reset))
+        ctx = std.SequentialContext(std.Clock(self.clk), std.Reset(self.reset))
         fifo = std.Fifo(4, 8)
 
         @std.concurrent

@@ -29,7 +29,7 @@ class test_executor_01(cohdl.Entity):
     is_ready = Port.output(Bit)
 
     def architecture(self):
-        ctx = std.Context(
+        ctx = std.SequentialContext(
             std.Clock(self.clk),
             std.Reset(self.reset),
         )

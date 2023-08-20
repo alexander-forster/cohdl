@@ -29,7 +29,7 @@ class test_toggle_signal_02(cohdl.Entity):
             pass
             self.callback_falling ^= True
 
-        ctx = std.Context(std.Clock(self.clk, frequency=std.GHz(2)))
+        ctx = std.SequentialContext(std.Clock(self.clk, frequency=std.GHz(2)))
 
         toggle = std.ToggleSignal(
             ctx,

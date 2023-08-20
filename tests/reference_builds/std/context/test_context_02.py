@@ -33,7 +33,7 @@ class test_context_02(cohdl.Entity):
 
         step_cond_b = lambda: Bit(True)
 
-        ctx = std.Context(clk_a, reset_a)
+        ctx = std.SequentialContext(clk_a, reset_a)
 
         expr = lambda: self.reset_b
 
@@ -57,7 +57,7 @@ class test_context_02(cohdl.Entity):
         #
         #
 
-        ctx_b = std.Context(clk_b, reset_b, step_cond=step_cond_b)
+        ctx_b = std.SequentialContext(clk_b, reset_b, step_cond=step_cond_b)
 
         ctx_new_a = ctx.or_reset(False)
         ctx_new_b = ctx_b.or_reset(False)

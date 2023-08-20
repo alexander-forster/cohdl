@@ -22,7 +22,7 @@ class test_sync_flag_02(cohdl.Entity):
     is_clear = Port.output(Bit)
 
     def architecture(self):
-        ctx = std.Context(std.Clock(self.clk), std.Reset(self.reset))
+        ctx = std.SequentialContext(std.Clock(self.clk), std.Reset(self.reset))
 
         sync = std.SyncFlag()
 

@@ -28,7 +28,7 @@ def gen_entity():
         resetable_bitvector = Port.output(BitVector[3], default="000")
 
         def architecture(self):
-            ctx = std.Context(
+            ctx = std.SequentialContext(
                 std.Clock(self.clk),
                 std.Reset(
                     self.reset, active_low=reset_active_low, is_async=reset_async

@@ -21,7 +21,7 @@ class test_spi_ctx_03(Entity):
     cs = Port.output(Bit)
 
     def architecture(self):
-        ctx = std.Context(std.Clock(self.clk, frequency=std.MHz(200)))
+        ctx = std.SequentialContext(std.Clock(self.clk, frequency=std.MHz(200)))
 
         spi = std.spi.Spi(
             sclk=self.sclk,

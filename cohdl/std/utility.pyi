@@ -320,10 +320,10 @@ async def wait_for(duration: Duration) -> None:
     """
     wait for a given time duration
 
-    wait_for uses `std.Context.current()` to determine the clock period
+    wait_for uses `std.SequentialContext.current()` to determine the clock period
     of the enclosing synthesizable context and calculates the needed number
     of wait cycles from it. Because of that this function can only be
-    used in contexts defined with std.Context.
+    used in sequential contexts defined with a fixed frequency Clock.
     """
 
 async def wait_forever() -> NoReturn:

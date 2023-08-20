@@ -316,13 +316,13 @@ def concurrent_call(fn, *args, **kwargs):
     calls `fn` with the given `args`/`kwargs` in a concurrent context
     """
 
-class Context:
+class SequentialContext:
     """
     helper type that wraps the arguments of std.sequential in a single object
     """
 
     @staticmethod
-    def current() -> Context | None:
+    def current() -> SequentialContext | None:
         """
         returns the currently used context
         or None when no such context exists
@@ -335,7 +335,7 @@ class Context:
         step_cond: Callable[[], bool] | None = None,
     ):
         """
-        creates an instance of Context
+        creates an instance of SequentialContext
 
         when applied to a function it is equivalent to
         | std.sequential(`clk`, `reset`, step_cond=`step_cond`)
@@ -354,7 +354,7 @@ class Context:
         """
     def with_params(
         self, *, clk: Clock | None = None, reset: Reset | None = None, step_cond=None
-    ) -> Context:
+    ) -> SequentialContext:
         """
         returns a copy of self with all supplied parameters changed
         """
@@ -365,7 +365,7 @@ class Context:
         *,
         active_low: bool | None = None,
         is_async: bool | None = None,
-    ) -> Context:
+    ) -> SequentialContext:
         """
         Returns a copy of self with the reset condition set to the
         result of ORing `cond` with self.reset().
@@ -383,7 +383,7 @@ class Context:
         expr=None,
         active_low: bool | None = None,
         is_async: bool | None = None,
-    ) -> Context:
+    ) -> SequentialContext:
         """
         Returns a copy of self with the reset condition set to the
         result of ORing `expr()` with self.reset().
@@ -402,7 +402,7 @@ class Context:
         *,
         active_low: bool | None = None,
         is_async: bool | None = None,
-    ) -> Context:
+    ) -> SequentialContext:
         """
         Returns a copy of self with the reset condition set to the
         result of ANDing `cond` with self.reset().
@@ -420,7 +420,7 @@ class Context:
         expr=None,
         active_low: bool | None = None,
         is_async: bool | None = None,
-    ) -> Context:
+    ) -> SequentialContext:
         """
         Returns a copy of self with the reset condition set to the
         result of ANDing `expr()` with self.reset().
@@ -443,6 +443,10 @@ class Context:
         since the context can detect their usage during parsing.
         """
 
+# keep old name Context for now
+# might be deprecated in the future
+Context = SequentialContext
+
 #
 #
 #
@@ -462,7 +466,7 @@ class Executor:
 
     def __init__(
         self,
-        ctx: Context | None,
+        ctx: SequentialContext | None,
         mode: ExecutorMode,
         action,
         result=None,
@@ -471,7 +475,7 @@ class Executor:
     ): ...
     @classmethod
     def make_parallel(
-        cls, ctx: Context, action, result, *args, **kwargs
+        cls, ctx: SequentialContext, action, result, *args, **kwargs
     ) -> Executor: ...
     @classmethod
     def make_before(cls, action, result, *args, **kwargs) -> Executor: ...

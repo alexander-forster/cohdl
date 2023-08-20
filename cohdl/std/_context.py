@@ -401,7 +401,7 @@ def concurrent(
     )
 
 
-def sequential(
+def _sequential_impl(
     trigger=None,
     /,
     reset=None,
@@ -414,7 +414,7 @@ def sequential(
     if trigger is None:
 
         def wrapper(fn):
-            sequential(
+            _sequential_impl(
                 fn,
                 reset=reset,
                 step_cond=step_cond,
@@ -555,6 +555,36 @@ def sequential(
     return helper
 
 
+def sequential(
+    trigger=None,
+    /,
+    reset=None,
+    *,
+    step_cond=None,
+    comment=None,
+    attributes: dict | None = None,
+    capture_lazy: bool = False,
+):
+    if isinstance(trigger, Clock):
+        return SequentialContext(
+            clk=trigger,
+            reset=reset,
+            step_cond=step_cond,
+            comment=comment,
+            attributes=attributes,
+            capture_lazy=capture_lazy,
+        )
+
+    return _sequential_impl(
+        trigger,
+        reset=reset,
+        step_cond=step_cond,
+        comment=comment,
+        attributes=attributes,
+        capture_lazy=capture_lazy,
+    )
+
+
 def concurrent_assign(target, source):
     @concurrent()
     def logic():
@@ -578,7 +608,7 @@ def concurrent_call(fn, *args, **kwargs):
 class _ContextData:
     def __init__(
         self,
-        ctx: Context,
+        ctx: SequentialContext,
         executors_before: list[Executor],
         executors_after: list[Executor],
     ):
@@ -587,14 +617,14 @@ class _ContextData:
         self.executors_after = executors_after
 
 
-_current_context: Context | None = None
+_current_context: SequentialContext | None = None
 _current_context_data: _ContextData | None = None
 
 
-class Context:
+class SequentialContext:
     @staticmethod
     @consteval
-    def current() -> Context | None:
+    def current() -> SequentialContext | None:
         return _current_context
 
     @staticmethod
@@ -604,7 +634,7 @@ class Context:
 
     @staticmethod
     @consteval
-    def _enter_context(ctx: Context, data: _ContextData | None = None):
+    def _enter_context(ctx: SequentialContext, data: _ContextData | None = None):
         global _current_context, _current_context_data
         _current_context = ctx
         _current_context_data = data
@@ -616,13 +646,25 @@ class Context:
         _current_context = None
         _current_context_data = None
 
-    def __init__(self, clk: Clock, reset: Reset | None = None, *, step_cond=None):
+    def __init__(
+        self,
+        clk: Clock,
+        reset: Reset | None = None,
+        *,
+        step_cond=None,
+        comment=None,
+        attributes: dict | None = None,
+        capture_lazy: bool = False,
+    ):
         assert isinstance(clk, Clock)
         assert reset is None or isinstance(reset, Reset)
 
         self._clk = clk
         self._reset = reset
         self._step_cond = step_cond
+        self._comment = comment
+        self._attributes = attributes
+        self._capture_lazy = capture_lazy
 
     def clk(self):
         return self._clk
@@ -636,7 +678,7 @@ class Context:
     def with_params(
         self, *, clk: Clock | None = None, reset: Reset | None = None, step_cond=None
     ):
-        return Context(
+        return SequentialContext(
             clk=self._clk if clk is None else clk,
             reset=self._reset if reset is None else reset,
             step_cond=self._step_cond if step_cond is None else step_cond,
@@ -676,7 +718,7 @@ class Context:
                 nonlocal combined_reset
                 combined_reset <<= self._reset.active_high_signal() or expr()
 
-        return Context(
+        return SequentialContext(
             self._clk,
             Reset(combined_reset, active_low=active_low, is_async=is_async),
         )
@@ -715,7 +757,7 @@ class Context:
                 nonlocal combined_reset
                 combined_reset <<= self._reset.active_high_signal() and expr()
 
-        return Context(
+        return SequentialContext(
             self._clk,
             Reset(combined_reset, active_low=active_low, is_async=is_async),
         )
@@ -768,15 +810,22 @@ class Context:
                     self._exit_context()
 
             context_fn.__name__ = fn.__name__
-            return sequential(self._clk, self._reset, step_cond=self._step_cond)(
-                context_fn
-            )
+            return _sequential_impl(
+                self._clk,
+                self._reset,
+                step_cond=self._step_cond,
+                comment=self._comment,
+                attributes=self._attributes,
+                capture_lazy=self._capture_lazy,
+            )(context_fn)
 
         if fn is not None:
             return helper(fn)
         else:
             return helper
 
+
+Context = SequentialContext
 
 #
 #
@@ -795,7 +844,7 @@ class ExecutorMode(enum.Enum):
 
 class Executor:
     """
-    Executor wraps a coroutine in a sequential process
+    Executor wraps a coroutine in a _sequential_impl process
     and provides methods to start the execution from a different
     context.
     """
@@ -803,16 +852,16 @@ class Executor:
     @consteval
     def _check_context(self):
         if not self._mode is ExecutorMode.parallel_process:
-            current_ctx = Context.current()
-            current_data = Context.current_data()
+            current_ctx = SequentialContext.current()
+            current_data = SequentialContext.current_data()
             assert (
                 current_ctx is not None
-            ), "Executor with mode {self._mode} can only be used in functions marked with std.Context"
+            ), "Executor with mode {self._mode} can only be used in functions marked with std.SequentialContext"
 
             if self._mode is ExecutorMode.immediate_before:
                 assert (
                     self in current_data.executors_before
-                ), "all used executors with mode {ExecutorMode.immediate_before} must be specified in the std.Context decorator of the enclosing function"
+                ), "all used executors with mode {ExecutorMode.immediate_before} must be specified in the std.SequentialContext decorator of the enclosing function"
             else:
                 assert self._mode is ExecutorMode.immediate_after
                 if self not in current_data.executors_after:
@@ -833,7 +882,7 @@ class Executor:
 
     def __init__(
         self,
-        ctx: Context | None,
+        ctx: SequentialContext | None,
         mode: ExecutorMode,
         action,
         result=None,
@@ -865,7 +914,7 @@ class Executor:
                 await self.executor_statemachine()
 
     @classmethod
-    def make_parallel(cls, ctx: Context, action, result, *args, **kwargs):
+    def make_parallel(cls, ctx: SequentialContext, action, result, *args, **kwargs):
         return cls(
             ctx=ctx,
             mode=ExecutorMode.parallel_process,

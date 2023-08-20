@@ -338,7 +338,7 @@ async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = Fa
         ctx = Context.current()
         assert (
             ctx is not None
-        ), "wait_for can only infer the clock in sequential contexts created with std.Context"
+        ), "wait_for can only infer the clock in sequential contexts created with a Clock with defined frequency"
         cnt = duration.count_periods(ctx.clk().period())
     else:
         cnt = duration
