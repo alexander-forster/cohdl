@@ -1554,10 +1554,10 @@ class EntityTemplate(Block):
                 if isinstance(obj, (Signal, Variable, Temporary)):
                     if obj in written_in:
                         assert written_in[obj] is current_ctx, (
-                            f"object '{obj}' written in multiple contexts\n"
-                            " first written here\n"
+                            f"object '{obj}, name={obj.name()}' written in multiple contexts\n"
+                            " written in this context\n"
                             f"{current_ctx.source_location()}\n"
-                            " also written here\n"
+                            " also written in this context\n"
                             f"{written_in[obj].source_location()}\n"
                         )
                     else:

@@ -366,6 +366,7 @@ def concurrent(
     comment=None,
     attributes: dict | None = None,
     capture_lazy: bool = False,
+    wrapped_fn=None,
 ):
     parent_prefix = _Prefix._parent_prefix()
 
@@ -382,21 +383,25 @@ def concurrent(
     if fn is None:
 
         def wrapper(fn):
+            nonlocal wrapped_fn
+            wrapped_fn = fn if wrapped_fn is None else wrapped_fn
             cohdl.concurrent_context(
                 _prefix_wrapper(parent_prefix, fn),
                 name=fn.__name__,
                 attributes=attributes,
-                source_location=SourceLocation.from_function(fn),
+                source_location=SourceLocation.from_function(wrapped_fn),
                 captured_functions=None if capture_lazy else [fn],
             )
 
         return wrapper
 
+    wrapped_fn = fn if wrapped_fn is None else wrapped_fn
+
     cohdl.concurrent_context(
         _prefix_wrapper(parent_prefix, fn),
         name=fn.__name__,
         attributes=attributes,
-        source_location=SourceLocation.from_function(fn),
+        source_location=SourceLocation.from_function(wrapped_fn),
         captured_functions=None if capture_lazy else [fn],
     )
 
@@ -410,6 +415,7 @@ def _sequential_impl(
     comment=None,
     attributes: dict | None = None,
     capture_lazy: bool = False,
+    wrapped_fn,
 ):
     if trigger is None:
 
@@ -421,6 +427,7 @@ def _sequential_impl(
                 comment=comment,
                 attributes=attributes,
                 capture_lazy=capture_lazy,
+                wrapped_fn=wrapped_fn,
             )
 
         return wrapper
@@ -443,6 +450,8 @@ def _sequential_impl(
         step_cond = lambda: True
 
     if inspect.isfunction(trigger) or is_coro:
+        wrapped_fn = trigger if wrapped_fn is None else wrapped_fn
+
         if is_coro:
             callable = coro = trigger()
             fn = None
@@ -465,13 +474,15 @@ def _sequential_impl(
             _prefix_wrapper(parent_prefix, wrapper),
             name=trigger.__name__,
             attributes=attributes,
-            source_location=SourceLocation.from_function(trigger),
+            source_location=SourceLocation.from_function(wrapped_fn),
             captured_functions=None if capture_lazy else [callable],
         )
 
         return trigger
 
     def helper(fn):
+        nonlocal wrapped_fn
+        wrapped_fn = fn if wrapped_fn is None else wrapped_fn
         is_coro = inspect.iscoroutinefunction(fn)
 
         if is_coro:
@@ -499,7 +510,7 @@ def _sequential_impl(
                 _prefix_wrapper(parent_prefix, wrapper),
                 name=fn.__name__,
                 attributes=attributes,
-                source_location=SourceLocation.from_function(fn),
+                source_location=SourceLocation.from_function(wrapped_fn),
                 captured_functions=None if capture_lazy else [callable],
             )
 
@@ -524,7 +535,7 @@ def _sequential_impl(
                 _prefix_wrapper(parent_prefix, wrapper),
                 name=fn.__name__,
                 attributes=attributes,
-                source_location=SourceLocation.from_function(fn),
+                source_location=SourceLocation.from_function(wrapped_fn),
                 captured_functions=None if capture_lazy else [callable],
             )
 
@@ -548,7 +559,7 @@ def _sequential_impl(
                 _prefix_wrapper(parent_prefix, wrapper),
                 name=fn.__name__,
                 attributes=attributes,
-                source_location=SourceLocation.from_function(fn),
+                source_location=SourceLocation.from_function(wrapped_fn),
                 captured_functions=None if capture_lazy else [callable],
             )
 
@@ -582,6 +593,7 @@ def sequential(
         comment=comment,
         attributes=attributes,
         capture_lazy=capture_lazy,
+        wrapped_fn=None,
     )
 
 
@@ -829,6 +841,7 @@ class SequentialContext:
                 comment=self._comment,
                 attributes=self._attributes,
                 capture_lazy=self._capture_lazy,
+                wrapped_fn=fn,
             )(context_fn)
 
         if fn is not None:

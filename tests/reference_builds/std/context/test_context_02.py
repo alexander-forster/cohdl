@@ -60,7 +60,7 @@ class test_context_02(cohdl.Entity):
         ctx_b = std.SequentialContext(clk_b, reset_b, step_cond=step_cond_b)
 
         ctx_new_a = ctx.or_reset(False)
-        ctx_new_b = ctx_b.or_reset(False)
+        ctx_new_b = ctx_b.or_reset(False, active_low=True)
 
         assert ctx_new_a.reset().is_active_high() == True
         assert ctx_new_b.reset().is_active_high() == False
