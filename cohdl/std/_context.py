@@ -92,8 +92,8 @@ class Frequency:
         return Frequency(arg * factor)
 
     @consteval
-    def __init__(self, val: int | float | Frequency | Period):
-        if isinstance(val, Period):
+    def __init__(self, val: int | float | Frequency | Duration):
+        if isinstance(val, Duration):
             val = val.frequency()
         if isinstance(val, Frequency):
             val = val._val
@@ -105,8 +105,8 @@ class Frequency:
         return self
 
     @consteval
-    def period(self) -> Period:
-        return Period(1 / self._val)
+    def period(self) -> Duration:
+        return Duration(1 / self._val)
 
     @consteval
     def gigahertz(self) -> float:
@@ -129,17 +129,17 @@ class Frequency:
         return self._val == other._val
 
 
-class Period:
+class Duration:
     @staticmethod
     @consteval
     def _getter(arg, factor):
-        if isinstance(arg, Period):
+        if isinstance(arg, Duration):
             return factor / arg._freq._val
-        return Period(arg / factor)
+        return Duration(arg / factor)
 
     @consteval
-    def __init__(self, val: int | float | Frequency | Period):
-        if isinstance(val, Period):
+    def __init__(self, val: int | float | Frequency | Duration):
+        if isinstance(val, Duration):
             self._freq = val._freq
         elif isinstance(val, Frequency):
             self._freq = val
@@ -151,36 +151,36 @@ class Period:
         return self._freq
 
     @consteval
-    def period(self) -> Period:
+    def period(self) -> Duration:
         return self
 
     @consteval
     def picoseconds(self):
-        return Period._getter(self, 1e12)
+        return Duration._getter(self, 1e12)
 
     @consteval
     def nanoseconds(self):
-        return Period._getter(self, 1e9)
+        return Duration._getter(self, 1e9)
 
     @consteval
     def microseconds(self):
-        return Period._getter(self, 1e6)
+        return Duration._getter(self, 1e6)
 
     @consteval
     def milliseconds(self):
-        return Period._getter(self, 1e3)
+        return Duration._getter(self, 1e3)
 
     @consteval
     def seconds(self):
-        return Period._getter(self, 1)
+        return Duration._getter(self, 1)
 
     @consteval
-    def __eq__(self, other: Period):
+    def __eq__(self, other: Duration):
         return self._freq == other._freq
 
     @consteval
     def count_periods(
-        self, subperiod: Period, *, allowed_delta=1e-9, float_result=False
+        self, subperiod: Duration, *, allowed_delta=1e-9, float_result=False
     ):
         self_ps = self.picoseconds()
         other_ps = subperiod.picoseconds()
@@ -197,8 +197,8 @@ class Period:
             return rounded
 
     @consteval
-    def __truediv__(self, other: int | float | Period):
-        if isinstance(other, Period):
+    def __truediv__(self, other: int | float | Duration):
+        if isinstance(other, Duration):
             self_ps = self.picoseconds()
             other_ps = other.picoseconds()
             return self_ps / other_ps
@@ -206,7 +206,7 @@ class Period:
             return type(self).picoseconds(self.picoseconds() / other)
 
 
-Duration = Period
+Period = Duration
 
 
 class ClockEdge(enum.Enum):
@@ -236,7 +236,7 @@ class Clock:
         *,
         active_edge: ClockEdge = ClockEdge.RISING,
         frequency: Frequency | int | None = None,
-        period: Period | int | None = None,
+        period: Duration | int | None = None,
         duty: float = 0.5,
         phase: float = 0.0,
     ):

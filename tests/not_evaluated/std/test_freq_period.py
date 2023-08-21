@@ -3,7 +3,7 @@ import unittest
 from cohdl import std
 
 
-class FreqPeriodTester(unittest.TestCase):
+class FreqDurationTester(unittest.TestCase):
     def test_frequency(self):
         for n in [1, 500, 1000, 123456]:
             for f in [std.Frequency(n), std.Frequency.hertz(n)]:
@@ -17,30 +17,29 @@ class FreqPeriodTester(unittest.TestCase):
                 assert f == std.Frequency.megahertz(n / 1000000)
                 assert f == std.Frequency.gigahertz(n / 1000000000)
 
-                assert f.period() == std.Period(1 / n)
+                assert f.period() == std.Duration(1 / n)
 
     def test_period(self):
         for n in [1, 500, 1000, 123456]:
-            for p in [std.Period(n), std.Period.seconds(n)]:
-
+            for p in [std.Duration(n), std.Duration.seconds(n)]:
                 assert p.seconds() == n
                 assert p.milliseconds() == n * 1000
                 assert p.microseconds() == n * 1000000
                 assert p.nanoseconds() == n * 1000000000
                 assert p.picoseconds() == n * 1000000000000
 
-                assert p == std.Period(n)
-                assert p == std.Period.seconds(n)
-                assert p == std.Period.milliseconds(1000 * n)
-                assert p == std.Period.microseconds(1000000 * n)
-                assert p == std.Period.nanoseconds(1000000000 * n)
-                assert p == std.Period.picoseconds(1000000000000 * n)
+                assert p == std.Duration(n)
+                assert p == std.Duration.seconds(n)
+                assert p == std.Duration.milliseconds(1000 * n)
+                assert p == std.Duration.microseconds(1000000 * n)
+                assert p == std.Duration.nanoseconds(1000000000 * n)
+                assert p == std.Duration.picoseconds(1000000000000 * n)
 
-                p_s = std.Period.seconds(n)
-                p_ms = std.Period.milliseconds(1000 * n)
-                p_us = std.Period.microseconds(1000000 * n)
-                p_ns = std.Period.nanoseconds(1000000000 * n)
-                p_ps = std.Period.picoseconds(1000000000000 * n)
+                p_s = std.Duration.seconds(n)
+                p_ms = std.Duration.milliseconds(1000 * n)
+                p_us = std.Duration.microseconds(1000000 * n)
+                p_ns = std.Duration.nanoseconds(1000000000 * n)
+                p_ps = std.Duration.picoseconds(1000000000000 * n)
 
                 assert p_s == p_ms
                 assert p_s == p_us

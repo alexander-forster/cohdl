@@ -41,7 +41,7 @@ class Frequency:
         frequency as the given value
         """
     @overload
-    def __init__(self, val: Period):
+    def __init__(self, val: Duration):
         """
         create a new Frequency object with a frequency
         corresponding to the given period
@@ -51,11 +51,11 @@ class Frequency:
         returns self
 
         this method exists to make it easier to write code
-        that works with both Frequency and Period objects
+        that works with both Frequency and Duration objects
         """
-    def period(self) -> Period:
+    def period(self) -> Duration:
         """
-        converts the Frequency to the corresponding Period
+        converts the Frequency to the corresponding Duration
         """
     @overload
     def gigahertz(self: Frequency) -> float:
@@ -103,13 +103,13 @@ class Frequency:
         """
     def __eq__(self, other: Frequency) -> bool: ...
 
-class Period:
+class Duration:
     @overload
     def __init__(self, val: int | float):
         """
-        create a new Period object with a given duration in seconds
+        create a new Duration object with a given duration in seconds
 
-        note: Period also provides classmethods to create
+        note: Duration also provides classmethods to create
         an object with a duration specified in pico/nano/micro or milliseconds
 
         alternatively std.ps, std.ns, std.us, std.ms can be used
@@ -117,89 +117,90 @@ class Period:
     @overload
     def __init__(self, val: Frequency):
         """
-        create a new Period object with a duration
+        create a new Duration object with a duration
         corresponding to the given frequency
         """
     @overload
-    def __init__(self, val: Period):
+    def __init__(self, val: Duration):
         """
-        create a new Period object with the same duration
+        create a new Duration object with the same duration
         as the given value
         """
     def frequency(self) -> Frequency:
         """
-        converts the Period to the corresponding frequency
+        Interprets the `Duration` as the period of a signal
+        and returns the corresponding frequency.
         """
-    def period(self) -> Period:
+    def period(self) -> Duration:
         """
         returns self
 
         this method exists to make it easier to write code
-        that works with both Frequency and Period objects
+        that works with both Frequency and Duration objects
         """
     @overload
-    def picoseconds(self: Period) -> float:
+    def picoseconds(self: Duration) -> float:
         """
-        returns the number of picoseconds in the Period
+        returns the number of picoseconds in the Duration
         """
     @overload
     @staticmethod
-    def picoseconds(val: int | float) -> Period:
+    def picoseconds(val: int | float) -> Duration:
         """
-        construct a Period that lasts the given
+        construct a Duration that lasts the given
         number of picoseconds
         """
     @overload
-    def nanoseconds(self: Period) -> float:
+    def nanoseconds(self: Duration) -> float:
         """
-        returns the number of nanoseconds in the Period
+        returns the number of nanoseconds in the Duration
         """
     @overload
     @staticmethod
-    def nanoseconds(val: int | float) -> Period:
+    def nanoseconds(val: int | float) -> Duration:
         """
-        construct a Period that lasts the given
+        construct a Duration that lasts the given
         number of nanoseconds
         """
     @overload
-    def microseconds(self: Period) -> float:
+    def microseconds(self: Duration) -> float:
         """
-        returns the number of microseconds in the Period
+        returns the number of microseconds in the Duration
         """
     @overload
     @staticmethod
-    def microseconds(val: int | float) -> Period:
+    def microseconds(val: int | float) -> Duration:
         """
-        construct a Period that lasts the given
+        construct a Duration that lasts the given
         number of microseconds
         """
     @overload
-    def milliseconds(self: Period) -> float:
+    def milliseconds(self: Duration) -> float:
         """
-        returns the number of milliseconds in the Period
+        returns the number of milliseconds in the Duration
         """
     @overload
     @staticmethod
-    def milliseconds(val: int | float) -> Period:
+    def milliseconds(val: int | float) -> Duration:
         """
-        construct a Period that lasts the given
+        construct a Duration that lasts the given
         number of milliseconds
         """
     @overload
-    def seconds(self: Period) -> float:
+    def seconds(self: Duration) -> float:
         """
-        returns the number of seconds in the Period
+        returns the number of seconds in the Duration
         """
     @overload
     @staticmethod
-    def seconds(val: int | float) -> Period:
+    def seconds(val: int | float) -> Duration:
         """
-        construct a Period that lasts the given
+        construct a Duration that lasts the given
         number of seconds
         """
-    def __eq__(self, other: Period) -> bool: ...
+    def __eq__(self, other: Duration) -> bool: ...
     def count_periods(
-        self, subperiod: Period, *, allowed_delta=1e-9, float_result: bool = False
+        self, subperiod: Duration, *, allowed_delta=1e-9, float_result: bool = False
     ):
         """
         returns the number of sub-periods that fit in the duration of self
@@ -213,7 +214,10 @@ class Period:
         division is returned without rounding.
         """
 
-Duration = Period
+Period = Duration
+"""
+deprecated: use std.Duration instead of std.Period
+"""
 
 class ClockEdge(enum.Enum):
     NEITHER = enum.auto()
@@ -232,7 +236,7 @@ class Clock:
         *,
         active_edge: ClockEdge = ClockEdge.RISING,
         frequency: Frequency | int | None = None,
-        period: Period | int | None = None,
+        period: Duration | int | None = None,
         duty: float = 0.5,
         phase: float = 0.0,
     ): ...
@@ -241,7 +245,7 @@ class Clock:
     def edge(self) -> ClockEdge: ...
     def signal(self) -> cohdl.Signal[cohdl.Bit]: ...
     def frequency(self) -> Frequency: ...
-    def period(self) -> Period: ...
+    def period(self) -> Duration: ...
     def duty(self) -> float: ...
     def phase(self) -> float: ...
     def rising(self) -> Clock: ...
@@ -452,6 +456,9 @@ class SequentialContext:
 # keep old name Context for now
 # might be deprecated in the future
 Context = SequentialContext
+"""
+deprecated: std.Context has been renamed to std.SequentialContext
+"""
 
 #
 #

@@ -28,10 +28,10 @@ from ._context import (
 )
 
 
-ms = Period.milliseconds
-us = Period.microseconds
-ns = Period.nanoseconds
-ps = Period.picoseconds
+ms = Duration.milliseconds
+us = Duration.microseconds
+ns = Duration.nanoseconds
+ps = Duration.picoseconds
 
 kHz = Frequency.kilohertz
 MHz = Frequency.megahertz
