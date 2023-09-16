@@ -1,0 +1,11 @@
+[project]
+name="cohdl"
+authors = [
+    { name = "Alexander Forster", email = "alexander.forster123@gmail.com" }
+]
+description="A Python to VHDL compiler"
+version="0.1"
+
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "tests.*"]

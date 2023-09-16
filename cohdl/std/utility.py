@@ -364,12 +364,16 @@ async def wait_forever():
 
 
 class OutShiftRegister:
-    def __init__(self, src: BitVector, msb_first=False, unchecked=False):
+    def __init__(
+        self, src: BitVector, msb_first=False, unchecked=False, initial_empty=False
+    ):
         self._unchecked = unchecked
         self._msb_first = msb_first
 
         if unchecked:
             self._data = Signal(src, name=name("out_shift_reg"))
+        elif initial_empty:
+            self._data = Signal[BitVector[src.width]](name="out_shift_reg")
         else:
             if msb_first:
                 self._data = Signal(src @ Bit(True), name=name("out_shift_out"))
