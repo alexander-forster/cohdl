@@ -237,6 +237,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         *,
         name: str | None = None,
         attributes: dict | None = None,
+        delayed_init: bool = False,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
@@ -1004,6 +1005,48 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
 class Signal(TypeQualifier):
     _SubTypes = {}
+
+    @_intrinsic
+    def __init__(
+        self,
+        value=None,
+        *,
+        name: str | None = None,
+        attributes: dict | None = None,
+        delayed_init: bool = None,
+        _root: TypeQualifier | None = None,
+        _ref_spec: list[RefSpec] | None = None,
+    ):
+        # delayed_init is handled by _init_replacement
+
+        super().__init__(
+            value, name=name, attributes=attributes, _root=_root, _ref_spec=_ref_spec
+        )
+
+    @_intrinsic_replacement(__init__)
+    def _init_replacement(
+        self,
+        value=None,
+        *,
+        name: str | None = None,
+        attributes: dict | None = None,
+        delayed_init: bool = False,
+        _root: TypeQualifier | None = None,
+        _ref_spec: list[RefSpec] | None = None,
+    ):
+        # copy of TypeQualifier._init_replacement
+        # with added support for delayed_init
+
+        assert _root is None
+        assert _ref_spec is None
+        # set default to None, because locally defined
+        # Signals/Variables cannot be used before they are constructed
+        # and thus initialized
+        self.__init__(None, name=name, attributes=attributes)
+
+        if value is None or is_primitive(value) and value._is_uninitialized():
+            return intr_op._IntrinsicDeclaration(self, None, delayed_init)
+        return intr_op._IntrinsicDeclaration(self, value, delayed_init)
 
     #
     # next assignment

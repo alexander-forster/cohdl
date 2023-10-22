@@ -4,6 +4,7 @@ from ._unsigned import Unsigned
 from ._signed import Signed
 
 from ._integer import Integer
+from ._boolean import boolean as Boolean
 from . import _enum as enum
 
 from ._type_qualifier import (

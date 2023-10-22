@@ -25,6 +25,8 @@ from cohdl._core import (
     expr_fn,
 )
 
+from ._assignable_type import make_signal, make_nonlocal
+
 from cohdl._core._intrinsic import _intrinsic
 
 from cohdl._core._intrinsic import comment as cohdl_comment
@@ -81,6 +83,19 @@ def iscouroutinefunction(fn):
     return inspect.iscoroutinefunction(fn)
 
 
+def base_type(x):
+    if isinstance(x, type):
+        if issubclass(x, TypeQualifierBase):
+            return x.type
+        else:
+            return x
+    else:
+        if isinstance(x, TypeQualifierBase):
+            return x.type
+        else:
+            return type(x)
+
+
 def instance_check(val, type):
     return isinstance(TypeQualifierBase.decay(val), type)
 
@@ -94,6 +109,18 @@ async def as_awaitable(fn, /, *args, **kwargs):
         return await fn(*args, **kwargs)
     else:
         return fn(*args, **kwargs)
+
+
+@_intrinsic
+def add_entity_port(entity, port, name: str | None = None):
+    if name is None:
+        name = port.name()
+        assert name is not None, "cannot determine name of new port"
+
+    assert name not in entity._info.ports, f"port '{name}' already exists"
+
+    entity._info.add_port(name, port)
+    return port
 
 
 #
@@ -256,14 +283,14 @@ def binary_fold(fn, first, *args, right_fold=False):
         return tc(first)
     else:
         if right_fold:
-            return fn(first, binary_fold(fn, *args), right_fold=True)
+            return fn(first, binary_fold(fn, *args, right_fold=True))
         else:
             snd, *rest = args
             return binary_fold(fn, fn(first, snd), *rest)
 
 
 def _concat_impl(first, *args):
-    return binary_fold(lambda a, b: a @ b, first, *args)
+    return binary_fold(lambda a, b: a @ b, first, *args, right_fold=True)
 
 
 def concat(first, *args):
@@ -279,9 +306,17 @@ def concat(first, *args):
 
 def stretch(val: Bit | BitVector, factor: int):
     if instance_check(val, Bit):
-        return concat(*[val for _ in range(factor)])
+        if const_cond(factor == 1):
+            return as_bitvector(val)
+        else:
+            return concat(*[val for _ in range(factor)])
     elif instance_check(val, BitVector):
-        return concat(*[stretch(b, factor) for b in val])
+        if const_cond(factor == 1):
+            return val.bitvector.copy()
+        else:
+            # reverse stretched list so bit 0 is the leftmost
+            # concatenated value
+            return concat(*[stretch(b, factor) for b in val][::-1])
     else:
         raise AssertionError("invalid argument")
 
@@ -299,6 +334,63 @@ def as_bitvector(inp: BitVector | Bit | str):
     else:
         assert instance_check(inp, Bit)
         return (inp @ inp)[0:0]
+
+
+def rol(inp: BitVector, n: int = 1) -> BitVector:
+    static_assert(0 <= n <= inp.width)
+    if const_cond(n == 0 or n == inp.width):
+        return inp.bitvector.copy()
+    else:
+        return inp.lsb(rest=n) @ inp.msb(n)
+
+
+def ror(inp: BitVector, n: int = 1) -> BitVector:
+    static_assert(0 <= n <= inp.width)
+    if const_cond(n == 0 or n == inp.width):
+        return inp.bitvector.copy()
+    else:
+        return inp.lsb(n) @ inp.msb(rest=n)
+
+
+def batched(input: BitVector, n: int) -> list[BitVector]:
+    static_assert(len(input) % n == 0)
+
+    return [input[off + n - 1 : off] for off in range(0, len(input), n)]
+
+
+def select_batch(
+    input: BitVector, onehot_selector: BitVector, batch_size: int
+) -> BitVector:
+    static_assert(len(input) == len(onehot_selector) * batch_size)
+    masked = input.bitvector & stretch(onehot_selector, batch_size)
+
+    return binary_fold(lambda a, b: a | b, *batched(masked, batch_size))
+
+
+@_intrinsic
+def stringify(*args):
+    return "".join(str(arg) for arg in args)
+
+
+def delayed(inp, delay: int, initial=Null):
+    if const_cond(delay == 0):
+        return Signal(inp)
+    else:
+        with prefix("delayed"):
+            inp_type = type(TypeQualifierBase.decay(inp))
+
+            steps = [
+                # make delay buffers as nonlocal signals so default values work
+                make_nonlocal[Signal](
+                    inp_type, initial, name=name(stringify(n)), delayed_init=True
+                )
+                for n in range(delay)
+            ]
+
+            for src, target in zip([inp, *steps], steps):
+                target <<= src
+
+            return steps[-1]
 
 
 #

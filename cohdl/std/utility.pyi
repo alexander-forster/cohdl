@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from typing import TypeVar, Generic, TypeGuard, overload, NoReturn
 
-from cohdl._core import Bit, BitVector, Temporary, Unsigned, Signal, expr_fn
+from cohdl._core import (
+    Entity,
+    Bit,
+    BitVector,
+    Temporary,
+    Unsigned,
+    Signal,
+    Port,
+    expr_fn,
+    Null,
+)
 
 from ._context import Duration, Context
 
@@ -53,6 +63,18 @@ def iscouroutinefunction(fn, /) -> bool:
     Returns true when fn is a coroutine function
     """
 
+def base_type(val_or_type, /) -> type:
+    """
+    Determines the type of the given argument after all type qualifiers are removed.
+
+    >>> base_type(int) is int
+    >>> base_type(1) is int
+    >>> base_type(Signal[Bit]) is Bit
+    >>> base_type(Signal[Bit](True)) is Bit
+    >>> base_type(Signal[BitVector[7:0]]) is BitVector[8]
+    >>> base_type(Signal[Array[Bit, 3]]) is Array[Bit, 3]
+    """
+
 def instance_check(val, type: type[T]) -> TypeGuard[T]:
     """
     `instance_check` is similar to Pythons `isinstance`.
@@ -81,6 +103,11 @@ async def as_awaitable(fn, /, *args, **kwargs):
 
     `await as_awaitable(fn, a, b=b)` is equivalent to `await fn(a, b=b)` when `fn`is a coroutine function.
     Otherwise the expression is equivalent to `fn(a, b=b)`.
+    """
+
+def add_entity_port(entity: Entity, port: Port, name: str | None = None) -> Port:
+    """
+    Adds a new port to the given entity.
     """
 
 #
@@ -254,9 +281,9 @@ def stretch(val: Bit | BitVector, factor: int) -> BitVector:
 
     example:
 
-    >>> stretch(Bit('0'), 1)        # -> BitVector("0")
-    >>> stretch(Bit('1'), 2)        # -> BitVector("11")
-    >>> stretch(BitVector('10'), 3) # -> BitVector("101010")
+    >>> stretch(Bit('0'), 1)           # -> "0"
+    >>> stretch(Bit('1'), 2)           # -> "11"
+    >>> stretch(BitVector[2]('10'), 3) # -> "111000"
     """
 
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
@@ -273,14 +300,97 @@ def as_bitvector(inp: BitVector | Bit | str) -> BitVector:
     """
     Returns a BitVector constructed from the argument.
 
-    When `inp` is of possibly qualifed type BitVector the result
+    When `inp` is of possibly qualified type BitVector the result
     is a copy of the input cast to BitVector.
 
-    When `inp` is of possibly qualifed type Bit the result is
+    When `inp` is of possibly qualified type Bit the result is
     a vector of length one with the same state as the bit.
 
     When `inp` is of type str the result is a bitvector literal
     with the same length as inp.
+    """
+
+def rol(inp: BitVector, n: int = 1) -> BitVector:
+    """
+    roll left `n` bits
+
+    >>> rol(bitvector("1001"))
+    >>> "0011"
+    >>> rol(bitvector("1001"), 2)
+    >>> "0110"
+    """
+
+def ror(inp: BitVector, n: int = 1) -> BitVector:
+    """
+    roll right `n` bits
+
+    >>> ror(bitvector("1001"))
+    >>> "1100"
+    >>> ror(bitvector("1001"), 2)
+    >>> "0110"
+    """
+
+def batched(input: BitVector, n: int) -> list[BitVector]:
+    """
+    Splits an input vector of length `M` into subvectors of length `n`.
+    `M` must be a multiple of `n`.
+    The result is a list of BitVectors starting with the least significant slice.
+    The elements of the result are references to the corresponding slices of `input`.
+
+    >>> input = BitVector[16]()
+    >>> # the following two lines are equivalent
+    >>> a = batched(input, 4)
+    >>> a = [input[3:0], input[7:4], input[11:8], input[15:12]]
+    """
+
+def select_batch(
+    input: BitVector, onehot_selector: BitVector, batch_size: int
+) -> BitVector:
+    """
+    Returns a subvector of input using a onehot selector.
+
+    The result is obtained by stretching `onehot_selector` by a factor
+    of `batch_size` (see std.stretch) and the following sequence
+    of binary-and/binary-or operations.
+
+    >>> # input          abcd efgh ijkl
+    >>> # selector   &   0000 1111 0000
+    >>> # -----------------------------
+    >>> #                0000|efgh|0000 -> efgh
+
+    `len(input)` must be equal to `len(onehot_selector)*batch_size`
+    """
+
+def stringify(*args, sep: str = ""):
+    """
+    returns `sep.join(str(arg) for arg in args)`
+
+    This function exists to allow basic string conversions
+    in evaluated contexts.
+    """
+
+def delayed(inp, delay: int, inital=Null) -> Signal:
+    """
+    Returns a copy of `inp` delayed by a number of clock cycles.
+    `initial` defines the default value of the internal delay memories.
+    When set to None the output value is undefined for the first `delay` steps.
+
+    >>>
+    >>> @std.sequential(clk)
+    >>> def example():
+    >>>     out_a <<= std.delayed(inp, 3)
+    >>>
+    >>>     if update_b:
+    >>>         out_b <<= std.delayed(inp, 2)
+    >>>
+    >>> # output:
+    >>>
+    >>> inp      : A B C D E F G H I J K L M
+    >>> update_b : 0 1 1 1 1 1 0 0 0 1 1 1 1
+    >>> ------------------------------------
+    >>> out_a    : 0 0 0 A B C D E F G H I J
+    >>> out_b    : 0 0 0 B C D D D D E F J K
+    >>>
     """
 
 #

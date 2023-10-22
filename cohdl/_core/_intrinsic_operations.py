@@ -107,6 +107,7 @@ class _IntrinsicAssignment:
 
 
 class _IntrinsicDeclaration:
-    def __init__(self, new_obj, assigned_value):
+    def __init__(self, new_obj, assigned_value, delayed_init=False):
         self.new_obj = new_obj
         self.assigned_value = assigned_value
+        self.delayed_init = delayed_init

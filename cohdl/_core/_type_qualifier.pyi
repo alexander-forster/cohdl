@@ -47,7 +47,13 @@ class TypeQualifier(typing.Generic[T]):
         *,
         name: str | None = None,
         attributes: dict | None = None,
-    ) -> None: ...
+    ) -> None:
+        """
+        Create a new Signal with an optional default `value`.
+
+        `name` is only a hint. The compiler will add a counter suffix to resolve name collisions.
+        `attributes` are currently unused.
+        """
     def name(self) -> str: ...
     def has_default(self) -> bool: ...
     def default(self): ...
@@ -161,6 +167,41 @@ class TypeQualifier(typing.Generic[T]):
     def copy(self) -> Temporary[T]: ...
 
 class Signal(typing.Generic[T], TypeQualifier[T]):
+    def __init__(
+        self,
+        value=None,
+        *,
+        name: str | None = None,
+        attributes: dict | None = None,
+        delayed_init: bool = False,
+    ) -> None:
+        """
+        Create a new Signal with an optional default `value`.
+
+        `name` is only a hint. The compiler will add a counter suffix to resolve name collisions.
+        `attributes` are currently unused.
+
+        `delayed_init` only has an effect for signals created locally in a sequential context.
+        By default these initializations are *NOT* the same as a signal assignment.
+        Instead initialization takes place immediately like variable assignment.
+        When `delayed_init` is set to true initialization behaves like a signal assignment
+        and takes one clock cycle.
+
+        >>> @std.sequential(clk)
+        >>> def example():
+        >>>     a = Signal[Bit](input)
+        >>>     b = Signal[Bit](a)
+        >>>     c = Signal[Bit](b)
+        >>>
+        >>>     # this assertion always holds
+        >>>     assert input == a == b == c
+        >>>
+        >>>     x = Signal[Bit](input, delayed_init=True)
+        >>>     y = Signal[Bit](x, delayed_init=True)
+        >>>
+        >>>     assert x == prev(input)
+        >>>     assert x == prev(prev(input))
+        """
     #
     #
     #

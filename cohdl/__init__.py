@@ -7,6 +7,7 @@ from ._core import (
     BitVector,
     Unsigned,
     Integer,
+    Boolean,
     Signed,
     Variable,
     TypeQualifierBase,

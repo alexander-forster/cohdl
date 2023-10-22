@@ -173,6 +173,31 @@ class CodeBlock(Statement):
 
         super().__init__()
 
+    def _fix_alias(self):
+        # replace all reads from locally constructed signals
+        # with reads from a temporary
+
+        alias_map = IdMap()
+
+        def collect_alias(node):
+            if isinstance(node, _SignalAlias):
+                alias_map[node.signal] = node.replacement
+                return Nop()
+            return node
+
+        self.visit(collect_alias)
+
+        def apply_alias(obj, access: AccessFlags):
+            # replace all reads from aliased signals with replacement
+            if access is AccessFlags.READ and hasattr(obj, "_root"):
+                if obj._root in alias_map:
+                    return Temporary[obj.type](
+                        obj._value, _root=alias_map[obj._root], _ref_spec=obj._ref_spec
+                    )
+            return obj
+
+        self.visit_objects(apply_alias)
+
     def get_parent_block(self, level):
         assert self._level >= level
 
@@ -928,26 +953,7 @@ class _State(Statement):
         # replace all reads from locally constructed signals
         # with reads from a temporary
 
-        alias_map = IdMap()
-
-        def collect_alias(node):
-            if isinstance(node, _SignalAlias):
-                alias_map[node.signal] = node.replacement
-                return Nop()
-            return node
-
-        self._code.visit(collect_alias)
-
-        def apply_alias(obj, access: AccessFlags):
-            # replace all reads from aliased signals with replacement
-            if access is AccessFlags.READ and hasattr(obj, "_root"):
-                if obj._root in alias_map:
-                    return Temporary[obj.type](
-                        obj._value, _root=alias_map[obj._root], _ref_spec=obj._ref_spec
-                    )
-            return obj
-
-        self._code.visit_objects(apply_alias)
+        self._code._fix_alias()
 
     def visit(self, operation):
         self._code = self._code.visit(operation)
@@ -1416,19 +1422,6 @@ class Concurrent(Context):
 
 
 class Sequential(Context):
-    def _remove_alias(self):
-        # remove all instances of _SignalAlias
-        # from the internal representation
-        # handled before this stage and not required
-        # be the subsequent steps
-
-        def visit_statements(stmt):
-            if isinstance(stmt, _SignalAlias):
-                return CodeBlock([], None)
-            return stmt
-
-        self.visit(visit_statements)
-
     def _pushed_resettable_signals(self):
         pushed = IdSet()
         resettable = IdSet()
@@ -1494,7 +1487,7 @@ class Sequential(Context):
         code.visit(translate_statemachine)
 
         self._pushed_resettable_signals()
-        self._remove_alias()
+        code._fix_alias()
 
     def visit(self, operation):
         if self._always_expr is not None:

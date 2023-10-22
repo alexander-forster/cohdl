@@ -4,7 +4,7 @@ import random
 from cohdl import Entity, Bit, BitVector, Port
 from cohdl import std
 
-from cocotbext.spi import SpiSlaveBase, SpiSignals, SpiConfig
+from cocotbext.spi import SpiSlaveBase, SpiBus, SpiConfig
 
 from cohdl_testutil import cocotb_util
 
@@ -58,7 +58,7 @@ class SimpleSpiSlave(SpiSlaveBase):
 @cocotb_util.test()
 async def testbench_spi_ctx_00(dut: test_spi_ctx_00):
     seq = cocotb_util.SequentialTest(dut.clk)
-    spi_signals = SpiSignals(sclk=dut.sclk, mosi=dut.mosi, miso=dut.miso, cs=dut.cs)
+    spi_signals = SpiBus(dut)
     spi_slave = SimpleSpiSlave(spi_signals)
 
     dut.start_transaction.value = False

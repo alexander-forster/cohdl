@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any
 
 import cohdl
+from cohdl._core._intrinsic import _intrinsic
 
 
 class _MetaAssignableType(type):
@@ -22,6 +23,7 @@ class AssignableType(metaclass=_MetaAssignableType):
     def _assign_(self, source, mode: cohdl.AssignMode):
         raise AssertionError("_assign_ must be overwritten")
 
+    # TODO: deprecate _init_qualified_, use _make_qualified_ instead
     @classmethod
     def _init_qualified_(cls, Qualifier, *args, **kwargs):
         return cls(
@@ -94,10 +96,19 @@ class _Make:
 
     def __getitem__(self, Qualifier):
         assert self._qualifier is None
-        return _Make(Qualifier)
+        return type(self)(Qualifier)
+
+
+class _MakeNonlocal(_Make):
+    @_intrinsic
+    def __call__(self, Type, *args: Any, **kwargs: Any) -> Any:
+        print(f"MAKE NONLOCAL {1+3}")
+        return super().__call__(Type, *args, **kwargs)
 
 
 make = _Make()
+
+make_nonlocal = _MakeNonlocal()
 
 
 def make_signal(Type, *args, **kwargs):

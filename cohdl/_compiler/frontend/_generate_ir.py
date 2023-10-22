@@ -83,7 +83,7 @@ class IrGenerator:
             # replace temporaries in always expression
             # with signals, this is required, because
             # only signals can be shared between blocks
-            # and the result must be availabe in the
+            # and the result must be available in the
             # sequential context
             concurrent.visit_referenced_objects(find_temporaries)
 

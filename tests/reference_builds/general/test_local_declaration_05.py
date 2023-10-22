@@ -81,7 +81,7 @@ class Mock(MockBase):
 
 
 @cocotb_util.test()
-async def testbench_local_declaration_04(dut: test_local_declaration_05):
+async def testbench_local_declaration_05(dut: test_local_declaration_05):
     mock = Mock(dut)
     mock.step <<= 0
     mock.check()

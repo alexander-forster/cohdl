@@ -346,7 +346,8 @@ class PrepareAst:
                     assigned = result.new_obj.type(result.assigned_value)
 
                 if (
-                    isinstance(result.new_obj, Signal)
+                    not result.delayed_init
+                    and isinstance(result.new_obj, Signal)
                     and self._context is ContextType.SEQUENTIAL
                 ):
                     signal_alias = Temporary[result.new_obj.type]()
@@ -521,6 +522,8 @@ class PrepareAst:
         bound_stmts = []
 
         if not isinstance(fn, FunctionDefinition):
+            if not inspect.isfunction(fn):
+                return self.subcall(getattr(fn, "__call__"), args, kwargs)
 
             def default_converter(x):
                 stmt = self.apply(x)
