@@ -70,15 +70,18 @@ async def testbench_delay(dut: test_delay):
 
     pairs = (d_0, d_1, d_2, d_3)
     pairs_en = (d_en_0, d_en_1, d_en_2, d_en_3)
+    once_enabled = False
 
     for input in range(128):
         en = random.choice([True, False])
+        once_enabled = once_enabled or en
+
         dut.clk.value = False
         dut.enable.value = en
-        await cocotb_util.step()
-        await cocotb_util.step()
-        await cocotb_util.step()
         dut.input.value = input
+        await cocotb_util.step()
+        await cocotb_util.step()
+        await cocotb_util.step()
 
         for mock, real in pairs:
             mock.popleft()
@@ -87,7 +90,7 @@ async def testbench_delay(dut: test_delay):
         if en:
             for mock, real in pairs_en:
                 mock.popleft()
-                mock.append(real)
+                mock.append(input)
 
         dut.clk.value = True
         await cocotb_util.step()
@@ -100,11 +103,12 @@ async def testbench_delay(dut: test_delay):
             if expected is not None:
                 assert real.value == expected
 
-        for mock, real in pairs_en:
-            expected = mock[0]
+        if once_enabled:
+            for mock, real in pairs_en:
+                expected = mock[0]
 
-            if expected is not None:
-                assert real.value == expected
+                if expected is not None:
+                    assert real.value == expected
 
 
 class Unittest(unittest.TestCase):

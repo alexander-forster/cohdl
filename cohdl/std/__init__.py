@@ -74,6 +74,8 @@ from .utility import (
     ror,
     batched,
     select_batch,
+    stringify,
+    DelayLine,
     delayed,
     max_int,
     int_log_2,

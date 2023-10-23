@@ -102,7 +102,6 @@ class _Make:
 class _MakeNonlocal(_Make):
     @_intrinsic
     def __call__(self, Type, *args: Any, **kwargs: Any) -> Any:
-        print(f"MAKE NONLOCAL {1+3}")
         return super().__call__(Type, *args, **kwargs)
 
 

@@ -25,7 +25,7 @@ from cohdl._core import (
     expr_fn,
 )
 
-from ._assignable_type import make_signal, make_nonlocal
+from ._assignable_type import make_nonlocal
 
 from cohdl._core._intrinsic import _intrinsic
 
@@ -33,6 +33,11 @@ from cohdl._core._intrinsic import comment as cohdl_comment
 
 from ._context import Duration, Context, concurrent
 from ._prefix import prefix, name
+
+
+# a singleton only used internally in the std module
+class _None:
+    pass
 
 
 def nop(*args, **kwargs):
@@ -372,25 +377,52 @@ def stringify(*args):
     return "".join(str(arg) for arg in args)
 
 
-def delayed(inp, delay: int, initial=Null):
-    if const_cond(delay == 0):
-        return Signal(inp)
-    else:
-        with prefix("delayed"):
-            inp_type = type(TypeQualifierBase.decay(inp))
+class DelayLine:
+    def __init__(self, inp, delay: int, initial=_None, ctx: None = None):
+        with prefix("delayline"):
+            if initial is _None:
+                self._steps = [
+                    inp,
+                    *[
+                        make_nonlocal[Signal](
+                            base_type(inp), name=name(stringify(n + 1))
+                        )
+                        for n in range(delay)
+                    ],
+                ]
+            else:
+                self._steps = [
+                    inp,
+                    *[
+                        make_nonlocal[Signal](
+                            base_type(inp), initial, name=name(stringify(n + 1))
+                        )
+                        for n in range(delay)
+                    ],
+                ]
 
-            steps = [
-                # make delay buffers as nonlocal signals so default values work
-                make_nonlocal[Signal](
-                    inp_type, initial, name=name(stringify(n)), delayed_init=True
-                )
-                for n in range(delay)
-            ]
+            def delay_impl():
+                for src, target in zip(self._steps, self._steps[1:]):
+                    target <<= src
 
-            for src, target in zip([inp, *steps], steps):
-                target <<= src
+            if ctx is not None:
 
-            return steps[-1]
+                @ctx
+                def process_delay():
+                    delay_impl()
+
+            else:
+                delay_impl()
+
+    def __getitem__(self, delay: int):
+        return self._steps[delay]
+
+    def last(self):
+        return self._steps[-1]
+
+
+def delayed(inp, delay: int, initial=_None):
+    return DelayLine(inp, delay, initial=initial).last()
 
 
 #

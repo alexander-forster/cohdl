@@ -14,7 +14,7 @@ from cohdl._core import (
     Null,
 )
 
-from ._context import Duration, Context
+from ._context import Duration, Context, SequentialContext
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -369,11 +369,40 @@ def stringify(*args, sep: str = ""):
     in evaluated contexts.
     """
 
-def delayed(inp, delay: int, inital=Null) -> Signal:
+class DelayLine(Generic[T]):
+    @overload
+    def __init__(self, inp: T, delay: int):
+        """
+        asdf
+
+        >>> line_a = DelayLine(inp, 3, initial=Null ctx=seq_ctx)
+        >>>
+        >>> @seq_ctx
+        >>> def example():
+        >>>     line_b = DelayLine(inp, 5)
+        >>>
+        >>>     out.a <<= line_a.last() # inp delayed by 3
+        >>>     out.a <<= line_a[1]     # inp delayed by 1
+        >>>
+        >>>     out.b <<= line_b.last() # inp delayed by 5
+        >>>     out.b <<= line_b[2]     # inp delayed by 2
+        """
+    @overload
+    def __init__(self, inp: T, delay: int, ctx: SequentialContext): ...
+    @overload
+    def __init__(self, inp: T, delay: int, initial): ...
+    @overload
+    def __init__(self, inp: T, delay: int, initial, ctx: SequentialContext): ...
+    def __getitem__(self, delay: int) -> T: ...
+    def last(self) -> T: ...
+
+@overload
+def delayed(inp, delay: int, inital) -> Signal:
     """
     Returns a copy of `inp` delayed by a number of clock cycles.
-    `initial` defines the default value of the internal delay memories.
-    When set to None the output value is undefined for the first `delay` steps.
+
+    When `initial` is specified it is passed as the first argument
+    of the constructors of the intermediate signals.
 
     >>>
     >>> @std.sequential(clk)
@@ -392,6 +421,9 @@ def delayed(inp, delay: int, inital=Null) -> Signal:
     >>> out_b    : 0 0 0 B C D D D D E F J K
     >>>
     """
+
+@overload
+def delayed(inp, delay: int) -> Signal: ...
 
 #
 #
