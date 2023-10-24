@@ -417,6 +417,12 @@ class DelayLine:
     def __getitem__(self, delay: int):
         return self._steps[delay]
 
+    def __len__(self):
+        return len(self._steps)
+
+    def __iter__(self):
+        return iter(self._steps)
+
     def last(self):
         return self._steps[-1]
 

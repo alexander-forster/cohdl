@@ -25,6 +25,9 @@ class test_delay(cohdl.Entity):
     delay_en_2 = Port.output(BitVector[16])
     delay_en_3 = Port.output(BitVector[16])
 
+    delay_sum = Port.output(Unsigned[16])
+    delay_en_sum = Port.output(Unsigned[16])
+
     def architecture(self):
         my_signal = Signal[Bit](True)
 
@@ -36,12 +39,22 @@ class test_delay(cohdl.Entity):
             self.delay_2 <<= std.delayed(self.input, 2, initial=Full)
             self.delay_3 <<= std.delayed(self.input, 3, initial=Unsigned[16](0x1234))
 
+            self.delay_sum <<= std.binary_fold(
+                lambda a, b: a.unsigned + b.unsigned,
+                *std.DelayLine(self.input, 3, initial=Unsigned[16](0x1234)),
+            )
+
             if self.enable:
                 self.delay_en_0 <<= std.delayed(self.input, 0)
                 self.delay_en_1 <<= std.delayed(self.input, 1, initial=Full)
                 self.delay_en_2 <<= std.delayed(self.input, 2, initial=Null)
                 self.delay_en_3 <<= std.delayed(
                     self.input, 3, initial=Unsigned[16](0xABCD)
+                )
+
+                self.delay_en_sum <<= std.binary_fold(
+                    lambda a, b: a.unsigned + b.unsigned,
+                    *std.DelayLine(self.input, 3, initial=Unsigned[16](0xABCD)),
                 )
 
 
@@ -103,12 +116,18 @@ async def testbench_delay(dut: test_delay):
             if expected is not None:
                 assert real.value == expected
 
+        expected_sum = sum(d_3[0]) % (2**16)
+        assert dut.delay_sum.value == expected_sum
+
         if once_enabled:
             for mock, real in pairs_en:
                 expected = mock[0]
 
                 if expected is not None:
                     assert real.value == expected
+
+            expected_sum = sum(d_en_3[0]) % (2**16)
+            assert dut.delay_en_sum.value == expected_sum
 
 
 class Unittest(unittest.TestCase):

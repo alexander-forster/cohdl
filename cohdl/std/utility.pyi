@@ -373,7 +373,15 @@ class DelayLine(Generic[T]):
     @overload
     def __init__(self, inp: T, delay: int):
         """
-        asdf
+        DelayLine wraps a list of Signals of type T.
+        With `delay + 1` elements. When used in a synthesizable context
+        the value of each element is assigned to the next one
+        every time the constructor is evaluated.
+
+        `initial` defines the default value of the internal memory elements.
+
+        DelayLines can be defined outside of synthesizable contexts,
+        when the `ctx` argument is provided.
 
         >>> line_a = DelayLine(inp, 3, initial=Null ctx=seq_ctx)
         >>>
@@ -394,6 +402,8 @@ class DelayLine(Generic[T]):
     @overload
     def __init__(self, inp: T, delay: int, initial, ctx: SequentialContext): ...
     def __getitem__(self, delay: int) -> T: ...
+    def __len__(self) -> int: ...
+    def __iter__(self): ...
     def last(self) -> T: ...
 
 @overload
