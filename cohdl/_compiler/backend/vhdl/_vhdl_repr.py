@@ -449,7 +449,9 @@ class CaseWhen(Statement):
                 (
                     IndentBlock(["when others =>", IndentBlock("null;")])
                     if self._others is None
-                    else IndentBlock(["when others =>", self._others.write(scope)])
+                    else IndentBlock(
+                        ["when others =>", IndentBlock(self._others.write(scope))]
+                    )
                 ),
                 "end case;",
             ],
