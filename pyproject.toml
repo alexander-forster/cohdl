@@ -9,3 +9,6 @@ version="0.1"
 
 [tool.setuptools.packages.find]
 exclude = ["tests", "tests.*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.pyi"]

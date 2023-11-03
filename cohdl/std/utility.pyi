@@ -457,6 +457,18 @@ def is_pow_two(inp: int):
     check if `inp` is an integer power of two
     """
 
+async def tick() -> None:
+    """
+    wait for a single clock cycle
+
+    This will introduce an unconditional state transition.
+
+    >>> # the following lines are equivalent
+    >>> await std.tick()
+    >>> await std.wait_for(1)
+    >>> await cohdl.true
+    """
+
 @overload
 async def wait_for(duration: int | Unsigned, *, allow_zero: bool = False) -> None:
     """

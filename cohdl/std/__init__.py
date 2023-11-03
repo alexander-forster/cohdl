@@ -63,6 +63,7 @@ from .utility import (
     choose_first,
     cond,
     check_return,
+    tick,
     wait_for,
     wait_forever,
     binary_fold,
@@ -92,3 +93,4 @@ from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle
 from ._prefix import prefix, name
 from . import spi
 from . import bitfield
+from . import _crc as crc

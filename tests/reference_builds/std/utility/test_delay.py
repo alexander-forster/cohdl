@@ -29,11 +29,8 @@ class test_delay(cohdl.Entity):
     delay_en_sum = Port.output(Unsigned[16])
 
     def architecture(self):
-        my_signal = Signal[Bit](True)
-
         @std.sequential(std.Clock(self.clk))
         def process():
-            my_signal.next = my_signal
             self.delay_0 <<= std.delayed(self.input, 0)
             self.delay_1 <<= std.delayed(self.input, 1, initial=Null)
             self.delay_2 <<= std.delayed(self.input, 2, initial=Full)

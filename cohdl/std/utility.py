@@ -463,6 +463,10 @@ def _is_one(val):
     return x
 
 
+async def tick() -> None:
+    await true
+
+
 async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = False):
     if isinstance(duration, Duration):
         ctx = Context.current()

@@ -192,8 +192,8 @@ class Duration:
         else:
             rounded = round(real_result)
             assert (
-                abs(rounded - real_result) <= allowed_delta
-            ), "subperiod does not divide period"
+                abs((rounded - real_result) / real_result) <= allowed_delta
+            ), f"subperiod does not divide period {real_result=} {rounded=}"
             return rounded
 
     @consteval
