@@ -498,6 +498,25 @@ async def wait_forever() -> NoReturn:
     The only way to leave this function is a reset of the enclosing context.
     """
 
+class Waiter:
+    """
+    Alternative to std.wait_for, that makes it possible to
+    reuse the same counter register for multiple wait operations.
+    """
+
+    def __init__(self, max_duration: int | Duration):
+        """
+        Initialize a Waiter that can wait up to a given duration.
+        When `max_duration` is an integer it is interpreted a
+        """
+    async def wait_for(self, duration: int | Duration):
+        """
+        same as std.wait_for() but all calls to this method, on
+        a single instance of Waiter, use the same counter register.
+
+        `duration` may not exceed the `max_duration` defined in the constructor.
+        """
+
 class OutShiftRegister:
     def __init__(self, src: BitVector, msb_first=False, unchecked=False):
         """
@@ -753,6 +772,66 @@ class SyncFlag:
         """
     async def __aenter__(self) -> None: ...
     async def __aexit__(self, val, type, traceback) -> None: ...
+
+class Mailbox(Generic[T]):
+    """
+    Mailbox combines a signal of data with a `std.SyncFlag`.
+
+    A sender process uses the `send` method to write data and
+    mark it as valid.
+
+    ---
+    Example:
+
+    >>> # in common scope
+    >>> mailbox = Mailbox(BitVector[8])
+    >>>
+    >>> # in sender context
+    >>> mailbox.send(data_to_send)
+    >>> # optionally wait until flag is cleared by receiver
+    >>> await mailbox.is_clear()
+    >>>
+    >>> # in receiver context
+    >>> # wait until flag is set and clear it
+    >>> received_data = await flag.receive()
+    """
+
+    def __init__(self, type: type[T], *args, **kwargs):
+        """
+        Create a Mailbox that can transmit data of the given `type`.
+
+        The optional `args`/`kwargs` will be forwarded to the constructor,
+        of the internal Signal (of type `type`).
+        """
+    def send(self, data: T):
+        """
+        Put data into Mailbox and mark it as valid.
+        """
+    async def receive(self) -> T:
+        """
+        Wait until data becomes valid and return it.
+        This method clears the valid flag.
+        """
+    def data(self) -> T:
+        """
+        Return the contained data.
+        The content is only valid when self.is_set() return true.
+        """
+    @expr_fn
+    def is_set(self) -> bool:
+        """
+        Returns true if the Mailbox contains data.
+        """
+    @expr_fn
+    def is_clear(self) -> bool:
+        """
+        Returns true when the Mailbox is empty.
+        """
+    def clear(self) -> None:
+        """
+        Unset the internal flag. In the next clock cycle `is_clear` will return true.
+        `is_set` will return true once the sender writes new data using `send`.
+        """
 
 #
 #

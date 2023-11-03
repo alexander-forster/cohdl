@@ -25,13 +25,13 @@ from cohdl._core import (
     expr_fn,
 )
 
-from ._assignable_type import make_nonlocal
+from ._assignable_type import make_nonlocal, make_signal
 
 from cohdl._core._intrinsic import _intrinsic
 
 from cohdl._core._intrinsic import comment as cohdl_comment
 
-from ._context import Duration, Context, concurrent
+from ._context import Duration, SequentialContext, concurrent
 from ._prefix import prefix, name
 
 
@@ -469,7 +469,7 @@ async def tick() -> None:
 
 async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = False):
     if isinstance(duration, Duration):
-        ctx = Context.current()
+        ctx = SequentialContext.current()
         assert (
             ctx is not None
         ), "wait_for can only infer the clock in sequential contexts created with a Clock with defined frequency"
@@ -495,6 +495,61 @@ async def wait_for(duration: int | Unsigned | Duration, *, allow_zero: bool = Fa
 
 async def wait_forever():
     await false
+
+
+class Waiter:
+    @_intrinsic
+    def _as_ticks(self, duration: int | Duration):
+        if isinstance(duration, int) or instance_check(duration, Unsigned):
+            return duration
+        ctx = SequentialContext.current()
+        return self._max_duration.count_periods(ctx.clk().period())
+
+    @_intrinsic
+    def _init(self):
+        if self._max_duration_cnt is not None:
+            return
+
+        self._max_duration_cnt = self._as_ticks(self._max_duration)
+        self._duration_cnt = Signal[Unsigned.upto(self._max_duration_cnt)](Null)
+
+    def __init__(self, max_duration: int | Duration):
+        self._max_duration = max_duration
+        self._max_duration_cnt: int | None = None
+        self._duration_cnt: Signal[Unsigned]
+
+    async def wait_for(
+        self, duration: int | Unsigned | Duration, *, allow_zero: bool = False
+    ):
+        self._init()
+        self._duration_cnt <<= self._as_ticks(duration) - 1
+
+        while self._duration_cnt:
+            self._duration_cnt <<= self._duration_cnt - 1
+
+        #
+        #
+        #
+
+        cnt = self._as_ticks(duration)
+        assert (
+            cnt < self._max_duration_cnt
+        ), "duration exceeds max_duration set in constructor"
+
+        if allow_zero:
+            if cnt == 0:
+                return
+        else:
+            assert (
+                cnt > 0
+            ), "waiting for 0 ticks only possible when allow_zero is set to True"
+
+        if _is_one(cnt):
+            await true
+        else:
+            self._duration_cnt <<= cnt - 1
+            while self._duration_cnt:
+                self._duration_cnt <<= self._duration_cnt - 1
 
 
 class OutShiftRegister:
@@ -647,7 +702,7 @@ class InShiftRegister:
                 return self._data.msb(rest=1).copy()
 
 
-def continuous_counter(ctx: Context, limit, *, on_change=nop):
+def continuous_counter(ctx: SequentialContext, limit, *, on_change=nop):
     if max_int(limit) == 0:
 
         @ctx
@@ -672,7 +727,7 @@ def continuous_counter(ctx: Context, limit, *, on_change=nop):
 class ToggleSignal:
     def __init__(
         self,
-        ctx: Context,
+        ctx: SequentialContext,
         first_duration: int | Unsigned | Duration,
         second_duration: int | Unsigned | Duration | None = None,
         *,
@@ -799,6 +854,32 @@ class SyncFlag:
 
     async def __aexit__(self, val, type, traceback):
         self.clear()
+
+
+class Mailbox:
+    def __init__(self, type, *args, **kwargs):
+        self._data = make_signal(type, *args, **kwargs)
+        self._flag = SyncFlag()
+
+    def send(self, data):
+        self._data <<= data
+        self._flag.set()
+
+    async def receive(self):
+        async with self._flag:
+            return self._data
+
+    def data(self):
+        return self._data
+
+    def is_set(self):
+        return self._flag.is_set()
+
+    def is_clear(self):
+        return self._flag.is_clear()
+
+    def clear(self):
+        return self._flag.clear()
 
 
 #

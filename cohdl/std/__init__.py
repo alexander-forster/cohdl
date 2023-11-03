@@ -66,6 +66,7 @@ from .utility import (
     tick,
     wait_for,
     wait_forever,
+    Waiter,
     binary_fold,
     concat,
     stretch,
@@ -86,6 +87,7 @@ from .utility import (
     continuous_counter,
     ToggleSignal,
     SyncFlag,
+    Mailbox,
     Fifo,
 )
 
