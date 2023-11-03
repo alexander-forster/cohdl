@@ -702,6 +702,22 @@ class ToggleSignal:
         each transition of the toggled signal from `1` to `0`.
         """
 
+class ClockDivider(ToggleSignal):
+    def __init__(
+        self,
+        ctx: SequentialContext,
+        duration: int | Unsigned | Duration,
+        *,
+        default_state: bool = False,
+        first_state: bool = False,
+        require_enable: bool = False,
+        on_rising=None,
+        on_falling=None,
+    ):
+        """ """
+    def __bool__(self) -> bool:
+        """ """
+
 class SyncFlag:
     """
     SyncFlag is used to send single bit notifications between two clocked

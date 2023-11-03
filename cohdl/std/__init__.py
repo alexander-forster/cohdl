@@ -86,6 +86,7 @@ from .utility import (
     OutShiftRegister,
     continuous_counter,
     ToggleSignal,
+    ClockDivider,
     SyncFlag,
     Mailbox,
     Fifo,

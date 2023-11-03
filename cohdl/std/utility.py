@@ -736,8 +736,9 @@ class ToggleSignal:
         require_enable: bool = False,
         on_rising=None,
         on_falling=None,
+        _prefix="toggle",
     ):
-        with prefix("toggle"):
+        with prefix(_prefix):
             assert not is_qualified(
                 default_state
             ), "default_state must be runtime constant"
@@ -819,6 +820,55 @@ class ToggleSignal:
 
     def state(self):
         return self._state
+
+
+class ClockDivider(ToggleSignal):
+    def __init__(
+        self,
+        ctx: SequentialContext,
+        duration: int | Unsigned | Duration,
+        *,
+        default_state: bool = False,
+        first_state: bool = False,
+        require_enable: bool = False,
+        on_rising=None,
+        on_falling=None,
+    ):
+        if isinstance(duration, Duration):
+            cnt_first = duration.count_periods(ctx.clk().period())
+        else:
+            cnt_first = duration
+
+        if isinstance(cnt_first, Signal):
+            assert instance_check(cnt_first, Unsigned)
+            cnt_first = Signal[cnt_first.type]()
+
+            @concurrent
+            def logic():
+                cnt_first.next = duration - 1
+
+        else:
+            cnt_first = cnt_first - 1
+
+        if default_state == first_state:
+            cnt_first, cnt_second = cnt_first, 1
+        else:
+            cnt_first, cnt_second = 1, cnt_first
+
+        super().__init__(
+            ctx,
+            cnt_first,
+            cnt_second,
+            default_state=default_state,
+            first_state=first_state,
+            require_enable=require_enable,
+            on_rising=on_rising,
+            on_falling=on_falling,
+            _prefix="clkdiv",
+        )
+
+    def __bool__(self):
+        return self.state()
 
 
 _prefix_name = name
