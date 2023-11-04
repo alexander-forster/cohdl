@@ -62,9 +62,11 @@ class test_toggle_signal_01(cohdl.Entity):
         for toggle, port in zip(toggle_list, port_list):
             std.concurrent_assign(toggle.get_reset_signal(), self.reset_toggle)
 
-            std.concurrent_assign(port[0], toggle.state())
-            std.concurrent_assign(port[1], toggle.rising())
-            std.concurrent_assign(port[2], toggle.falling())
+            @std.concurrent
+            def logic():
+                port[0] <<= toggle.state()
+                port[1] <<= toggle.rising()
+                port[2] <<= toggle.falling()
 
 
 #

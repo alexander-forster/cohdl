@@ -36,6 +36,13 @@ def comment(*lines: str) -> None:
     >>> -- B
     """
 
+def fail(message: str, *args, **kwargs) -> NoReturn:
+    """
+    Fail the compilation with an error message.
+    `message` is formatted with `args` and `kwargs` because
+    f-strings are not supported in synthesizable contexts.
+    """
+
 class _TC(Generic[T]):
     def __getitem__(self, t: type[U]) -> _TC[U]: ...
     def __call__(self, arg) -> T | Temporary[T]:
@@ -330,6 +337,17 @@ def ror(inp: BitVector, n: int = 1) -> BitVector:
     >>> "0110"
     """
 
+def lshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
+    """
+    Left shift `val` by the width of `fill` and
+
+    >>> lshift_fill(abcdef, XYZ) == defXYZ
+    >>> lshift_fill()
+    """
+
+def rshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
+    """ """
+
 def batched(input: BitVector, n: int) -> list[BitVector]:
     """
     Splits an input vector of length `M` into subvectors of length `n`.
@@ -434,6 +452,29 @@ def delayed(inp, delay: int, inital) -> Signal:
 
 @overload
 def delayed(inp, delay: int) -> Signal: ...
+def debounce(
+    ctx: SequentialContext,
+    inp: Signal[Bit],
+    period: int | Duration,
+    initial: bool | Bit = False,
+    allowed_delta: float = 1e-9,
+) -> Signal[Bit]:
+    """
+    Debounce the input signal using a saturating counter
+    with a max-value defined by `period`.
+
+    The counter is incremented, when `inp` is '1', and decremented
+    when `inp` is '0'.
+
+    The output signal is set to '1', when the max-value
+    is reached, and to '0' when 0 is reached.
+
+    On reset, the internal counter is initialized with `period/2`
+    and the output is defined by `initial`.
+
+    When `period` is defined as a Duration, `allowed_delta` defines the maximal
+    allowed relative error in the debounce period.
+    """
 
 #
 #

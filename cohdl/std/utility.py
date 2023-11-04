@@ -48,6 +48,11 @@ def comment(*lines):
     cohdl_comment(*lines)
 
 
+@_intrinsic
+def fail(message: str = "", *args, **kwargs):
+    raise AssertionError("Compilation failed: " + message.format(*args, **kwargs))
+
+
 class _TC:
     def __init__(self, T=None) -> None:
         self._T = T
@@ -357,6 +362,30 @@ def ror(inp: BitVector, n: int = 1) -> BitVector:
         return inp.lsb(n) @ inp.msb(rest=n)
 
 
+def lshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
+    width_val = width(val)
+    width_fill = width(fill)
+
+    if width_fill == width_val:
+        return as_bitvector(fill)
+    elif width_fill > width_val:
+        fail("fill width ({}) exceeds width of value ({})", width_fill, width_val)
+    else:
+        return val.lsb(width_val - width_fill) @ fill
+
+
+def rshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
+    width_val = width(val)
+    width_fill = width(fill)
+
+    if width_fill == width_val:
+        return as_bitvector(fill)
+    elif width_fill > width_val:
+        fail("fill width ({}) exceeds width of value ({})", width_fill, width_val)
+    else:
+        return fill @ val.msb(width_val - width_fill)
+
+
 def batched(input: BitVector, n: int) -> list[BitVector]:
     static_assert(len(input) % n == 0)
 
@@ -431,6 +460,37 @@ def delayed(inp, delay: int, initial=_None):
     return DelayLine(inp, delay, initial=initial).last()
 
 
+def debounce(
+    ctx: SequentialContext,
+    inp: Signal[Bit],
+    period: int | Duration,
+    initial=False,
+    allowed_delta=1e-9,
+):
+    if isinstance(period, Duration):
+        period = period.count_periods(ctx.clk().period(), allowed_delta=allowed_delta)
+
+    assert period >= 1, "debounce period to small"
+
+    result = Signal[Bit](initial)
+    counter = Signal[Unsigned.upto(period)](period // 2)
+
+    @ctx
+    def proc_debounce():
+        if inp:
+            if counter == period:
+                result.next = True
+            else:
+                counter.next = counter + 1
+        else:
+            if counter == 0:
+                result.next = False
+            else:
+                counter.next = counter - 1
+
+    return result
+
+
 #
 #
 #
@@ -503,7 +563,7 @@ class Waiter:
         if isinstance(duration, int) or instance_check(duration, Unsigned):
             return duration
         ctx = SequentialContext.current()
-        return self._max_duration.count_periods(ctx.clk().period())
+        return duration.count_periods(ctx.clk().period())
 
     @_intrinsic
     def _init(self):
@@ -522,18 +582,10 @@ class Waiter:
         self, duration: int | Unsigned | Duration, *, allow_zero: bool = False
     ):
         self._init()
-        self._duration_cnt <<= self._as_ticks(duration) - 1
-
-        while self._duration_cnt:
-            self._duration_cnt <<= self._duration_cnt - 1
-
-        #
-        #
-        #
-
         cnt = self._as_ticks(duration)
+
         assert (
-            cnt < self._max_duration_cnt
+            cnt <= self._max_duration_cnt
         ), "duration exceeds max_duration set in constructor"
 
         if allow_zero:

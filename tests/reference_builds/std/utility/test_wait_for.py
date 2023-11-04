@@ -18,6 +18,10 @@ class test_wait_for(cohdl.Entity):
     output_b = Port.output(Bit)
     output_c = Port.output(Bit)
 
+    output_waiter_a = Port.output(Bit)
+    output_waiter_b = Port.output(Bit)
+    output_waiter_c = Port.output(Bit)
+
     def architecture(self):
         raw_clk = std.Clock(self.clk)
         timed_clk = std.Clock(self.clk, frequency=std.GHz(1))
@@ -58,6 +62,46 @@ class test_wait_for(cohdl.Entity):
             await std.wait_for(self.var_wait)
             self.output_c <<= False
 
+        waiter_a = std.Waiter(5)
+
+        @std.SequentialContext(raw_clk)
+        async def proc_waiter_raw():
+            await self.start
+            self.output_waiter_a <<= True
+            await waiter_a.wait_for(1)
+            self.output_waiter_a <<= False
+            await waiter_a.wait_for(2)
+            self.output_waiter_a <<= True
+            await waiter_a.wait_for(5)
+            self.output_waiter_a <<= False
+
+        waiter_b = std.Waiter(std.us(0.005))
+
+        @std.sequential(timed_clk)
+        async def proc_waiter_timed():
+            await self.start
+            self.output_waiter_b <<= True
+            await waiter_b.wait_for(std.ns(1))
+            self.output_waiter_b <<= False
+            await waiter_b.wait_for(std.ps(2000))
+            self.output_waiter_b <<= True
+            await waiter_b.wait_for(std.us(0.005))
+            self.output_waiter_b <<= False
+
+        waiter_c = std.Waiter(31)
+
+        @std.sequential(raw_clk)
+        async def proc_var():
+            await self.start
+            self.output_waiter_c <<= True
+            await waiter_c.wait_for(self.var_wait)
+            self.output_waiter_c <<= False
+            await waiter_c.wait_for(self.var_wait)
+            await waiter_c.wait_for(zero_val, allow_zero=True)
+            self.output_waiter_c <<= True
+            await waiter_c.wait_for(self.var_wait)
+            self.output_waiter_c <<= False
+
 
 #
 # test code
@@ -75,6 +119,10 @@ async def testbench_wait_for(dut: test_wait_for):
             assert dut.output_a.value == s
             assert dut.output_b.value == s
             assert dut.output_c.value == s
+
+            assert dut.output_waiter_a.value == s
+            assert dut.output_waiter_b.value == s
+            assert dut.output_waiter_c.value == s
 
     await seq.tick()
     dut.start.value = 1

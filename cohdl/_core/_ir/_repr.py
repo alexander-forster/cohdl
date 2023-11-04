@@ -1545,29 +1545,31 @@ class EntityTemplate(Block):
                     raise AssertionError(f"writing to input port '{obj}' not allowed")
 
                 if isinstance(obj, (Signal, Variable, Temporary)):
-                    if obj in written_in:
-                        assert written_in[obj] is current_ctx, (
-                            f"object '{obj}, name={obj.name()}' written in multiple contexts\n"
+                    obj_root = obj._root
+                    if obj_root in written_in:
+                        assert written_in[obj_root] is current_ctx, (
+                            f"object '{obj_root}, name={obj_root.name()}' written in multiple contexts\n"
                             " written in this context\n"
                             f"{current_ctx.source_location()}\n"
                             " also written in this context\n"
-                            f"{written_in[obj].source_location()}\n"
+                            f"{written_in[obj_root].source_location()}\n"
                         )
                     else:
-                        written_in[obj] = current_ctx
+                        written_in[obj_root] = current_ctx
 
             # check, that Variables and Temporaries are only used in a single context
             if isinstance(obj, (Temporary, Variable)):
-                if obj in used_in:
-                    assert used_in[obj] is current_ctx, (
-                        f"object '{obj}' used in multiple contexts\n"
+                obj_root = obj._root
+                if obj_root in used_in:
+                    assert used_in[obj_root] is current_ctx, (
+                        f"object '{obj_root}' used in multiple contexts\n"
                         " first found here\n"
                         f"{current_ctx.source_location()}\n"
                         " also found here\n"
-                        f"{used_in[obj].source_location()}\n"
+                        f"{used_in[obj_root].source_location()}\n"
                     )
                 else:
-                    used_in[obj] = current_ctx
+                    used_in[obj_root] = current_ctx
 
             return obj
 

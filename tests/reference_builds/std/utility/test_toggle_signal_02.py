@@ -41,9 +41,11 @@ class test_toggle_signal_02(cohdl.Entity):
 
         std.concurrent_assign(toggle.get_reset_signal(), self.reset_toggle)
 
-        std.concurrent_assign(self.result[0], toggle.state())
-        std.concurrent_assign(self.result[1], toggle.rising())
-        std.concurrent_assign(self.result[2], toggle.falling())
+        @std.concurrent
+        def logic():
+            self.result[0] <<= toggle.state()
+            self.result[1] <<= toggle.rising()
+            self.result[2] <<= toggle.falling()
 
 
 #
