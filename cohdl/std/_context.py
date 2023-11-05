@@ -416,7 +416,13 @@ def _sequential_impl(
     attributes: dict | None = None,
     capture_lazy: bool = False,
     wrapped_fn,
+    on_reset=None,
 ):
+    if on_reset is None:
+        on_reset = []
+    elif not isinstance(on_reset, list):
+        on_reset = [on_reset]
+
     if trigger is None:
 
         def wrapper(fn):
@@ -520,6 +526,8 @@ def _sequential_impl(
                 cohdl.sensitivity.list(trigger.signal(), reset.signal())
                 if reset:
                     cohdl.reset_context()
+                    for reset_fn in on_reset:
+                        reset_fn()
                 elif trigger:
                     if step_cond():
                         cohdl.reset_pushed()
@@ -546,6 +554,8 @@ def _sequential_impl(
                 if trigger:
                     if reset:
                         cohdl.reset_context()
+                        for reset_fn in on_reset:
+                            reset_fn()
                     elif step_cond():
                         cohdl.reset_pushed()
                         if is_coro:
@@ -573,6 +583,7 @@ def sequential(
     *,
     step_cond=None,
     comment=None,
+    on_reset=None,
     attributes: dict | None = None,
     capture_lazy: bool = False,
 ):
@@ -582,6 +593,7 @@ def sequential(
             reset=reset,
             step_cond=step_cond,
             comment=comment,
+            on_reset=on_reset,
             attributes=attributes,
             capture_lazy=capture_lazy,
         )
@@ -591,6 +603,7 @@ def sequential(
         reset=reset,
         step_cond=step_cond,
         comment=comment,
+        on_reset=on_reset,
         attributes=attributes,
         capture_lazy=capture_lazy,
         wrapped_fn=None,
@@ -665,6 +678,7 @@ class SequentialContext:
         *,
         step_cond=None,
         comment=None,
+        on_reset=None,
         attributes: dict | None = None,
         capture_lazy: bool = False,
     ):
@@ -675,6 +689,7 @@ class SequentialContext:
         self._reset = reset
         self._step_cond = step_cond
         self._comment = comment
+        self._on_reset = on_reset
         self._attributes = attributes
         self._capture_lazy = capture_lazy
 
@@ -688,12 +703,18 @@ class SequentialContext:
         return self._step_cond
 
     def with_params(
-        self, *, clk: Clock | None = None, reset: Reset | None = None, step_cond=None
+        self,
+        *,
+        clk: Clock | None = None,
+        reset: Reset | None = None,
+        step_cond=None,
+        on_reset=None,
     ):
         return SequentialContext(
             clk=self._clk if clk is None else clk,
             reset=self._reset if reset is None else reset,
             step_cond=self._step_cond if step_cond is None else step_cond,
+            on_reset=self._on_reset if on_reset is None else on_reset,
         )
 
     def or_reset(
@@ -786,7 +807,9 @@ class SequentialContext:
             Reset(combined_reset, active_low=active_low, is_async=is_async),
         )
 
-    def __call__(self, fn=None, *, executors: list[Executor] | None = None):
+    def __call__(
+        self, fn=None, *, on_reset=None, executors: list[Executor] | None = None
+    ):
         executors = [] if executors is None else executors
 
         data = _ContextData(
@@ -838,6 +861,7 @@ class SequentialContext:
                 self._clk,
                 self._reset,
                 step_cond=self._step_cond,
+                on_reset=on_reset,
                 comment=self._comment,
                 attributes=self._attributes,
                 capture_lazy=self._capture_lazy,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 import cohdl
-from cohdl import std, Bit, BitVector, Port
+from cohdl import std, BitVector, Port
 
 from cohdl_testutil import cocotb_util
 

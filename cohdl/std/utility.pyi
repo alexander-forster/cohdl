@@ -474,6 +474,15 @@ def debounce(
 
     When `period` is defined as a Duration, `allowed_delta` defines the maximal
     allowed relative error in the debounce period.
+
+    ---
+    >>> # Example
+    >>> def architecture(self):
+    >>>     ctx = std.SequentialContext(self.clk)
+    >>>     debounced = std.debounce(ctx, self.inp, 128)
+    >>>
+    >>>     # output debounced version of self.inp
+    >>>     std.concurrent_assign(self.output, debounced)
     """
 
 #
@@ -743,21 +752,50 @@ class ToggleSignal:
         each transition of the toggled signal from `1` to `0`.
         """
 
-class ClockDivider(ToggleSignal):
+class ClockDivider:
     def __init__(
         self,
         ctx: SequentialContext,
         duration: int | Unsigned | Duration,
         *,
         default_state: bool = False,
-        first_state: bool = False,
+        tick_at_start: bool = False,
         require_enable: bool = False,
         on_rising=None,
         on_falling=None,
     ):
-        """ """
-    def __bool__(self) -> bool:
-        """ """
+        """
+        ClockDivider takes a SequentialContext and a duration.
+        It generates a signal that is high for one clock cycle
+        and low for the rest of a period with the given duration.
+        """
+    def get_reset_signal(self) -> Signal[Bit]:
+        """
+        Returns the signal used to reset the internal counter mechanism.
+        `enable` and `disable` are helper methods that set/reset this signal.
+        """
+    def enable(self) -> None:
+        """
+        Start signal generation after a previous call to `disable`.
+        """
+    def disable(self) -> None:
+        """
+        Stop signal generation and reset the internal counter to zero.
+        """
+    def state(self) -> Signal[Bit]:
+        """
+        Returns the bit signal that is toggled by this instance of ClockDivider.
+        """
+    def rising(self) -> Signal[Bit]:
+        """
+        Returns a bit signal that is `1` for a single clock cycle after
+        each transition of self.state() from `0` to `1`.
+        """
+    def falling(self) -> Signal[Bit]:
+        """
+        Returns a bit signal that is `1` for a single clock cycle after
+        each transition of self.state() from `1` to `0`.
+        """
 
 class SyncFlag:
     """

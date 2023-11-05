@@ -754,7 +754,9 @@ class InShiftRegister:
                 return self._data.msb(rest=1).copy()
 
 
-def continuous_counter(ctx: SequentialContext, limit, *, on_change=nop):
+def continuous_counter(
+    ctx: SequentialContext, limit, *, on_change=nop, start_at_limit=False
+):
     if max_int(limit) == 0:
 
         @ctx
@@ -763,12 +765,26 @@ def continuous_counter(ctx: SequentialContext, limit, *, on_change=nop):
 
         return Signal[Unsigned[1]](0)
     else:
-        counter = Signal[Unsigned.upto(max_int(limit))](0, name=name("counter"))
+        if not start_at_limit:
+            counter = Signal[Unsigned.upto(max_int(limit))](0, name=name("counter"))
+
+        if start_at_limit:
+            assert not is_qualified(limit)
+            counter = Signal[Unsigned.upto(max_int(limit))](limit, name=name("counter"))
+
+            def reset_fn():
+                counter.next = limit
+
+            ctx = ctx(on_reset=reset_fn)
 
         @ctx
         def proc():
             nonlocal counter
-            next_value = 0 if counter >= limit else (counter + 1)
+
+            if not is_qualified(limit):
+                next_value = 0 if counter == limit else (counter + 1)
+            else:
+                next_value = 0 if counter >= limit else (counter + 1)
 
             counter <<= next_value
             on_change(next_value)
@@ -874,53 +890,92 @@ class ToggleSignal:
         return self._state
 
 
-class ClockDivider(ToggleSignal):
+class ClockDivider:
     def __init__(
         self,
         ctx: SequentialContext,
         duration: int | Unsigned | Duration,
         *,
         default_state: bool = False,
-        first_state: bool = False,
+        tick_at_start: bool = False,
         require_enable: bool = False,
         on_rising=None,
         on_falling=None,
+        _prefix="clkdiv",
     ):
-        if isinstance(duration, Duration):
-            cnt_first = duration.count_periods(ctx.clk().period())
-        else:
-            cnt_first = duration
+        with prefix(_prefix):
+            assert not is_qualified(
+                default_state
+            ), "default_state must be runtime constant"
 
-        if isinstance(cnt_first, Signal):
-            assert instance_check(cnt_first, Unsigned)
-            cnt_first = Signal[cnt_first.type]()
+            if isinstance(duration, Duration):
+                cnt_duration = duration.count_periods(ctx.clk().period())
+            else:
+                cnt_duration = duration
 
-            @concurrent
-            def logic():
-                cnt_first.next = duration - 1
+            if is_qualified(cnt_duration):
+                max_counter_end = max_int(cnt_duration) - 1
+                CounterType = Unsigned.upto(max_counter_end)
+                counter_end = Signal[CounterType](name="counter_end")
 
-        else:
-            cnt_first = cnt_first - 1
+                @concurrent_context
+                def logic():
+                    # cast cnt_first and cnt_second to CounterType
+                    # to avoid unsigned overflow
+                    counter_end.next = cnt_duration - 1
+                    assert cnt_duration >= 1, "clkdiv period must be greater than 1"
 
-        if default_state == first_state:
-            cnt_first, cnt_second = cnt_first, 1
-        else:
-            cnt_first, cnt_second = 1, cnt_first
+            else:
+                counter_end = cnt_duration - 1
+                assert counter_end >= 1, "clockdiv period must be greater than 1"
 
-        super().__init__(
-            ctx,
-            cnt_first,
-            cnt_second,
-            default_state=default_state,
-            first_state=first_state,
-            require_enable=require_enable,
-            on_rising=on_rising,
-            on_falling=on_falling,
-            _prefix="clkdiv",
-        )
+            self._reset_counter = Signal[Bit](require_enable, name=name("reset"))
 
-    def __bool__(self):
-        return self.state()
+            self._ctx = ctx
+            self._state = Signal[Bit](default_state, name=name("state"))
+            self._rising = Signal[Bit](False, name=name("rising"))
+            self._falling = Signal[Bit](False, name=name("falling"))
+
+            def change_handler(next_cnt):
+                next_state = (not default_state) if next_cnt == 0 else default_state
+
+                self._state <<= next_state
+
+                rising = not self._state and next_state
+                falling = self._state and not next_state
+
+                self._rising <<= rising
+                self._falling <<= falling
+
+                if on_rising is not None and rising:
+                    on_rising()
+                if on_falling is not None and falling:
+                    on_falling()
+
+            continuous_counter(
+                ctx.or_reset(self._reset_counter),
+                counter_end,
+                on_change=change_handler,
+                start_at_limit=tick_at_start,
+            )
+
+    def get_reset_signal(self):
+        return self._reset_counter
+
+    def enable(self):
+        self._reset_counter <<= False
+
+    def disable(self):
+        self._reset_counter <<= True
+
+    def rising(self):
+        return self._rising
+
+    def falling(self):
+        return self._falling
+
+    def state(self):
+        return self._state
 
 
 _prefix_name = name
@@ -974,9 +1029,11 @@ class Mailbox:
     def data(self):
         return self._data
 
+    @expr_fn
     def is_set(self):
         return self._flag.is_set()
 
+    @expr_fn
     def is_clear(self):
         return self._flag.is_clear()
 
