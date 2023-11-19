@@ -38,7 +38,7 @@ class test_delay(cohdl.Entity):
 
             self.delay_sum <<= std.binary_fold(
                 lambda a, b: a.unsigned + b.unsigned,
-                *std.DelayLine(self.input, 3, initial=Unsigned[16](0x1234)),
+                std.DelayLine(self.input, 3, initial=Unsigned[16](0x1234)),
             )
 
             if self.enable:
@@ -51,7 +51,7 @@ class test_delay(cohdl.Entity):
 
                 self.delay_en_sum <<= std.binary_fold(
                     lambda a, b: a.unsigned + b.unsigned,
-                    *std.DelayLine(self.input, 3, initial=Unsigned[16](0xABCD)),
+                    std.DelayLine(self.input, 3, initial=Unsigned[16](0xABCD)),
                 )
 
 

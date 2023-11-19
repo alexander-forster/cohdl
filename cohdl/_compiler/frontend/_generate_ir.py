@@ -392,6 +392,10 @@ class IrGenerator:
             # restore returned blocks of parent Call
             IrGenerator.returned_blocks = prev_returned_blocks
 
+            return result
+
+            # TODO: check if this works in all cases and improves the generated VHDL
+
             root_groups: IdMap[ir.CodeBlock, list[ir.CodeBlock]] = IdMap()
 
             for block in result:
@@ -402,13 +406,9 @@ class IrGenerator:
                 else:
                     root_groups[root] = [block]
 
-            result = []
-
-            for root_group in root_groups.values():
-                common = ir.CodeBlock.common_block(root_group)
-                assert common is not None
-                result.append(common)
-
+            if len(root_groups) == 1:
+                root_group, *rest = root_groups.values()
+                return [ir.CodeBlock.common_block(root_group)]
             return result
 
         if isinstance(inp, out.Return):
@@ -445,7 +445,9 @@ class IrGenerator:
                     ctx.add_state(new_state)
 
                     for block in open_blocks:
-                        block.append(ir._Transition(new_state))
+                        # add transition at front of block to allow
+                        # contained await expressions to overwrite them
+                        block.addfront(ir._Transition(new_state))
 
                 first, *rest = self.apply(
                     inp.bound_statements(), open_blocks=[new_state.code()]
@@ -504,7 +506,9 @@ class IrGenerator:
                 new_state = ir._State(new_block, new_block)
 
                 for block in open_blocks:
-                    block.append(ir._Transition(new_state))
+                    # add transition at front of block to allow
+                    # contained await expressions to overwrite them
+                    block.addfront(ir._Transition(new_state))
 
                 ctx.add_state(new_state)
 
@@ -524,7 +528,9 @@ class IrGenerator:
                 for open_body in self.apply(inp._body, open_blocks=[body]):
                     # add transition to start of while loop
                     # required, if loop is made up of multiple states
-                    open_body.append(ir._Transition(new_state))
+                    # add to front so the transition can be overwritten
+                    # by contained await expressions
+                    open_body.addfront(ir._Transition(new_state))
 
                 assert len(IrGenerator._break_result) == len_before + 1
 
@@ -559,7 +565,9 @@ class IrGenerator:
                 for open_body in self.apply(inp._body, open_blocks=[open_block]):
                     # add transition to start of while loop
                     # required, if loop is made up of multiple states
-                    open_body.append(ir._Transition(new_state))
+                    # add to front so the transition can be overwritten
+                    # by contained await expressions
+                    open_body.addfront(ir._Transition(new_state))
 
                 # ensure, that exactly one continue statement was contained in inp._body
                 assert len(IrGenerator._continue_result) == len_before + 1
@@ -593,7 +601,9 @@ class IrGenerator:
             # write converted code into body of if statement
             for open_body in self.apply(inp._body, open_blocks=[body]):
                 # add transition to start of while loop
-                open_body.append(ir._Transition(new_state))
+                # add to front so the transition can be overwritten
+                # by contained await expressions
+                open_body.addfront(ir._Transition(new_state))
 
             open_block.append(ir.If(inp._test.result(), body, orelse))
             open_block.get_parent_state().set_open_block(orelse)
@@ -649,6 +659,13 @@ class IrGenerator:
         if isinstance(inp, list):
             for stmt in inp:
                 open_blocks = self.apply(stmt, open_blocks=open_blocks)
+                # if len(inp) == 3:
+                #    print("///////////////////////////////////")
+                #    for blk in open_blocks:
+                #        print(blk.dump())
+                #        print("-------------")
+                #        print()
+                #    print()
 
                 if stmt.returns_always():
                     break

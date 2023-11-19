@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from typing import TypeVar, Generic, TypeGuard, overload, NoReturn
+from typing import (
+    TypeVar,
+    Generic,
+    TypeGuard,
+    overload,
+    NoReturn,
+    Iterable,
+    Callable,
+    Any,
+)
 
 from cohdl._core import (
     Entity,
@@ -243,16 +252,16 @@ def check_return(fn):
 #
 #
 
-def binary_fold(fn, first, *args, right_fold=False):
+def binary_fold(fn: Callable[[Any, Any], Any], args: Iterable, right_fold=False):
     """
     similar to pythons `reduce` function and C++ fold expressions
 
     ---
 
-    >>> binary_fold(fn, 1, 2)
+    >>> binary_fold(fn, (1, 2))
     >>> # == fn(1, 2)
 
-    >>> binary_fold(fn, 1, 2, 3, 4)
+    >>> binary_fold(fn, (1, 2, 3, 4))
     >>> # == fn(fn(fn(1, 2), 3), 4)
 
     ---
@@ -265,11 +274,32 @@ def binary_fold(fn, first, *args, right_fold=False):
     when `right_fold` is set to True the order in which arguments
     are passed to `fn`is reversed:
 
-    >>> binary_fold(fn, 1, 2, 3):
+    >>> binary_fold(fn, (1, 2, 3)):
     >>> # == fn(fn(1, 2), 3)
 
-    >>> binary_fold(fn, 1, 2, 3, right_fold=True):
+    >>> binary_fold(fn, (1, 2, 3), right_fold=True):
     >>> # == fn(1, fn(2, 3))
+    """
+
+def batched_fold(fn: Callable[[Any, Any], Any], args: Iterable, batch_size=2):
+    """
+    Alternative to binary_fold for commutative operations.
+
+    - splits args into batches of the given size
+    - runs std.binary fold on each batch
+    - recursively calls batched_fold on the result until
+        only a singe result remains
+
+    ---
+
+    >>> batched_fold(fn, (1, 2, 3, 4, 5, 6, 7), batch_size=2)
+    >>> # == fn(
+    >>> #        fn(
+    >>> #            fn(1, 2),
+    >>> #            fn(3, 4)),
+    >>> #        fn(
+    >>> #            fn(5, 6),
+    >>> #            7))
     """
 
 def concat(first, *args) -> BitVector:
@@ -377,6 +407,13 @@ def select_batch(
     >>> #                0000|efgh|0000 -> efgh
 
     `len(input)` must be equal to `len(onehot_selector)*batch_size`
+    """
+
+def parity(vec: BitVector) -> Bit:
+    """
+    Returns the parity of a given BitVector
+    calculated as a repeated xor operation over
+    all bits.
     """
 
 def stringify(*args, sep: str = ""):

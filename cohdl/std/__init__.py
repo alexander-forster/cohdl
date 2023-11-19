@@ -69,6 +69,7 @@ from .utility import (
     wait_forever,
     Waiter,
     binary_fold,
+    batched_fold,
     concat,
     stretch,
     apply_mask,
@@ -101,3 +102,4 @@ from ._prefix import prefix, name
 from . import spi
 from . import bitfield
 from . import _crc as crc
+from . import uart

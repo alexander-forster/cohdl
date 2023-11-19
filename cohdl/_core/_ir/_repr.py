@@ -297,6 +297,9 @@ class Nop(Statement):
     def copy(self):
         return Nop()
 
+    def dump(self):
+        return IndentBlock(title="Nop", content=[])
+
 
 class Comment(Statement):
     def __init__(self, lines: list[str] = None):
@@ -1017,7 +1020,7 @@ class _Transition(Statement):
         return _Transition(self._next_state)
 
     def dump(self) -> IndentBlock:
-        return IndentBlock(title=f"Transition, target={self._next_state}")
+        return IndentBlock(title=f"Transition, target={self._next_state}", content=[])
 
 
 class _ResetContext(Statement):
@@ -1039,7 +1042,7 @@ class _ResetPushed(Statement):
         return _ResetPushed()
 
     def dump(self) -> IndentBlock:
-        return IndentBlock(title=f"ResetPushed")
+        return IndentBlock(title=f"ResetPushed", content=[])
 
 
 class BitSignalEvent(Expression):
@@ -1227,7 +1230,7 @@ class Statemachine(Statement):
             state.visit_objects(operation)
 
     def dump(self):
-        raise AssertionError("TODO")
+        return IndentBlock("Statemachine")
 
     def copy(self):
         copied_states = [state.copy() for state in self._ctx._states]

@@ -288,19 +288,44 @@ def check_return(fn):
 #
 
 
-def binary_fold(fn, first, *args, right_fold=False):
-    if len(args) == 0:
-        return tc(first)
+def binary_fold(fn, args, right_fold=False):
+    if len(args) == 1:
+        return tc(args[0])
     else:
-        if right_fold:
-            return fn(first, binary_fold(fn, *args, right_fold=True))
+        if const_cond(right_fold):
+            first, *rest = args
+            return fn(first, binary_fold(fn, rest, right_fold=True))
         else:
-            snd, *rest = args
-            return binary_fold(fn, fn(first, snd), *rest)
+            first, snd, *rest = args
+            return binary_fold(fn, [fn(first, snd), *rest])
 
 
-def _concat_impl(first, *args):
-    return binary_fold(lambda a, b: a @ b, first, *args, right_fold=True)
+@_intrinsic
+def _batch_args(args: list, batch_size: int):
+    batches = []
+
+    for nr in range(0, len(args), batch_size):
+        batches.append(args[nr : nr + batch_size])
+
+    print(batches)
+    return batches
+
+
+def batched_fold(fn, args, batch_size=2):
+    if const_cond(len(args) <= batch_size):
+        return binary_fold(fn, *args)
+    else:
+        return batched_fold(
+            fn,
+            *[
+                batched_fold(fn, batch, batch_size=batch_size)
+                for batch in _batch_args(args, batch_size)
+            ],
+        )
+
+
+def _concat_impl(args):
+    return binary_fold(lambda a, b: a @ b, args, right_fold=True)
 
 
 def concat(first, *args):
@@ -311,7 +336,7 @@ def concat(first, *args):
             assert instance_check(first, BitVector)
             return tc[BitVector[len(first)]](first)
     else:
-        return _concat_impl(first, *args)
+        return _concat_impl([first, *args])
 
 
 def stretch(val: Bit | BitVector, factor: int):
@@ -398,7 +423,11 @@ def select_batch(
     static_assert(len(input) == len(onehot_selector) * batch_size)
     masked = input.bitvector & stretch(onehot_selector, batch_size)
 
-    return binary_fold(lambda a, b: a | b, *batched(masked, batch_size))
+    return binary_fold(lambda a, b: a | b, batched(masked, batch_size))
+
+
+def parity(vec: BitVector) -> Bit:
+    return binary_fold(lambda a, b: a ^ b, vec)
 
 
 @_intrinsic

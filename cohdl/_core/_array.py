@@ -70,6 +70,10 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
             self._value = None
 
     @_intrinsic
+    def __len__(self):
+        return self._shape[0]
+
+    @_intrinsic
     def __getitem__(self, slice):
         if not isinstance(slice, tuple):
             slice = (slice,)
