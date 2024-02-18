@@ -15,11 +15,11 @@ from cohdl import (
     static_assert,
 )
 
-from .utility import tc, instance_check, choose_first
+from ._core_utility import Value, instance_check, choose_first
+
 from ._assignable_type import AssignableType
+from ._template import Template
 
-
-from typing import Type, TypeVar
 
 import enum
 
@@ -98,10 +98,33 @@ class _Resize(typing.Generic[T]):
 #
 
 
-class SFixed(AssignableType):
-    _type_map: dict[tuple[int, int], type] = dict()
-    _width: int
-    _exp: int
+class _FixedTemplateArg:
+    width: int
+    exp: int
+
+    def __init__(self, arg: slice):
+        assert arg.step is None
+        assert isinstance(arg.start, int)
+        assert isinstance(arg.stop, int)
+        assert arg.start >= arg.stop
+
+        self.arg = arg
+        self.width: int = arg.start - arg.stop + 1
+        self.exp: int = arg.stop
+
+    def __hash__(self):
+        return hash((self.width, self.exp))
+
+    def __eq__(self, other):
+        return self.arg == other.arg
+
+    def __repr__(self):
+        return f"[{self.arg.start}:{self.arg.stop}]"
+
+
+class SFixed(Template[_FixedTemplateArg], AssignableType):
+    _width: _FixedTemplateArg.width
+    _exp: _FixedTemplateArg.exp
 
     @classmethod
     @consteval
@@ -118,11 +141,6 @@ class SFixed(AssignableType):
     def _adjust_val(cls, val):
         return int(val / 2**cls._exp)
 
-    @classmethod
-    @consteval
-    def _class_repr_(cls):
-        return f"SFixed[{cls._exp+cls._width-1}:{cls._exp}]"
-
     @consteval
     def __repr__(self):
         val = TypeQualifier.decay(self._val).to_int() * 2**self._exp
@@ -138,53 +156,41 @@ class SFixed(AssignableType):
     def left(cls):
         return cls._exp + cls._width - 1
 
-    @consteval
-    def __class_getitem__(cls, arg):
-        assert cls is SFixed
-        assert isinstance(arg, slice)
-        assert arg.step is None
-        assert arg.start > arg.stop
+    def __init__(self, val=None, *, raw=None, _qualifier_=Value):
+        raw_type = Signed[self._width]
 
-        width = arg.start - arg.stop + 1
-        exp = arg.stop
-
-        type_info = (width, exp)
-
-        if type_info not in SFixed._type_map:
-
-            class _SFixed(SFixed):
-                _width = width
-                _exp = exp
-
-            SFixed._type_map[type_info] = _SFixed
-
-        return SFixed._type_map[type_info]
-
-    def __init__(self, val=None, *, raw=None):
         if raw is not None:
             assert val is None
-            assert instance_check(raw, Signed[self._width])
+            assert instance_check(raw, raw_type)
             self._val: Signed = raw
         else:
             if val is None or val is Full or val is Null:
-                self._val = Signed[self._width](val)
+                self._val = _qualifier_[raw_type](val)
             elif isinstance(val, (int, float)):
                 static_assert(
                     self.min() <= val <= self.max(),
                     "value outside valid range of fixed point number",
                 )
-                self._val = Signed[self._width](self._adjust_val(val))
+                self._val = _qualifier_[raw_type](self._adjust_val(val))
             elif instance_check(val, Signed):
                 zeros = -self._exp
                 static_assert(zeros >= 0)
-                self._val = tc[Signed[self._width]](
-                    val.resize(self._width, zeros=zeros)
-                )
+
+                self._val = _qualifier_(raw_type, val.resize(self._width, zeros=zeros))
             elif instance_check(val, Unsigned):
                 zeros = -self._exp
                 static_assert(zeros >= 0)
-                self._val = tc[Signed[self._width]](
+                self._val = _qualifier_[raw_type](
                     val.resize(self._width - 1, zeros=zeros)
+                )
+            elif instance_check(val, SFixed):
+                assert self.left() >= val.left()
+                assert self.right() <= val.right()
+
+                zeros = self.right() - val.right()
+
+                self._val = _qualifier_[raw_type](
+                    val._val.resize(self._width, zeros=zeros)
                 )
             else:
                 raise AssertionError("invalid arg")
@@ -192,24 +198,6 @@ class SFixed(AssignableType):
     #
     #
     #
-
-    @classmethod
-    def _init_qualified_(
-        cls, Qualifier, val: SFixed | Signed | Unsigned | int | None = None
-    ):
-        if isinstance(val, SFixed):
-            assert cls.left() >= val.left()
-            assert cls.right() <= val.right()
-
-            zeros = cls.right() - val.right()
-            return cls(raw=Qualifier(val._val.resize(cls._width, zeros=zeros)))
-        elif isinstance(val, int):
-            return cls(raw=Qualifier(Signed[cls._width](cls._adjust_val(val))))
-
-        elif val is None:
-            return cls(raw=Qualifier(Signed[cls._width]()))
-        else:
-            raise AssertionError("not implemented")
 
     def _assign_(self, source, mode: AssignMode) -> None:
         if isinstance(source, SFixed):
@@ -291,7 +279,7 @@ class SFixed(AssignableType):
         selfright = self.right()
 
         if selfleft == left and selfright == right:
-            return type(self)(raw=tc(self._val))
+            return type(self)(raw=Value(self._val))
 
         Result = SFixed[left:right]
 
@@ -313,7 +301,7 @@ class SFixed(AssignableType):
 
                     if round_style is FixedRoundStyle.TRUNCATE:
                         return Result(
-                            raw=tc[Signed[Result._width]](
+                            raw=Value[Signed[Result._width]](
                                 self._val.lsb(rest=overflow).msb(rest=cutoff).signed
                             )
                         )
@@ -335,7 +323,7 @@ class SFixed(AssignableType):
                             )
 
                         return Result(
-                            raw=tc[Signed[Result._width]](
+                            raw=Value[Signed[Result._width]](
                                 self._val.lsb(rest=overflow).msb(rest=cutoff).signed
                                 + do_round
                             )
@@ -361,7 +349,7 @@ class SFixed(AssignableType):
                         )
 
                     return Result(
-                        raw=tc[Signed[Result._width]](
+                        raw=Value[Signed[Result._width]](
                             choose_first(
                                 (does_underflow, Signed[Result._width].min()),
                                 (does_overflow, Signed[Result._width].max()),
@@ -374,7 +362,7 @@ class SFixed(AssignableType):
 
                     if round_style is FixedRoundStyle.TRUNCATE:
                         return Result(
-                            raw=tc[Signed[Result._width]](
+                            raw=Value[Signed[Result._width]](
                                 choose_first(
                                     (does_underflow, Signed[Result._width].min()),
                                     (does_overflow, Signed[Result._width].max()),
@@ -407,7 +395,7 @@ class SFixed(AssignableType):
                         overflow_or_full = does_overflow or not ~selected_bits
 
                         return Result(
-                            raw=tc[Signed[Result._width]](
+                            raw=Value[Signed[Result._width]](
                                 choose_first(
                                     (does_underflow, Signed[Result._width].min()),
                                     (overflow_or_full, Signed[Result._width].max()),
@@ -429,7 +417,7 @@ class SFixed(AssignableType):
 
                 if round_style is FixedRoundStyle.TRUNCATE:
                     return Result(
-                        raw=tc[Signed[Result._width]](
+                        raw=Value[Signed[Result._width]](
                             self._val.msb(rest=cutoff).signed.resize(Result._width)
                         )
                     )
@@ -451,7 +439,7 @@ class SFixed(AssignableType):
                         )
 
                     return Result(
-                        raw=tc[Signed[Result._width]](
+                        raw=Value[Signed[Result._width]](
                             self._val.msb(rest=cutoff).signed.resize(Result._width)
                             + do_round
                         )
@@ -462,10 +450,9 @@ class SFixed(AssignableType):
 #
 
 
-class UFixed(AssignableType):
-    _type_map: dict[tuple[int, int], type] = dict()
-    _width: int
-    _exp: int
+class UFixed(Template[_FixedTemplateArg], AssignableType):
+    _width: _FixedTemplateArg.width
+    _exp: _FixedTemplateArg.exp
 
     @classmethod
     @consteval
@@ -482,11 +469,6 @@ class UFixed(AssignableType):
     def _adjust_val(cls, val):
         return int(val / 2**cls._exp)
 
-    @classmethod
-    @consteval
-    def _class_repr_(cls):
-        return f"UFixed[{cls._exp+cls._width-1}:{cls._exp}]"
-
     @consteval
     def __repr__(self):
         val = TypeQualifier.decay(self._val).to_int() * 2**self._exp
@@ -502,48 +484,36 @@ class UFixed(AssignableType):
     def left(cls):
         return cls._exp + cls._width - 1
 
-    @consteval
-    def __class_getitem__(cls, arg):
-        assert cls is UFixed
-        assert isinstance(arg, slice)
-        assert arg.step is None
-        assert arg.start >= arg.stop
+    def __init__(self, val=None, *, raw=None, _qualifier_=Value):
 
-        width = arg.start - arg.stop + 1
-        exp = arg.stop
+        raw_type = Unsigned[self._width]
 
-        type_info = (width, exp)
-
-        if type_info not in UFixed._type_map:
-
-            class _UFixed(UFixed):
-                _width = width
-                _exp = exp
-
-            UFixed._type_map[type_info] = _UFixed
-
-        return UFixed._type_map[type_info]
-
-    def __init__(self, val=None, *, raw=None):
         if raw is not None:
             assert val is None
-            assert instance_check(raw, Unsigned[self._width])
-            self._val: Unsigned = raw
-
+            assert instance_check(raw, raw_type)
+            self._val = _qualifier_(raw)
         else:
             if val is None or val is Full or val is Null:
-                self._val = Unsigned[self._width](val)
+                self._val = _qualifier_[raw_type](val)
             elif isinstance(val, (int, float)):
                 static_assert(
                     self.min() <= val <= self.max(),
                     "value outside valid range of fixed point number",
                 )
-                self._val = Unsigned[self._width](self._adjust_val(val))
+                self._val = _qualifier_[raw_type](self._adjust_val(val))
             elif instance_check(val, Unsigned):
                 zeros = -self._exp
                 static_assert(zeros >= 0)
-                self._val = tc[Unsigned[self._width]](
-                    val.resize(self._width, zeros=zeros)
+
+                self._val = _qualifier_[raw_type](val.resize(self._width, zeros=zeros))
+            elif instance_check(val, UFixed):
+                assert self.left() >= val.left()
+                assert self.right() <= val.right()
+
+                zeros = self.right() - val.right()
+
+                self._val = _qualifier_[raw_type](
+                    val._val.resize(self._width, zeros=zeros)
                 )
             else:
                 raise AssertionError("invalid arg")
@@ -551,21 +521,6 @@ class UFixed(AssignableType):
     #
     #
     #
-
-    @classmethod
-    def _init_qualified_(cls, Qualifier, val: UFixed | Unsigned | int | None = None):
-        if isinstance(val, UFixed):
-            assert cls.left() >= val.left()
-            assert cls.right() <= val.right()
-
-            zeros = cls.right() - val.right()
-            return cls(raw=Qualifier(val._val.resize(cls._width, zeros=zeros)))
-        elif isinstance(val, int):
-            return cls(raw=Qualifier(Unsigned[cls._width](cls._adjust_val(val))))
-        elif val is None:
-            return cls(raw=Qualifier(Unsigned[cls._width]()))
-        else:
-            raise AssertionError("not implemented")
 
     def _assign_(self, source, mode: AssignMode) -> None:
         if isinstance(source, UFixed):
@@ -595,7 +550,7 @@ class UFixed(AssignableType):
         return bool(self._val)
 
     def __abs__(self):
-        return type(self)(raw=tc(self._val))
+        return type(self)(raw=Value(self._val))
 
     def __add__(self, other: UFixed):
         assert isinstance(other, UFixed)
@@ -647,7 +602,7 @@ class UFixed(AssignableType):
         selfright = self.right()
 
         if selfleft == left and selfright == right:
-            return type(self)(raw=tc(self._val))
+            return type(self)(raw=Value(self._val))
 
         Result = UFixed[left:right]
 
@@ -671,7 +626,7 @@ class UFixed(AssignableType):
 
                     if round_style is FixedRoundStyle.TRUNCATE:
                         return Result(
-                            raw=tc[Unsigned[Result._width]](
+                            raw=Value[Unsigned[Result._width]](
                                 self._val.lsb(rest=overflow).msb(rest=cutoff).unsigned
                             )
                         )
@@ -693,7 +648,7 @@ class UFixed(AssignableType):
                             )
 
                         return Result(
-                            raw=tc[Unsigned[Result._width]](
+                            raw=Value[Unsigned[Result._width]](
                                 self._val.lsb(rest=overflow).msb(rest=cutoff).unsigned
                                 + do_round
                             )
@@ -715,7 +670,7 @@ class UFixed(AssignableType):
                         )
 
                     return Result(
-                        raw=tc[Unsigned[Result._width]](
+                        raw=Value[Unsigned[Result._width]](
                             choose_first(
                                 (does_overflow, Unsigned[Result._width].max()),
                                 default=default_bits,
@@ -727,7 +682,7 @@ class UFixed(AssignableType):
 
                     if round_style is FixedRoundStyle.TRUNCATE:
                         return Result(
-                            raw=tc[Unsigned[Result._width]](
+                            raw=Value[Unsigned[Result._width]](
                                 choose_first(
                                     (does_overflow, Unsigned[Result._width].max()),
                                     default=self._val.lsb(rest=overflow)
@@ -757,7 +712,7 @@ class UFixed(AssignableType):
                         overflow_or_full = does_overflow or not ~selected_bits
 
                         return Result(
-                            raw=tc[Unsigned[Result._width]](
+                            raw=Value[Unsigned[Result._width]](
                                 choose_first(
                                     (overflow_or_full, Unsigned[Result._width].max()),
                                     default=selected_bits.unsigned + do_round,
@@ -775,7 +730,7 @@ class UFixed(AssignableType):
 
                 if round_style is FixedRoundStyle.TRUNCATE:
                     return Result(
-                        raw=tc[Unsigned[Result._width]](
+                        raw=Value[Unsigned[Result._width]](
                             self._val.msb(rest=cutoff).unsigned.resize(Result._width)
                         )
                     )
@@ -797,7 +752,7 @@ class UFixed(AssignableType):
                         )
 
                     return Result(
-                        raw=tc[Unsigned[Result._width]](
+                        raw=Value[Unsigned[Result._width]](
                             self._val.msb(rest=cutoff).unsigned.resize(Result._width)
                             + do_round
                         )

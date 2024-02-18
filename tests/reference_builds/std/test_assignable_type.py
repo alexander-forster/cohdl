@@ -10,9 +10,9 @@ from cohdl_testutil import cocotb_util
 
 
 class Coord(std.AssignableType):
-    def __init__(self, x: Signal | Variable, y: Signal | Variable):
-        self.x = x
-        self.y = y
+    def __init__(self, x: Signal | Variable, y: Signal | Variable, _qualifier_=std.Ref):
+        self.x = _qualifier_(x)
+        self.y = _qualifier_(y)
 
     def _assign_(self, source: Coord, mode: cohdl.AssignMode) -> None:
         self.x._assign_(source.x, mode)
@@ -46,12 +46,12 @@ class test_assignable_type(cohdl.Entity):
         out_d = Coord(self.port_out_xd, self.port_out_yd)
         out_e = Coord(self.port_out_xe, self.port_out_ye)
 
-        local_c = Coord.signal(Unsigned[8](), Unsigned[8]())
+        local_c = Signal[Coord](Unsigned[8](), Unsigned[8]())
 
         @std.concurrent
         def logic():
             nonlocal out_a
-            local_d = Coord.signal(Unsigned[8](), y=Unsigned[8]())
+            local_d = Signal[Coord](Unsigned[8](), y=Unsigned[8]())
 
             out_a <<= inp
             out_b.next = inp
@@ -63,7 +63,7 @@ class test_assignable_type(cohdl.Entity):
 
         @std.sequential
         def proc():
-            local_e = Coord.variable(Unsigned[8](), y=Unsigned[8]())
+            local_e = Variable[Coord](Unsigned[8](), y=Unsigned[8]())
             local_e.value = inp
             out_e.next = local_e
 

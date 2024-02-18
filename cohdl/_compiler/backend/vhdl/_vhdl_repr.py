@@ -78,9 +78,11 @@ class CodeBlock(Statement):
     def write(self, scope: VhdlScope, indent=True) -> TextBlock:
         return TextBlock(
             content=[
-                stmt.write(scope, indent)
-                if isinstance(stmt, CodeBlock)
-                else stmt.write(scope)
+                (
+                    stmt.write(scope, indent)
+                    if isinstance(stmt, CodeBlock)
+                    else stmt.write(scope)
+                )
                 for stmt in self._stmts
             ]
         )
@@ -94,8 +96,7 @@ class Value(Expression):
         return scope.format_value(self.result, target_hint, constrain)
 
 
-class Constant(Value):
-    ...
+class Constant(Value): ...
 
 
 class Literal(Constant):
@@ -117,8 +118,7 @@ class Target(Value):
         return scope.format_target(self.result)
 
 
-class Source(Value):
-    ...
+class Source(Value): ...
 
 
 class Nop(Expression):
@@ -578,10 +578,10 @@ class VhdlScope:
                     isinstance(obj, type)
                     and issubclass(obj, Array)
                     and issubclass(
-                        obj.elemtype, (cohdl_enum.Enum, cohdl_enum.DynamicEnum, Array)
+                        obj._elemtype_, (cohdl_enum.Enum, cohdl_enum.DynamicEnum, Array)
                     )
                 ):
-                    self.declare(obj.elemtype, True)
+                    self.declare(obj._elemtype_, True)
                     type_declared = True
             elif isinstance(obj, TypeQualifier):
                 # type of signal must be declared before signal
@@ -764,7 +764,7 @@ class VhdlScope:
             obj_type = type(primitive_obj)
 
             if isinstance(primitive_obj, Array):
-                result_type = primitive_obj.elemtype
+                result_type = primitive_obj._elemtype_
             else:
                 assert isinstance(primitive_obj, BitVector)
                 result_type = Bit
@@ -848,8 +848,7 @@ class VhdlScope:
         else:
             val = obj._value
             assert val is not None
-            assert len(obj.shape) == 1
-            elemtype = obj.elemtype
+            elemtype = obj._elemtype_
 
             # use ( 0 => ELEM0, 1 => ELEM1 ) notation because
             # ( ELEM0, ELEM1 ) form is not allowed for arrays with only a single element
@@ -858,9 +857,7 @@ class VhdlScope:
                 for nr, elem in enumerate(val)
             ]
 
-            width = obj.shape[0]
-
-            if len(val) < width:
+            if len(val) < obj._count_:
                 elemstr.append(f"others => {self.format_literal(elemtype())}")
 
             return f'( {", ".join(elemstr)} )'
@@ -891,7 +888,7 @@ class VhdlScope:
                 enumerators = [member.name for member in obj.__members__]
                 return f"type {name} is ({', '.join(enumerators)});"
             elif issubclass(obj, cohdl.Array):
-                elemtype = obj.elemtype
+                elemtype = obj._elemtype_
 
                 if issubclass(elemtype, cohdl_enum.Enum):
                     first, *rest = elemtype._member_map_.values()
@@ -899,7 +896,7 @@ class VhdlScope:
                 else:
                     elem_obj = elemtype()
 
-                return f"type {name} is array({0} to {obj.shape[0]-1}) of {self.format_type(elem_obj)};"
+                return f"type {name} is array({0} to {obj._count_-1}) of {self.format_type(elem_obj)};"
             elif issubclass(obj, cohdl.Attribute):
                 return f"attribute {obj.name} : {self.format_type(obj.attr_type)};"
             else:
@@ -1095,7 +1092,7 @@ class VhdlScope:
                     for ref_spec in target._ref_spec:
                         if issubclass(vhdl_target_type, Array):
                             if isinstance(ref_spec, Offset):
-                                vhdl_target_type = vhdl_target_type.elemtype
+                                vhdl_target_type = vhdl_target_type._elemtype_
                             else:
                                 raise AssertionError("Array slices are not implemented")
                         else:
@@ -1245,7 +1242,7 @@ class VhdlScope:
 
         elif issubclass(target_type, Array):
             assert issubclass(value_type, Array)
-            assert target_type.elemtype is value_type.elemtype
+            assert target_type._elemtype_ is value_type._elemtype_
             return value_str
 
         raise AssertionError(f"error cannot convert from {value_type} to {target_type}")
@@ -1378,12 +1375,10 @@ class ModuleScope(VhdlScope):
         self._used_names = self._vhdl_reserved | self._additional_reserved
 
 
-class EntityScope(VhdlScope):
-    ...
+class EntityScope(VhdlScope): ...
 
 
-class ArchScope(VhdlScope):
-    ...
+class ArchScope(VhdlScope): ...
 
 
 class AliasScope:
@@ -1412,8 +1407,7 @@ class Instance:
         return self._scope
 
     @abstractmethod
-    def write(self):
-        ...
+    def write(self): ...
 
     def dump(self):
         return self.write()

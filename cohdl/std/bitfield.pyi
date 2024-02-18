@@ -2,41 +2,65 @@ from __future__ import annotations
 from ._assignable_type import AssignableType
 from cohdl._core import BitVector
 
-import typing
+from cohdl import Bit, BitVector, Unsigned, Signed
+from typing import overload, TypeVar
 
-class Field:
-    @typing.overload
-    def __class_getitem__(cls, offset: int) -> Field.Bit: ...
-    @typing.overload
-    def __class_getitem__(cls, s: slice) -> Field.BitVector: ...
+T = TypeVar("T")
 
-    class Bit:
-        offset: int
+#
+#
+#
 
-        def __class_getitem__(cls, offset: int) -> Field.Bit: ...
+class FieldBit:
+    def __new__(cls, source: BitVector) -> Bit: ...
 
-    class BitVector:
-        start: int
-        stop: int
+class FieldBitVector:
+    def __new__(cls, source: BitVector) -> BitVector: ...
 
-        def __class_getitem__(cls, s: slice) -> Field.BitVector: ...
+    BitVector: type[FieldBitVector]
+    Signed: type[_FieldSigned]
+    Unsigned: type[_FieldUnsigned]
 
-    class Unsigned: ...
-    class Signed: ...
+class _FieldSigned(FieldBitVector):
+    def __new__(cls, source: BitVector) -> Signed: ...
 
-def bitfield(cls):
-    class BitField(cls, AssignableType):
-        pass
-    return cls
+class _FieldUnsigned(FieldBitVector):
+    def __new__(cls, source: BitVector) -> Unsigned: ...
 
-def make_bitfield(source, **fields):
-    @bitfield
-    class _BitField:
-        __annotations__ = fields
-    return _BitField(source)
+class _MetaField(type):
+    @overload
+    def __getitem__(cls, arg: int) -> type[FieldBit]: ...
+    @overload
+    def __getitem__(cls, arg: slice) -> type[FieldBitVector]: ...
+    @overload
+    def __getitem__(
+        cls, arg: tuple[slice, type[BitVector]]
+    ) -> type[FieldBitVector]: ...
+    @overload
+    def __getitem__(cls, arg: tuple[slice, type[Signed]]) -> type[_FieldSigned]: ...
+    @overload
+    def __getitem__(cls, arg: tuple[slice, type[Unsigned]]) -> type[_FieldUnsigned]: ...
 
-def underlying_value(source) -> BitVector:
-    """
-    return the underlying value (the value passed in the constructor)
-    of an instance of a  bitfield class
-    """
+class Field(metaclass=_MetaField):
+    pass
+
+#
+#
+#
+
+class _MetaBitField(type):
+    def __getitem__(cls, width: int) -> type[_BitFieldInst]: ...
+
+class _MetaBitFieldInst(type):
+    @overload
+    def __getitem__(cls: type[T], offset: int) -> type[T]: ...
+    @overload
+    def __getitem__(cls: type[T], slice: slice) -> type[T]: ...
+
+class _BitFieldInst(BitField, metaclass=_MetaBitFieldInst):
+    pass
+
+class BitField(AssignableType, metaclass=_MetaBitField):
+    _width_: int
+    _offset_: int = 0
+    Field: type[Field]

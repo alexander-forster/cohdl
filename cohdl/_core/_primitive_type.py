@@ -65,7 +65,10 @@ class _PrimitiveType:
 
 
 def is_primitive_type(t):
-    return issubclass(t, _PrimitiveType)
+    if not isinstance(t, type):
+        return False
+    else:
+        return issubclass(t, _PrimitiveType)
 
 
 def is_primitive(obj):

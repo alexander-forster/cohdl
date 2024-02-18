@@ -11,7 +11,7 @@ from .utility import (
     wait_for,
 )
 
-from .utility import parity as std_parity
+from ._core_utility import parity as std_parity
 
 import enum
 
@@ -101,7 +101,7 @@ class UartReceiver:
     ):
         assert parity is Parity.NONE
 
-        has_parity = parity is not None
+        has_parity = parity not in (None, Parity.NONE)
         parity_bit_cnt = 1 if has_parity else 0
 
         with prefix("uartrx"):

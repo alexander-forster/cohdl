@@ -130,6 +130,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
                 return
 
             if isinstance(val, BitVector):
+                assert (
+                    val._width == self._width
+                ), f"width mismatch in vector constructor source-width({val._width}) != target-width({self._width})"
                 start_val = val._value
             elif isinstance(val, str):
                 assert len(val) == self._width

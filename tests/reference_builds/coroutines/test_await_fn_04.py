@@ -68,8 +68,6 @@ async def testbench_await_fn_04(dut: test_await_fn_04):
         await seq.tick()
         u.send(None)
 
-        print(addr, input, result, dut.result.value)
-
         assert dut.result.value == result
         assert dut.toggle.value == toggle
 

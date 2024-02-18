@@ -1725,10 +1725,6 @@ class PrepareAst:
 
                     # non default __new__ not (yet) supported
 
-                    assert _is_intrinsic(
-                        obj_type.__new__
-                    ), "cohdl does not support __new__ during synthesis. This can be fixed by marking __new__ as constexpr"
-
                     new_call = self.subcall(obj_type.__new__, [obj_type, *args], kwargs)
                     new_obj = new_call.result()
 

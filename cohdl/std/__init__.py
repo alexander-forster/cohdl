@@ -1,13 +1,5 @@
 from ._compile import VhdlCompiler
-from ._assignable_type import (
-    AssignableType,
-    make_qualified,
-    make,
-    make_nonlocal,
-    make_signal,
-    make_variable,
-)
-
+from ._assignable_type import AssignableType
 
 from ._context import (
     concurrent,
@@ -40,18 +32,22 @@ GHz = Frequency.gigahertz
 
 from . import axi
 
-from . import utility
-from .utility import (
+from ._core_utility import (
     nop,
     comment,
     fail,
-    tc,
+    identity,
+    Ref,
+    Value,
+    Signal,
+    Variable,
+    Temporary,
+    Nonlocal,
     base_type,
     instance_check,
     subclass_check,
     iscouroutinefunction,
     as_awaitable,
-    add_entity_port,
     zeros,
     ones,
     width,
@@ -63,11 +59,10 @@ from .utility import (
     select,
     choose_first,
     cond,
+    to_bits,
+    from_bits,
+    count_bits,
     check_return,
-    tick,
-    wait_for,
-    wait_forever,
-    Waiter,
     binary_fold,
     batched_fold,
     concat,
@@ -80,6 +75,19 @@ from .utility import (
     rshift_fill,
     batched,
     select_batch,
+)
+
+from . import utility
+from .utility import (
+    add_entity_port,
+    Serialized,
+    as_readable_vector,
+    as_writeable_vector,
+    Array,
+    tick,
+    wait_for,
+    wait_forever,
+    Waiter,
     stringify,
     DelayLine,
     delayed,
@@ -103,3 +111,8 @@ from . import spi
 from . import bitfield
 from . import _crc as crc
 from . import uart
+
+from ._template import Template
+from ._record import Record
+
+# from . import experimental as exp

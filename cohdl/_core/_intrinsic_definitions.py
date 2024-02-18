@@ -139,6 +139,7 @@ _intrinsic(list.__getitem__)
 
 _intrinsic(str.__eq__)
 _intrinsic(str.__len__)
+_intrinsic(str.format)
 
 #
 # object methods

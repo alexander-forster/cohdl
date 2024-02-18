@@ -1,420 +1,174 @@
 from __future__ import annotations
 
-from typing import (
-    TypeVar,
-    Generic,
-    TypeGuard,
-    overload,
-    NoReturn,
-    Iterable,
-    Callable,
-    Any,
-)
+from typing import TypeVar, Generic, overload, NoReturn, Literal
 
 from cohdl._core import (
     Entity,
     Bit,
     BitVector,
-    Temporary,
     Unsigned,
     Signal,
     Port,
     expr_fn,
-    Null,
+    AssignMode,
 )
 
+from ._assignable_type import AssignableType
+from ._core_utility import Value, Ref, nop
 from ._context import Duration, Context, SequentialContext
 
 T = TypeVar("T")
 U = TypeVar("U")
-
-def nop(*args, **kwargs) -> None:
-    """
-    A function that takes arbitrary arguments, does nothing and returns None.
-    Can be used as a default value for optional callback functions.
-    """
-
-def comment(*lines: str) -> None:
-    """
-    Inserts a comment into the generated VHDL representation.
-
-    std.comment("Hello, world!", "A", "B") is translated into
-
-    >>> -- Hello, world!
-    >>> -- A
-    >>> -- B
-    """
-
-def fail(message: str, *args, **kwargs) -> NoReturn:
-    """
-    Fail the compilation with an error message.
-    `message` is formatted with `args` and `kwargs` because
-    f-strings are not supported in synthesizable contexts.
-    """
-
-class _TC(Generic[T]):
-    def __getitem__(self, t: type[U]) -> _TC[U]: ...
-    def __call__(self, arg) -> T | Temporary[T]:
-        """
-        `tc[T]` is a conversion utility function that creates
-        either a temporary or constant object of type `T` depending on the given argument.
-
-        When `arg` is type qualified (Signal/Variable or Temporary)
-        the return value is a new Temporary constructed from arg.
-        Otherwise a new constant is constructed using the expression `T(arg)`.
-
-        `tc[T]` is used to write code that is constant evaluated when
-        possible and only falls back to runtime variable temporaries
-        when necessary.
-        """
-
-tc = _TC()
-
-#
-#
-#
-
-def iscouroutinefunction(fn, /) -> bool:
-    """
-    Returns true when fn is a coroutine function
-    """
-
-def base_type(val_or_type, /) -> type:
-    """
-    Determines the type of the given argument after all type qualifiers are removed.
-
-    >>> base_type(int) is int
-    >>> base_type(1) is int
-    >>> base_type(Signal[Bit]) is Bit
-    >>> base_type(Signal[Bit](True)) is Bit
-    >>> base_type(Signal[BitVector[7:0]]) is BitVector[8]
-    >>> base_type(Signal[Array[Bit, 3]]) is Array[Bit, 3]
-    """
-
-def instance_check(val, type: type[T]) -> TypeGuard[T]:
-    """
-    `instance_check` is similar to Pythons `isinstance`.
-    The only difference is that type qualified types (Signals, Variables, Temporaries)
-    are decayed before the type check.
-
-    ---
-    example:
-
-    >>> isinstance(Bit(), Bit) == True
-    >>> instance_check(Bit(), Bit) == True
-    >>> isinstance(Signal[Bit](), Bit) == False
-    >>> instance_check(Signal[Bit](), Bit) == True
-    """
-
-def subclass_check(val, type) -> bool:
-    """
-    `subclass_check` is similar to Pythons `issubclass`.
-    The only difference is that type qualified types (Signals, Variables, Temporaries)
-    are decayed before the type check.
-    """
-
-async def as_awaitable(fn, /, *args, **kwargs):
-    """
-    Calls or awaits `fn` with the given arguments.
-
-    `await as_awaitable(fn, a, b=b)` is equivalent to `await fn(a, b=b)` when `fn`is a coroutine function.
-    Otherwise the expression is equivalent to `fn(a, b=b)`.
-    """
+N = TypeVar(
+    "N", Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 20, 24, 32, 64, 100, 128]
+)
 
 def add_entity_port(entity: Entity, port: Port, name: str | None = None) -> Port:
     """
     Adds a new port to the given entity.
     """
 
-#
-#
-#
+class Serialized(Generic[T], AssignableType):
+    _elemtype_: type[T]
 
-def zeros(len: int) -> BitVector:
-    """
-    Similar to matlab/numpy zeros.
-    Returns a BitVector literal of width `len` with all bits set to `0`.
-    """
-
-def ones(len: int) -> BitVector:
-    """
-    Similar to matlab/numpy ones.
-    Returns a BitVector literal of width `len` with all bits set to `1`.
-    """
-
-def width(inp: Bit | BitVector) -> int:
-    """
-    Determines the number of bits in `inp`.
-    Returns `1` if `inp` is a bit type and `inp.width` otherwise.
-    """
-
-def one_hot(width: int, bit_pos: int | Unsigned) -> BitVector:
-    """
-    Returns a BitVector of `width` bits where the single bit at index
-    `bit_pos` is set to `1`.
-    """
-
-def reverse_bits(inp: BitVector) -> BitVector:
-    """
-    Creates a new BitVector from the Bits in `inp` in reverse order.
-
-    ---
-
-    example:
-
-    >>> reverse_bits(BitVector[5]("10100")) == BitVector[5]("00101")
-    """
-
-#
-#
-#
-
-def is_qualified(arg) -> bool:
-    """
-    Return true if `arg` is a type qualified value (a Port/Signal, Variable or Temporary).
-    """
-
-def const_cond(arg) -> bool:
-    """
-    Asserts, that the argument is convertible to a compile
-    time constant boolean value. And returns that value.
-
-    This function is used to ensure, that if-statements are
-    resolved at compile time (similar to VHDL if-generate statements or preprocessor #if blocks in C).
-
-    Note: CoHDL always evaluates if-Statements with constant argument at compile time
-    and discards the dead branch without inspecting it. When the
-    context compiles `const_cond` has no effect (other than calling arg.__bool__). The purpose of this function is to prevent
-    the accidental usage of runtime variables in conditions.
-    """
-
-Option = TypeVar("Option")
-Condition = TypeVar("Condition")
-Result = TypeVar("Result")
-
-class _CheckType(Generic[T]):
-    def __getitem__(self, expected_type: type[U]) -> _CheckType[U]: ...
-    def __call__(self, arg: T) -> T:
+    @classmethod
+    def from_raw(cls, raw: BitVector) -> Serialized[T]:
         """
-        `std.check_type[T](arg)`
-        checks, that the type of the given argument matches the given `T`
+        Create a new instance of `Serialized[T]` that uses `raw`
+        as the internal, serialized representation of an object
+        of type `T`.
         """
 
-class _Select(Generic[Result]):
-    def __getitem__(self, expected_type: type[U]) -> _Select[U]: ...
-    def __call__(
-        self, arg, branches: dict[Option, Result], default: Result | None = None
-    ) -> Result:
+    def _assign_(self, source, mode: AssignMode) -> None: ...
+    def value(self, qualifier=Value) -> T:
         """
-        `std.select[T](...)` is a type checked wrapper around `cohdl.select_with`
-        equivalent to:
-
-        >>> std.check_type[T](
-        >>>     cohdl.select_with(
-        >>>         ...
-        >>>     )
-        >>> )
+        Converts the internal, serialized representation into an object of
+        type `T` using `std.from_bits` and the optional type qualifier.
         """
 
-class _ChooseFirst(Generic[Result]):
-    def __getitem__(self, expected_type: type[U]) -> _ChooseFirst[U]: ...
-    def __call__(self, *args: tuple[Condition, Result], default: Result) -> Result:
+    @property
+    def ref(self) -> T:
         """
-        `std.coose_first[T](...)` takes an arbitrary number of arguments each of which is a
-        tuple with two elements (CONDITION, VALUE). The function returns the first
-        VALUE with a truthy CONDITION or default if no such CONDITION exists.
-        """
+        Converts the internal, serialized representation into an object of
+        type `T`. The elements of the returned object are references to
+        bits in the serialized representation.
 
-class _Cond(Generic[T]):
-    def __getitem__(self, expected_type: type[U]) -> _Cond[U]: ...
-    def __call__(self, cond: bool, on_true: T, on_false: T) -> T:
-        """
-        `std.cond[T](cond, on_true, on_false)` is a type checked wrapper around
-        an if expression equivalent to:
+        This only works for types, that are trivially serializable meaning
+        each member directly maps to a subrange of the serialized bits.
+        Examples for trivially serializable types are
+        the builtins Bit/BitVector/Signed/Unsigned, std.SFixed, std.UFixed
+        and all std.Record types.
 
-        >>> std.check_type[T](
-        >>>     on_true if cond else on_false
-        >>> )
+        `self.ref` is equivalent to `self.value(qualifier=std.Ref)`.
+        `ref` is implemented as a property to allow its use in assignments.
         """
 
-check_type = _CheckType()
-select = _Select()
-choose_first = _ChooseFirst()
-cond = _Cond()
+    def bits(self) -> BitVector:
+        """
+        Returns the internal, serialized representation.
+        My be converted to an instance of `T` using std.from_bits.
+        Objects of type `T` can be serialized and assigned to these bits.
 
-def check_return(fn):
+        >>> def example(a, b):
+        >>>     my_serialized = Signal[Serialized[MyType]](a, b)
+        >>>     my_deserialized_1 = my_serialized.value()
+        >>>     my_deserialized_2 = std.from_bits[MyType](my_serialized.bits())
+        """
+
+def as_readable_vector(*parts: Bit | BitVector) -> Signal[BitVector]:
     """
-    the return value of functions decorated with check_return
-    is checked against the return type hint
+    Concatenates all arguments to a single BitVector.
+    The resulting vector is not writeable because it is assigned
+    in the function.
+
+    This function cannot be used in synthesizable contexts.
+
+    >>> def architecture(self):
+    >>>     a = Signal[Bit]()
+    >>>     b = Signal[BitVector[5]]()
+    >>>     c = Signal[Bit]()
+    >>>
+    >>>     vec = std.as_readable_vector(a, b, c)
+    >>>
+    >>>     @std.concurrent
+    >>>     def logic():
+    >>>         assert c == vec[0]
+    >>>         assert b == vec[5:1]
+    >>>         assert a == vec[6]
     """
+
+def as_writeable_vector(
+    *parts: Signal[Bit] | Signal[BitVector], default=None
+) -> Signal[BitVector]:
+    """
+    Takes a list of Bits and BitVectors and creates a new
+    BitVector with the total width of all parts.
+
+    Each part is assigned the state of the corresponding
+    subsection of this new vector.
+
+    `default` defines the initial state of the new BitVector.
+
+    This function cannot be used in synthesizable contexts.
+
+    >>> def architecture(self):
+    >>>     a = Signal[Bit]()
+    >>>     b = Signal[BitVector[5]]()
+    >>>     c = Signal[Bit]()
+    >>>
+    >>>     vec = std.as_writeable_vector(a, b, c)
+    >>>
+    >>>     @std.concurrent
+    >>>     def logic():
+    >>>         # update the states of a, b and c
+    >>>         # by assigning to the corresponding ranges in vec
+    >>>         vec[0] <<= Null
+    >>>         vec[5:1] <<= Full
+    >>>         vec[6] <<= True
+    >>>
+    >>>         assert c == Bit(Null)
+    >>>         assert b == BitVector[5](Full)
+    >>>         assert a == Bit(True)
+    """
+
+class Array(Generic[T, N]):
+    """
+    A wrapper utility around cohdl.Array.
+    Unlike the builtin cohdl.Array the element type of std.Array is not
+    limited to builtins. Any serializable type can be stored.
+    """
+
+    def __init__(self, _qualifier_=Signal): ...
+    def __len__(self) -> int:
+        """
+        returns the number of elements in the Array
+        """
+
+    def __getitem__(self, index: Unsigned | int) -> T:
+        """
+        Returns the element at the given index.
+
+        This only works for trivially serializable element types,
+        because internally `std.from_bits[T](raw, std.Ref)` is used
+        to obtain the returned value.
+
+        Use `self.get_elem` for other types.
+        """
+
+    def get_elem(self, index: Unsigned | int, qualifier=Ref) -> T:
+        """
+        Returns the value obtained by deserializing the stored element
+        at `index` using the given `qualifier`.
+        """
+
+    def set_elem(self, index: Unsigned | int, value: T):
+        """
+        Assign the provided `value` to the element at `index`.
+        """
 
 #
 #
 #
-
-def binary_fold(fn: Callable[[Any, Any], Any], args: Iterable, right_fold=False):
-    """
-    similar to pythons `reduce` function and C++ fold expressions
-
-    ---
-
-    >>> binary_fold(fn, (1, 2))
-    >>> # == fn(1, 2)
-
-    >>> binary_fold(fn, (1, 2, 3, 4))
-    >>> # == fn(fn(fn(1, 2), 3), 4)
-
-    ---
-
-    when only a single argument is given, a copy of it is returned
-    and fn is not called
-
-    ---
-
-    when `right_fold` is set to True the order in which arguments
-    are passed to `fn`is reversed:
-
-    >>> binary_fold(fn, (1, 2, 3)):
-    >>> # == fn(fn(1, 2), 3)
-
-    >>> binary_fold(fn, (1, 2, 3), right_fold=True):
-    >>> # == fn(1, fn(2, 3))
-    """
-
-def batched_fold(fn: Callable[[Any, Any], Any], args: Iterable, batch_size=2):
-    """
-    Alternative to binary_fold for commutative operations.
-
-    - splits args into batches of the given size
-    - runs std.binary fold on each batch
-    - recursively calls batched_fold on the result until
-        only a singe result remains
-
-    ---
-
-    >>> batched_fold(fn, (1, 2, 3, 4, 5, 6, 7), batch_size=2)
-    >>> # == fn(
-    >>> #        fn(
-    >>> #            fn(1, 2),
-    >>> #            fn(3, 4)),
-    >>> #        fn(
-    >>> #            fn(5, 6),
-    >>> #            7))
-    """
-
-def concat(first, *args) -> BitVector:
-    """
-    concatenate all arguments
-
-    this is equivalent to `first @ arg1 @ arg2 @ ...`
-
-    when only one argument is given the return value
-    is a new BitVector (even when the argument was a single Bit)
-    """
-
-def stretch(val: Bit | BitVector, factor: int) -> BitVector:
-    """
-    repeat the bits of `val` `factor` times:
-
-    example:
-
-    >>> stretch(Bit('0'), 1)           # -> "0"
-    >>> stretch(Bit('1'), 2)           # -> "11"
-    >>> stretch(BitVector[2]('10'), 3) # -> "111000"
-    """
-
-def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
-    """
-    takes three BitVectors of the same length and returns a new
-    BitVector of that same length.
-    Each result bit is constructed from the corresponding input
-    bits according to the following expression:
-
-    `result_bit = new_bit if mask_bit else old_bit`
-    """
-
-def as_bitvector(inp: BitVector | Bit | str) -> BitVector:
-    """
-    Returns a BitVector constructed from the argument.
-
-    When `inp` is of possibly qualified type BitVector the result
-    is a copy of the input cast to BitVector.
-
-    When `inp` is of possibly qualified type Bit the result is
-    a vector of length one with the same state as the bit.
-
-    When `inp` is of type str the result is a bitvector literal
-    with the same length as inp.
-    """
-
-def rol(inp: BitVector, n: int = 1) -> BitVector:
-    """
-    roll left `n` bits
-
-    >>> rol(bitvector("1001"))
-    >>> "0011"
-    >>> rol(bitvector("1001"), 2)
-    >>> "0110"
-    """
-
-def ror(inp: BitVector, n: int = 1) -> BitVector:
-    """
-    roll right `n` bits
-
-    >>> ror(bitvector("1001"))
-    >>> "1100"
-    >>> ror(bitvector("1001"), 2)
-    >>> "0110"
-    """
-
-def lshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
-    """
-    Left shift `val` by the width of `fill` and
-
-    >>> lshift_fill(abcdef, XYZ) == defXYZ
-    >>> lshift_fill()
-    """
-
-def rshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
-    """ """
-
-def batched(input: BitVector, n: int) -> list[BitVector]:
-    """
-    Splits an input vector of length `M` into subvectors of length `n`.
-    `M` must be a multiple of `n`.
-    The result is a list of BitVectors starting with the least significant slice.
-    The elements of the result are references to the corresponding slices of `input`.
-
-    >>> input = BitVector[16]()
-    >>> # the following two lines are equivalent
-    >>> a = batched(input, 4)
-    >>> a = [input[3:0], input[7:4], input[11:8], input[15:12]]
-    """
-
-def select_batch(
-    input: BitVector, onehot_selector: BitVector, batch_size: int
-) -> BitVector:
-    """
-    Returns a subvector of input using a onehot selector.
-
-    The result is obtained by stretching `onehot_selector` by a factor
-    of `batch_size` (see std.stretch) and the following sequence
-    of binary-and/binary-or operations.
-
-    >>> # input          abcd efgh ijkl
-    >>> # selector   &   0000 1111 0000
-    >>> # -----------------------------
-    >>> #                0000|efgh|0000 -> efgh
-
-    `len(input)` must be equal to `len(onehot_selector)*batch_size`
-    """
-
-def parity(vec: BitVector) -> Bit:
-    """
-    Returns the parity of a given BitVector
-    calculated as a repeated xor operation over
-    all bits.
-    """
 
 def stringify(*args, sep: str = ""):
     """
@@ -450,6 +204,7 @@ class DelayLine(Generic[T]):
         >>>     out.b <<= line_b.last() # inp delayed by 5
         >>>     out.b <<= line_b[2]     # inp delayed by 2
         """
+
     @overload
     def __init__(self, inp: T, delay: int, ctx: SequentialContext): ...
     @overload
@@ -596,6 +351,7 @@ class Waiter:
         Initialize a Waiter that can wait up to a given duration.
         When `max_duration` is an integer it is interpreted a
         """
+
     async def wait_for(self, duration: int | Duration):
         """
         same as std.wait_for() but all calls to this method, on
@@ -616,6 +372,7 @@ class OutShiftRegister:
         shifted out. The methods `shift_all` and `empty` cannot be
         used when this option is set.
         """
+
     def set_data(self, data: BitVector):
         """
         Reinitialize the shift register with the given data
@@ -625,6 +382,7 @@ class OutShiftRegister:
         and will be overwritten if `shift` is called
         after `set_data` in the same clock cycle.
         """
+
     async def shift_all(
         self, target: Signal[Bit] | Signal[BitVector], shift_delayed=False
     ):
@@ -636,10 +394,12 @@ class OutShiftRegister:
         When `shift_delayed` is set to True shifting starts with
         a delay of one clock cycle.
         """
+
     def empty(self):
         """
         Returns True when all bits have been shifted out of the register
         """
+
     @overload
     def shift(self) -> Bit:
         """
@@ -649,6 +409,7 @@ class OutShiftRegister:
         This method can only be called once per clock cycle
         and may not be mixed with `shift_all`.
         """
+
     @overload
     def shift(self, count: int) -> BitVector:
         """
@@ -671,6 +432,7 @@ class InShiftRegister:
         shifted out. The methods `shift_all` and `full` cannot be
         used when this options is set.
         """
+
     async def shift_all(self, src: Bit | BitVector, shift_delayed=False):
         """
         Shift the state of `src` into the shift register
@@ -678,6 +440,7 @@ class InShiftRegister:
         When `shift_delayed` is set to True shifting starts with
         a delay of one clock cycle.
         """
+
     def clear(self):
         """
         Reinitialize the shift register.
@@ -686,11 +449,13 @@ class InShiftRegister:
         and will be overwritten if `shift` is called
         after `clear` in the same clock cycle.
         """
+
     def full(self):
         """
         Returns True when `len` bits of data have been
         shifted into the register.
         """
+
     def shift(self, src: Bit | BitVector):
         """
         Shifts the content of `src` into the register.
@@ -698,6 +463,7 @@ class InShiftRegister:
         This method can only be called once per clock cycle
         and may not be mixed with `shift_all`.
         """
+
     def data(self):
         """
         Returns the deserialized data.
@@ -761,28 +527,34 @@ class ToggleSignal:
         when ToggleSignal updates the internal state (i.e. in the clock cycle before
         the state change becomes visible to other sequential contexts).
         """
+
     def get_reset_signal(self) -> Signal[Bit]:
         """
         Returns the signal used to reset the internal toggle mechanism.
         `enable` and `disable` are helper methods that set/reset this signal.
         """
+
     def enable(self) -> None:
         """
         Start the toggle signal after a previous call to `disable`.
         """
+
     def disable(self) -> None:
         """
         Stop the toggle signal and reset the internal counter to zero.
         """
+
     def state(self) -> Signal[Bit]:
         """
         Returns the bit signal that is toggled by this instance of ToggleSignal.
         """
+
     def rising(self) -> Signal[Bit]:
         """
         Returns a bit signal that is `1` for a single clock cycle after
         each transition of the toggled signal from `0` to `1`.
         """
+
     def falling(self) -> Signal[Bit]:
         """
         Returns a bit signal that is `1` for a single clock cycle after
@@ -806,28 +578,34 @@ class ClockDivider:
         It generates a signal that is high for one clock cycle
         and low for the rest of a period with the given duration.
         """
+
     def get_reset_signal(self) -> Signal[Bit]:
         """
         Returns the signal used to reset the internal counter mechanism.
         `enable` and `disable` are helper methods that set/reset this signal.
         """
+
     def enable(self) -> None:
         """
         Start signal generation after a previous call to `disable`.
         """
+
     def disable(self) -> None:
         """
         Stop signal generation and reset the internal counter to zero.
         """
+
     def state(self) -> Signal[Bit]:
         """
         Returns the bit signal that is toggled by this instance of ClockDivider.
         """
+
     def rising(self) -> Signal[Bit]:
         """
         Returns a bit signal that is `1` for a single clock cycle after
         each transition of self.state() from `0` to `1`.
         """
+
     def falling(self) -> Signal[Bit]:
         """
         Returns a bit signal that is `1` for a single clock cycle after
@@ -875,6 +653,7 @@ class SyncFlag:
 
         This method is used in the sender context.
         """
+
     def clear(self) -> None:
         """
         Clear the flag. This has no effect  when it is already clear.
@@ -882,6 +661,7 @@ class SyncFlag:
         This method should be used in the receiver context
         after a received `set` was processed.
         """
+
     @expr_fn
     def is_set(self) -> bool:
         """
@@ -890,6 +670,7 @@ class SyncFlag:
         Note: This method is marked as `expr_fn` and thus awaitable when used as the
         argument of an await expression.
         """
+
     @expr_fn
     def is_clear(self) -> bool:
         """
@@ -898,10 +679,12 @@ class SyncFlag:
         Note: This method is marked as `expr_fn` and thus awaitable when used as the
         argument of an await expression.
         """
+
     async def receive(self) -> None:
         """
         Wait until the SyncFlag is set and immediately clear it.
         """
+
     async def __aenter__(self) -> None: ...
     async def __aexit__(self, val, type, traceback) -> None: ...
 
@@ -935,30 +718,36 @@ class Mailbox(Generic[T]):
         The optional `args`/`kwargs` will be forwarded to the constructor,
         of the internal Signal (of type `type`).
         """
+
     def send(self, data: T):
         """
         Put data into Mailbox and mark it as valid.
         """
+
     async def receive(self) -> T:
         """
         Wait until data becomes valid and return it.
         This method clears the valid flag.
         """
+
     def data(self) -> T:
         """
         Return the contained data.
         The content is only valid when self.is_set() return true.
         """
+
     @expr_fn
     def is_set(self) -> bool:
         """
         Returns true if the Mailbox contains data.
         """
+
     @expr_fn
     def is_clear(self) -> bool:
         """
         Returns true when the Mailbox is empty.
         """
+
     def clear(self) -> None:
         """
         Unset the internal flag. In the next clock cycle `is_clear` will return true.
@@ -969,39 +758,43 @@ class Mailbox(Generic[T]):
 #
 #
 
-class Fifo:
-    def __init__(self, elem_width: int, depth: int):
-        """
-        construct a new Fifo containing BitVectors of width `elem_width`
+class Fifo(Generic[T, N]):
+    """
+    A first-in-first-out container that can hold up to N-1 elements
+    of type T.
 
-        `depth` defines the size of the internal array.
-        The Fifo can hold at most `depth`-1 elements.
-        """
-    def push(self, data: BitVector):
+    """
+
+    def __init__(self, name: str): ...
+    def push(self, data: T):
         """
         push one element onto the Fifo
 
         may only be called once per clock cycle
         may not be called on a full Fifo
         """
-    def pop(self) -> BitVector:
+
+    def pop(self) -> T:
         """
         remove one element from the Fifo
         returns the removed element
 
         may not be called on an empty Fifo
         """
-    def front(self) -> BitVector:
+
+    def front(self) -> T:
         """
         Returns the state of element at the front of the Fifo
         i.e. the next value returned by `pop` without removing it.
 
         The result is undefined while the Fifo is empty
         """
+
     def empty(self) -> Bit:
         """
         check if fifo is empty
         """
+
     def full(self) -> Bit:
         """
         check if fifo is full

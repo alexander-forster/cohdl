@@ -18,48 +18,37 @@ class TestWriter(metaclass=ABCMeta):
         self.assign(self.make_output(BitVector[width], name), self.to_slv(arg))
 
     @abstractmethod
-    def write(self):
-        ...
+    def write(self): ...
 
     @abstractmethod
-    def name(self):
-        ...
+    def name(self): ...
 
     @abstractmethod
-    def ports(self):
-        ...
+    def ports(self): ...
 
     @abstractmethod
-    def make_signal(self, type, name):
-        ...
+    def make_signal(self, type, name): ...
 
     @abstractmethod
-    def make_input(self, type, name):
-        ...
+    def make_input(self, type, name): ...
 
     @abstractmethod
-    def make_output(self, type, name):
-        ...
+    def make_output(self, type, name): ...
 
     @abstractmethod
-    def start_section(self, name: str):
-        ...
+    def start_section(self, name: str): ...
 
     @abstractmethod
-    def to_slv(self, obj):
-        ...
+    def to_slv(self, obj): ...
 
     @abstractmethod
-    def to_sfixed(self, obj, left, right):
-        ...
+    def to_sfixed(self, obj, left, right): ...
 
     @abstractmethod
-    def assign(self, out: Port, arg):
-        ...
+    def assign(self, out: Port, arg): ...
 
     @abstractmethod
-    def add(self, a, b):
-        ...
+    def add(self, a, b): ...
 
     @abstractmethod
     def resize(
@@ -69,8 +58,7 @@ class TestWriter(metaclass=ABCMeta):
         right,
         round_style: std.FixedRoundStyle,
         overflow_style: std.FixedOverflowStyle,
-    ):
-        ...
+    ): ...
 
 
 class PseudoSignal:
@@ -176,7 +164,7 @@ class VhdlTestWriter(TestWriter):
 
     def make_signal(self, type, name):
         if issubclass(type, std.SFixed):
-            sig = PseudoSignal(type.signal(), name)
+            sig = PseudoSignal(Signal[type](), name)
         else:
             sig = Signal[type](name=name)
         self._used_signals.append(sig)
@@ -251,7 +239,7 @@ class CoHDL_TestWriter(TestWriter):
 
     def make_signal(self, type, name):
         if issubclass(type, std.SFixed):
-            return type.signal()
+            return Signal[type]()
         else:
             return Signal[type](name=name)
 
@@ -476,8 +464,7 @@ class Unittest(unittest.TestCase):
     def test_concurrent(self):
         make_combined(test_fn, test_fn.__name__)
 
-        class DummyEntity(cohdl.Entity, name=test_fn.__name__):
-            ...
+        class DummyEntity(cohdl.Entity, name=test_fn.__name__): ...
 
         DummyEntity.__name__ = test_fn.__name__
 

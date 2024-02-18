@@ -27,7 +27,6 @@ class CaptureTester(unittest.TestCase):
 
         std.VhdlCompiler.to_string(Entity_A)
         assert captured == loop_values
-        print(captured)
         captured = []
 
         #
@@ -44,7 +43,6 @@ class CaptureTester(unittest.TestCase):
 
         std.VhdlCompiler.to_string(Entity_B)
         assert captured == [loop_values[-1]] * len(loop_values)
-        print(captured)
         captured = []
 
         #
@@ -73,7 +71,6 @@ class CaptureTester(unittest.TestCase):
 
         std.VhdlCompiler.to_string(Entity_A)
         assert captured == loop_values
-        print(captured)
         captured = []
 
         #
@@ -90,5 +87,4 @@ class CaptureTester(unittest.TestCase):
 
         std.VhdlCompiler.to_string(Entity_B)
         assert captured == [loop_values[-1]] * len(loop_values)
-        print(captured)
         captured = []

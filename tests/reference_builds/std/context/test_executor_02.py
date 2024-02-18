@@ -91,57 +91,56 @@ class test_executor_02(cohdl.Entity):
             self.result_before <<= await exec_before.exec()
 
 
-if False:
-    print(std.VhdlCompiler.to_string(test_executor_02))
+#
+# test code
+#
 
-else:
-    #
-    # test code
-    #
 
-    def gen_onehot():
-        for i in range(30):
-            yield 1 << i
+def gen_onehot():
+    for i in range(30):
+        yield 1 << i
 
-    @cocotb_util.test()
-    async def testbench_executor_02(dut: test_executor_02):
-        gen = cocotb_util.ConstrainedGenerator(32)
 
-        seq = cocotb_util.SequentialTest(dut.clk)
-        dut.start.value = False
-        dut.reset.value = True
-        dut.inp_value.value = 0
+@cocotb_util.test()
+async def testbench_executor_02(dut: test_executor_02):
+    gen = cocotb_util.ConstrainedGenerator(32)
+
+    seq = cocotb_util.SequentialTest(dut.clk)
+    dut.start.value = False
+    dut.reset.value = True
+    dut.inp_value.value = 0
+    await seq.tick()
+    await seq.tick()
+    dut.reset.value = False
+
+    for _ in range(4):
         await seq.tick()
-        await seq.tick()
-        dut.reset.value = False
+        dut.start.value = True
 
-        for _ in range(4):
+        values = []
+
+        for nr, inp_value in enumerate(gen.random(16)):
+            values.append(inp_value)
+            dut.inp_value.value = inp_value.as_int()
             await seq.tick()
-            dut.start.value = True
+            dut.start.value = False
 
-            values = []
+            if nr == 11:
+                res_a = sum(values[-11:])
+            elif nr == 12:
+                res_b = sum(values[-11:])
 
-            for nr, inp_value in enumerate(gen.random(16)):
-                values.append(inp_value)
-                dut.inp_value.value = inp_value.as_int()
-                await seq.tick()
-                dut.start.value = False
+            if nr >= 13:
+                assert dut.result_after.value == res_a.as_int()
+                assert dut.result_before.value == res_b.as_int()
+            elif nr >= 14:
+                assert dut.result_parallel.value == res_b.as_int()
 
-                if nr == 11:
-                    res_a = sum(values[-11:])
-                elif nr == 12:
-                    res_b = sum(values[-11:])
 
-                if nr >= 13:
-                    assert dut.result_after.value == res_a.as_int()
-                    assert dut.result_before.value == res_b.as_int()
-                elif nr >= 14:
-                    assert dut.result_parallel.value == res_b.as_int()
-
-    class Unittest(unittest.TestCase):
-        def test_executor_02(self):
-            cocotb_util.run_cocotb_tests(
-                test_executor_02,
-                __file__,
-                self.__module__,
-            )
+class Unittest(unittest.TestCase):
+    def test_executor_02(self):
+        cocotb_util.run_cocotb_tests(
+            test_executor_02,
+            __file__,
+            self.__module__,
+        )

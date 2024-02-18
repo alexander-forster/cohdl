@@ -28,7 +28,7 @@ class Attribute:
 class TypeQualifierBase(typing.Generic[T]):
     def decay(val): ...
 
-class TypeQualifier(typing.Generic[T]):
+class TypeQualifier(typing.Generic[T], TypeQualifierBase[T]):
     @property
     def type(cls): ...
     @property

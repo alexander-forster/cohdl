@@ -3,14 +3,14 @@ from __future__ import annotations
 from cohdl._core import Bit, BitVector, Signal, Unsigned, Null, Full, TypeQualifierBase
 
 from ._context import Context, Duration, Frequency, concurrent_eval, concurrent_assign
+from ._core_utility import instance_check, is_qualified, as_bitvector
+
+
 from .utility import (
-    is_qualified,
-    instance_check,
     InShiftRegister,
     OutShiftRegister,
     ToggleSignal,
     max_int,
-    as_bitvector,
 )
 
 from ._prefix import prefix

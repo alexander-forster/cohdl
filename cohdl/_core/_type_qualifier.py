@@ -155,8 +155,6 @@ class _TypeQualifier(type):
             WrappedType = _Boolean
         elif WrappedType is int:
             WrappedType = Integer
-        else:
-            assert is_primitive_type(WrappedType)
 
         type_spec = (WrappedType, direction)
 
@@ -230,23 +228,18 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     #
     #
 
-    @_intrinsic
-    def __new__(
-        cls,
-        value=None,
-        *,
-        name: str | None = None,
-        attributes: dict | None = None,
-        delayed_init: bool = False,
-        _root: TypeQualifier | None = None,
-        _ref_spec: list[RefSpec] | None = None,
-    ):
+    def __new__(cls, *args, **kwargs):
         if not hasattr(cls, "_Wrapped"):
-            value = _decay(value)
-            assert is_primitive(value)
-            cls = cls[type(value)]
+            value = args[0]
+            decayed = _decay(value)
+            wrapped_class = cls[type(decayed)]
+        else:
+            wrapped_class = cls
 
-        return object.__new__(cls)
+        if not is_primitive_type(wrapped_class._Wrapped):
+            return wrapped_class._Wrapped(*args, **kwargs, _qualifier_=cls._Qualifier)
+        else:
+            return object.__new__(wrapped_class)
 
     @_intrinsic
     def __init__(
@@ -309,7 +302,11 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic
     def __str__(self):
-        return f"{type(self)}({self._value})"
+        return f"{type(self)}({self._value!s})"
+
+    @_intrinsic
+    def __repr__(self):
+        return f"{type(self)}({self._value!s})"
 
     @_intrinsic
     def __len__(self):

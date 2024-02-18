@@ -27,7 +27,7 @@ class test_fifo_02(cohdl.Entity):
 
     def architecture(self):
         ctx = std.SequentialContext(std.Clock(self.clk), std.Reset(self.reset))
-        fifo = std.Fifo(4, 11)
+        fifo = std.Fifo[BitVector[4], 11]()
 
         @std.concurrent
         def logic():

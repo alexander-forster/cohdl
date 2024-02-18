@@ -1,21 +1,14 @@
 from __future__ import annotations
 
-import inspect
-import typing
 
 from cohdl._core._type_qualifier import (
     TypeQualifierBase,
-    TypeQualifier,
-    Temporary,
     Signal,
 )
 from cohdl._core import (
     Bit,
     BitVector,
     Unsigned,
-    Array,
-    select_with,
-    evaluated,
     true,
     false,
     Null,
@@ -23,13 +16,31 @@ from cohdl._core import (
     static_assert,
     concurrent_context,
     expr_fn,
+    AssignMode,
 )
 
-from ._assignable_type import make_nonlocal, make_signal
+from cohdl._core import Array as CohdlArray
+
+from ._core_utility import (
+    Ref,
+    Value,
+    nop,
+    Nonlocal,
+    zeros,
+    width,
+    concat,
+    to_bits,
+    from_bits,
+    count_bits,
+    base_type,
+    is_qualified,
+    instance_check,
+)
+from ._template import Template
+from ._assignable_type import AssignableType
 
 from cohdl._core._intrinsic import _intrinsic
 
-from cohdl._core._intrinsic import comment as cohdl_comment
 
 from ._context import Duration, SequentialContext, concurrent
 from ._prefix import prefix, name
@@ -38,87 +49,6 @@ from ._prefix import prefix, name
 # a singleton only used internally in the std module
 class _None:
     pass
-
-
-def nop(*args, **kwargs):
-    pass
-
-
-def comment(*lines):
-    cohdl_comment(*lines)
-
-
-@_intrinsic
-def fail(message: str = "", *args, **kwargs):
-    raise AssertionError("Compilation failed: " + message.format(*args, **kwargs))
-
-
-class _TC:
-    def __init__(self, T=None) -> None:
-        self._T = T
-
-    def __call__(self, arg):
-        if self._T is None:
-            if isinstance(arg, TypeQualifier):
-                assert evaluated(), "expression only allowed in synthesizable contexts"
-                return Temporary(arg)
-            elif isinstance(arg, TypeQualifierBase):
-                return TypeQualifierBase.decay(arg)
-            else:
-                return arg
-        else:
-            if isinstance(arg, TypeQualifier):
-                assert evaluated(), "expression only allowed in synthesizable contexts"
-                return Temporary[self._T](arg)
-            elif isinstance(arg, TypeQualifierBase):
-                return TypeQualifierBase.decay(arg)
-            else:
-                return self._T(arg)
-
-    @_intrinsic
-    def __getitem__(self, T):
-        assert self._T is None, "redefining expression type not allowed"
-        return _TC(T)
-
-
-tc = _TC()
-
-#
-#
-#
-
-
-@_intrinsic
-def iscouroutinefunction(fn):
-    return inspect.iscoroutinefunction(fn)
-
-
-def base_type(x):
-    if isinstance(x, type):
-        if issubclass(x, TypeQualifierBase):
-            return x.type
-        else:
-            return x
-    else:
-        if isinstance(x, TypeQualifierBase):
-            return x.type
-        else:
-            return type(x)
-
-
-def instance_check(val, type):
-    return isinstance(TypeQualifierBase.decay(val), type)
-
-
-def subclass_check(val, type):
-    return issubclass(TypeQualifierBase.decay(val), type)
-
-
-async def as_awaitable(fn, /, *args, **kwargs):
-    if iscouroutinefunction(fn):
-        return await fn(*args, **kwargs)
-    else:
-        return fn(*args, **kwargs)
 
 
 @_intrinsic
@@ -133,154 +63,112 @@ def add_entity_port(entity, port, name: str | None = None):
     return port
 
 
+class _SerializedTemplateArgs:
+    elem_type: type
+
+    @_intrinsic
+    def __init__(self, elem_type: type):
+        assert not isinstance(
+            elem_type, Serialized
+        ), "Serialized types should not be nested"
+        self.elem_type = elem_type
+
+    @_intrinsic
+    def __hash__(self):
+        return id(self.elem_type)
+
+    @_intrinsic
+    def __eq__(self, other: _SerializedTemplateArgs):
+        return self.elem_type is other.elem_type
+
+
+class Serialized(Template[_SerializedTemplateArgs], AssignableType):
+    _elemtype_: _SerializedTemplateArgs.elem_type
+
+    @classmethod
+    def from_raw(cls, raw: BitVector):
+        return cls(raw, _use_as_raw=True)
+
+    def _assign_(self, source, mode: AssignMode) -> None:
+        if isinstance(source, Serialized):
+            assert self._elemtype_ is source._elemtype_
+            self._raw._assign_(source._raw, mode)
+        else:
+            assert self._elemtype_ is base_type(source)
+            self._raw._assign_(to_bits(source), mode)
+
+    def __init__(self, raw=None, _qualifier_=Value, _use_as_raw=False):
+        elem_type = self._elemtype_
+        bit_count = count_bits(elem_type)
+
+        if _use_as_raw:
+            assert (
+                bit_count == raw.width
+            ), "the number serialized bits ({}) does not match required width ({}) of type '{}'".format(
+                raw.width, bit_count, elem_type
+            )
+            self._raw = raw.bitvector
+        else:
+            if isinstance(raw, Serialized):
+                assert elem_type is raw._elemtype_
+                self._raw = _qualifier_[elem_type](raw._raw)
+            elif raw is Null or raw is Full:
+                self._raw = _qualifier_[BitVector[bit_count]](BitVector[bit_count](raw))
+            else:
+                assert base_type(raw) is elem_type
+                self._raw = to_bits(raw)
+
+    def value(self, qualifier=Value):
+        return from_bits[self._elemtype_](self._raw, qualifier)
+
+    @property
+    def ref(self):
+        return self.value(qualifier=Ref)
+
+    def bits(self):
+        return self._raw
+
+
 #
 #
 #
 
 
-@_intrinsic
-def zeros(len: int):
-    return BitVector[len](Null)
+def as_readable_vector(*parts):
+    total_width = sum(width(p) for p in parts)
 
+    result = Signal[BitVector[total_width]]()
 
-@_intrinsic
-def ones(len: int):
-    return BitVector[len](Full)
+    @concurrent
+    def logic():
+        result.next = concat(*parts)
 
-
-@_intrinsic
-def width(inp: Bit | BitVector) -> int:
-    if instance_check(inp, Bit):
-        return 1
-    else:
-        return inp.width
-
-
-def one_hot(width: int, bit_pos: int | Unsigned) -> BitVector:
-    assert 0 <= bit_pos < width, "bit_pos out of range"
-    return (Unsigned[width](1) << bit_pos).bitvector
-
-
-def reverse_bits(inp: BitVector) -> BitVector:
-    return concat(*inp)
-
-
-#
-#
-#
-
-
-def is_qualified(arg):
-    return isinstance(arg, TypeQualifierBase)
-
-
-def const_cond(arg):
-    result = bool(arg)
-    static_assert(isinstance(result, bool), "condition is not a constant")
     return result
 
 
-class _UncheckedType:
-    pass
+def as_writeable_vector(*parts, default=None):
+    offset = 0
+    slice_list = []
 
+    for part in parts:
+        if instance_check(part, Bit):
+            slice_list.append(part, offset)
+            offset += 1
+        else:
+            w = width(part)
+            slice_list.append((part, slice(offset + w - 1, offset)))
+            offset += w
 
-def _check_type(result, expected):
-    if expected is _UncheckedType:
-        return True
-    elif expected is None:
-        return result is None
-    else:
-        return instance_check(result, expected)
+    total_width = offset
 
+    result = Signal[BitVector[total_width]](default)
 
-@_intrinsic
-def _format_type_check_error(expected_type, actual_type):
-    return f"invalid type in checked expression: expected '{expected_type}' but got '{actual_type}'"
+    @concurrent
+    def logic():
+        for part, slice in slice_list:
+            part <<= result[slice]
 
-
-class _TypeCheckedExpression:
-    def __init__(self, expected_type: type | tuple = _UncheckedType):
-        self._expected = expected_type
-
-    def _checked(self, arg):
-        assert _check_type(arg, self._expected), _format_type_check_error(
-            self._expected, arg
-        )
-        return arg
-
-    def __getitem__(self, expected_type):
-        return type(self)(expected_type)
-
-
-class _CheckType(_TypeCheckedExpression):
-    def __call__(self, arg):
-        assert (
-            self._expected is not _UncheckedType
-        ), "no type specified in std.check_type"
-        return self._checked(arg)
-
-
-class _Select(_TypeCheckedExpression):
-    def __call__(self, arg, branches: dict, default=None):
-        return self._checked(
-            select_with(
-                arg,
-                branches,
-                default=default,
-            )
-        )
-
-
-def _first_impl(*args, default):
-    if len(args) == 0:
-        return default
-    else:
-        first, *rest = args
-        return first[1] if first[0] else _first_impl(*rest, default=default)
-
-
-class _ChooseFirst(_TypeCheckedExpression):
-    def __call__(self, *args, default):
-        return self._checked(_first_impl(*args, default=default))
-
-
-class _Cond(_TypeCheckedExpression):
-    def __call__(self, cond: bool, on_true, on_false):
-        return self._checked(on_true if cond else on_false)
-
-
-check_type = _CheckType()
-select = _Select()
-choose_first = _ChooseFirst()
-cond = _Cond()
-
-
-@_intrinsic
-def _get_return_type_hint(fn):
-    return typing.get_type_hints(fn).get("return", _UncheckedType)
-
-
-def check_return(fn):
-    if iscouroutinefunction(fn):
-
-        async def wrapper(*args, **kwargs):
-            result = await fn(*args, **kwargs)
-            assert _check_type(
-                result, _get_return_type_hint(fn)
-            ), "invalid return value in function call"
-            return result
-
-    else:
-
-        def wrapper(*args, **kwargs):
-            result = fn(*args, **kwargs)
-            assert _check_type(
-                result, _get_return_type_hint(fn)
-            ), "invalid return value in function call"
-            return result
-
-    wrapper.__name__ = fn.__name__
-    return wrapper
+    return result
 
 
 #
@@ -288,146 +176,44 @@ def check_return(fn):
 #
 
 
-def binary_fold(fn, args, right_fold=False):
-    if len(args) == 1:
-        return tc(args[0])
-    else:
-        if const_cond(right_fold):
-            first, *rest = args
-            return fn(first, binary_fold(fn, rest, right_fold=True))
-        else:
-            first, snd, *rest = args
-            return binary_fold(fn, [fn(first, snd), *rest])
+class _ArrayArgs:
+    def __init__(self, args: tuple):
+        elem_type, elem_cnt = args
+        self.elem_type = elem_type
+        self.elem_cnt = int(elem_cnt)
+
+    def __hash__(self):
+        return hash((self.elem_type, self.elem_cnt))
+
+    def __eq__(self, other: _ArrayArgs):
+        return self.elem_type is other.elem_type and self.elem_cnt == other.elem_cnt
 
 
-@_intrinsic
-def _batch_args(args: list, batch_size: int):
-    batches = []
+class Array(Template[_ArrayArgs]):
+    _count_: _ArrayArgs.elem_cnt
+    _elemtype_: _ArrayArgs.elem_type
 
-    for nr in range(0, len(args), batch_size):
-        batches.append(args[nr : nr + batch_size])
+    def __init__(self, _qualifier_=Signal):
+        elem_width = count_bits(self._elemtype_)
+        self._content = _qualifier_[CohdlArray[BitVector[elem_width], self._count_]]()
 
-    print(batches)
-    return batches
+    @_intrinsic
+    def __len__(self):
+        return self._count_
 
+    def get_elem(self, index, qualifier=Ref):
+        return from_bits[self._elemtype_](self._content[index], qualifier)
 
-def batched_fold(fn, args, batch_size=2):
-    if const_cond(len(args) <= batch_size):
-        return binary_fold(fn, *args)
-    else:
-        return batched_fold(
-            fn,
-            *[
-                batched_fold(fn, batch, batch_size=batch_size)
-                for batch in _batch_args(args, batch_size)
-            ],
-        )
+    def set_elem(self, index, value):
+        self._content[index]._assign_(value, AssignMode.AUTO)
+
+    def __getitem__(self, index):
+        return self.get_elem(index, Ref)
 
 
-def _concat_impl(args):
-    return binary_fold(lambda a, b: a @ b, args, right_fold=True)
-
-
-def concat(first, *args):
-    if len(args) == 0:
-        if instance_check(first, Bit):
-            return as_bitvector(first)
-        else:
-            assert instance_check(first, BitVector)
-            return tc[BitVector[len(first)]](first)
-    else:
-        return _concat_impl([first, *args])
-
-
-def stretch(val: Bit | BitVector, factor: int):
-    if instance_check(val, Bit):
-        if const_cond(factor == 1):
-            return as_bitvector(val)
-        else:
-            return concat(*[val for _ in range(factor)])
-    elif instance_check(val, BitVector):
-        if const_cond(factor == 1):
-            return val.bitvector.copy()
-        else:
-            # reverse stretched list so bit 0 is the leftmost
-            # concatenated value
-            return concat(*[stretch(b, factor) for b in val][::-1])
-    else:
-        raise AssertionError("invalid argument")
-
-
-def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
-    assert old.width == new.width
-    return (old & ~mask) | (new & mask)
-
-
-def as_bitvector(inp: BitVector | Bit | str):
-    if isinstance(inp, str):
-        return BitVector[len(inp)](inp)
-    elif instance_check(inp, BitVector):
-        return inp.bitvector.copy()
-    else:
-        assert instance_check(inp, Bit)
-        return (inp @ inp)[0:0]
-
-
-def rol(inp: BitVector, n: int = 1) -> BitVector:
-    static_assert(0 <= n <= inp.width)
-    if const_cond(n == 0 or n == inp.width):
-        return inp.bitvector.copy()
-    else:
-        return inp.lsb(rest=n) @ inp.msb(n)
-
-
-def ror(inp: BitVector, n: int = 1) -> BitVector:
-    static_assert(0 <= n <= inp.width)
-    if const_cond(n == 0 or n == inp.width):
-        return inp.bitvector.copy()
-    else:
-        return inp.lsb(n) @ inp.msb(rest=n)
-
-
-def lshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
-    width_val = width(val)
-    width_fill = width(fill)
-
-    if width_fill == width_val:
-        return as_bitvector(fill)
-    elif width_fill > width_val:
-        fail("fill width ({}) exceeds width of value ({})", width_fill, width_val)
-    else:
-        return val.lsb(width_val - width_fill) @ fill
-
-
-def rshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
-    width_val = width(val)
-    width_fill = width(fill)
-
-    if width_fill == width_val:
-        return as_bitvector(fill)
-    elif width_fill > width_val:
-        fail("fill width ({}) exceeds width of value ({})", width_fill, width_val)
-    else:
-        return fill @ val.msb(width_val - width_fill)
-
-
-def batched(input: BitVector, n: int) -> list[BitVector]:
-    static_assert(len(input) % n == 0)
-
-    return [input[off + n - 1 : off] for off in range(0, len(input), n)]
-
-
-def select_batch(
-    input: BitVector, onehot_selector: BitVector, batch_size: int
-) -> BitVector:
-    static_assert(len(input) == len(onehot_selector) * batch_size)
-    masked = input.bitvector & stretch(onehot_selector, batch_size)
-
-    return binary_fold(lambda a, b: a | b, batched(masked, batch_size))
-
-
-def parity(vec: BitVector) -> Bit:
-    return binary_fold(lambda a, b: a ^ b, vec)
+#
+#
+#
 
 
 @_intrinsic
@@ -441,22 +227,12 @@ class DelayLine:
             if initial is _None:
                 self._steps = [
                     inp,
-                    *[
-                        make_nonlocal[Signal](
-                            base_type(inp), name=name(stringify(n + 1))
-                        )
-                        for n in range(delay)
-                    ],
+                    *[Nonlocal[Signal[base_type(inp)]]() for _ in range(delay)],
                 ]
             else:
                 self._steps = [
                     inp,
-                    *[
-                        make_nonlocal[Signal](
-                            base_type(inp), initial, name=name(stringify(n + 1))
-                        )
-                        for n in range(delay)
-                    ],
+                    *[Nonlocal[Signal[base_type(inp)]](initial) for _ in range(delay)],
                 ]
 
             def delay_impl():
@@ -860,7 +636,7 @@ class ToggleSignal:
 
                 @concurrent_context
                 def logic():
-                    sum = tc[CounterType](cnt_first) + tc[CounterType](cnt_second)
+                    sum = Value[CounterType](cnt_first) + Value[CounterType](cnt_second)
                     assert sum != 0
 
                     # cast cnt_first and cnt_second to CounterType
@@ -1044,7 +820,7 @@ class SyncFlag:
 
 class Mailbox:
     def __init__(self, type, *args, **kwargs):
-        self._data = make_signal(type, *args, **kwargs)
+        self._data = Signal[type](*args, **kwargs)
         self._flag = SyncFlag()
 
     def send(self, data):
@@ -1075,19 +851,40 @@ class Mailbox:
 #
 
 
-class Fifo:
+class _FifoArgs:
+    def __init__(self, arg):
+        self.elemtype, self.count = arg
+        assert isinstance(self.elemtype, type)
+        assert isinstance(self.count, int)
+
+    def __hash__(self) -> int:
+        return hash((self.elemtype, self.count))
+
+    def __eq__(self, other: _FifoArgs) -> bool:
+        return self.elemtype is other.elemtype and self.count == other.count
+
+
+class Fifo(Template[_FifoArgs]):
+    _elemtype_: _FifoArgs.elemtype
+    _count_: _FifoArgs.count
+
     def _next_index(self, index):
         if is_pow_two(self._max_index + 1):
             return index + 1
         else:
             return index + 1 if index != self._max_index else 0
 
-    def __init__(self, elem_width: int, depth: int, name="fifo"):
+    @_intrinsic
+    def __len__(self):
+        return self._count_
+
+    def __init__(self, name="fifo"):
+        count = self._count_
+
         with prefix(name):
-            self._mem = Signal[Array[BitVector[elem_width], depth]](
-                name=_prefix_name("mem")
-            )
-            self._max_index = depth - 1
+            with prefix("mem"):
+                self._mem = Signal[Array[self._elemtype_, count]]()
+            self._max_index = count - 1
 
             self._write_index = Signal[Unsigned.upto(self._max_index)](
                 0, name=_prefix_name("wr_index")
@@ -1104,12 +901,12 @@ class Fifo:
             self._empty <<= self._write_index == self._read_index
             self._full <<= self._next_index(self._write_index) == self._read_index
 
-    def push(self, data: BitVector):
+    def push(self, data):
         assert not self._full, "writing to full fifo"
         self._mem[self._write_index] <<= data
         self._write_index <<= self._next_index(self._write_index)
 
-    def pop(self) -> BitVector:
+    def pop(self):
         assert not self._empty, "reading from empty fifo"
         self._read_index <<= self._next_index(self._read_index)
         return self._mem[self._read_index]
@@ -1122,3 +919,54 @@ class Fifo:
 
     def full(self):
         return self._full
+
+
+if False:
+
+    class Fifo:
+        def _next_index(self, index):
+            if is_pow_two(self._max_index + 1):
+                return index + 1
+            else:
+                return index + 1 if index != self._max_index else 0
+
+        def __init__(self, elem_width: int, depth: int, name="fifo"):
+            with prefix(name):
+                self._mem = Signal[CohdlArray[BitVector[elem_width], depth]](
+                    name=_prefix_name("mem")
+                )
+                self._max_index = depth - 1
+
+                self._write_index = Signal[Unsigned.upto(self._max_index)](
+                    0, name=_prefix_name("wr_index")
+                )
+                self._read_index = Signal[Unsigned.upto(self._max_index)](
+                    0, name=_prefix_name("rd_index")
+                )
+
+                self._empty = Signal[Bit](name=_prefix_name("empty"))
+                self._full = Signal[Bit](name=_prefix_name("full"))
+
+            @concurrent
+            def logic():
+                self._empty <<= self._write_index == self._read_index
+                self._full <<= self._next_index(self._write_index) == self._read_index
+
+        def push(self, data: BitVector):
+            assert not self._full, "writing to full fifo"
+            self._mem[self._write_index] <<= data
+            self._write_index <<= self._next_index(self._write_index)
+
+        def pop(self) -> BitVector:
+            assert not self._empty, "reading from empty fifo"
+            self._read_index <<= self._next_index(self._read_index)
+            return self._mem[self._read_index]
+
+        def front(self):
+            return self._mem[self._read_index]
+
+        def empty(self):
+            return self._empty
+
+        def full(self):
+            return self._full

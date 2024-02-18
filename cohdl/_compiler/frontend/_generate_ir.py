@@ -659,13 +659,6 @@ class IrGenerator:
         if isinstance(inp, list):
             for stmt in inp:
                 open_blocks = self.apply(stmt, open_blocks=open_blocks)
-                # if len(inp) == 3:
-                #    print("///////////////////////////////////")
-                #    for blk in open_blocks:
-                #        print(blk.dump())
-                #        print("-------------")
-                #        print()
-                #    print()
 
                 if stmt.returns_always():
                     break

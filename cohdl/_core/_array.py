@@ -8,81 +8,71 @@ from ._enum import Enum
 
 class _MetaArray(type):
     _SubTypes: dict[tuple, type]
-    _elem_type: type
-    _shape: tuple
+
+    _elemtype_: type
+    _count_: int
+
+    @_intrinsic
+    def __len__(cls):
+        return cls._count_
 
     @_intrinsic
     def __getitem__(cls, slice):
         assert (
             isinstance(slice, tuple) and len(slice) == 2
         ), "cohdl.Array[] requires two arguments [DATA_TYPE, SIZE]"
-        assert isinstance(slice[0], type)
 
-        elem_type = slice[0]
-        shape = tuple(slice[1:])
+        elemtype, count = slice
 
-        assert is_primitive_type(elem_type)
+        assert isinstance(elemtype, type)
+        assert isinstance(count, int)
 
-        content_type = (elem_type, shape)
+        assert is_primitive_type(elemtype)
+
+        content_type = (elemtype, count)
 
         if content_type in cls._SubTypes:
             return cls._SubTypes[content_type]
 
         new_type = type(
-            cls.__name__, (cls,), {"_elem_type": elem_type, "_shape": shape}
+            cls.__name__, (cls,), {"_elemtype_": elemtype, "_count_": count}
         )
         cls._SubTypes[content_type] = new_type
         return new_type
 
     @_intrinsic
     def __str__(cls):
-        shape = ", ".join(str(dim) for dim in cls._shape)
-        return f"{cls.__name__}[{cls._elem_type}, {shape}]"
+        return f"{cls.__name__}[{cls._elemtype_}, {cls._count_}]"
 
 
 class Array(_PrimitiveType, metaclass=_MetaArray):
     _SubTypes = {}
-    _elem_type: type
-    _shape: tuple
-
-    @classmethod
-    @property
-    def shape(cls):
-        return cls._shape
-
-    @classmethod
-    @property
-    def elemtype(cls):
-        return cls._elem_type
+    _elemtype_: type
+    _count_: int
 
     @_intrinsic
     def __init__(self, val=None):
-        shape = self._shape
+        elemtype = self._elemtype_
 
         if isinstance(val, Array):
             val = val._value
 
         if isinstance(val, (list, tuple)):
-            assert len(shape) == 1 and len(val) <= shape[0]
-            self._value = [self._elem_type(v) for v in val]
+            assert (
+                len(val) <= self._count_
+            ), "more default arguments than array elements"
+            self._value = [elemtype(v) for v in val]
         else:
             assert val is None, "invalid array type"
             self._value = None
 
     @_intrinsic
     def __len__(self):
-        return self._shape[0]
+        return self._count_
 
     @_intrinsic
-    def __getitem__(self, slice):
-        if not isinstance(slice, tuple):
-            slice = (slice,)
-
-        assert len(slice) == len(self._shape)
-        # TODO: multidimensional array
-        assert len(slice) == 1
-
-        elem_type = self._elem_type
+    def __getitem__(self, index: int):
+        elem_type = self._elemtype_
 
         if issubclass(elem_type, Enum):
             first, *rest = elem_type._member_map_.values()
@@ -99,11 +89,14 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
     @_intrinsic
     def _assign(self, value):
         assert isinstance(value, Array)
-        assert value.shape[0] == self.shape[0]
+        assert value._count_ == self._count_
 
-        self_val = self.elemtype()
+        self_val = self._elemtype_()
 
         for val in value._value:
+            # Dummy assignment, does not actually assign to array members
+            # to avoid creating potentially large number of elements.
+            # Only used to ensure, that the assignment is sound.
             self_val._assign(val)
 
     @_intrinsic
@@ -112,7 +105,7 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
 
     @_intrinsic
     def __hash__(self):
-        return sum(self._shape)
+        return hash(self._elemtype_, self._count_)
 
     @_intrinsic
     def __str__(self) -> str:

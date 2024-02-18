@@ -1,191 +1,231 @@
 from __future__ import annotations
 from ._assignable_type import AssignableType
 from cohdl._core._intrinsic import _intrinsic
-from cohdl._core import evaluated
 
 import cohdl
 import typing
 
+from ._core_utility import Ref, instance_check, fail
+from ._template import Template
+
+
+class BitArg(int):
+    pass
+
+
+class FieldBit(Template[BitArg]):
+    _offset_: BitArg
+
+    @_intrinsic
+    def __new__(cls, source: cohdl.BitVector):
+        return source[cls._offset_]
+
+
+class BitVectorArg:
+    start: int
+    stop: int
+    type: type
+
+    @_intrinsic
+    def __init__(self, arg: slice) -> None:
+        if not isinstance(arg, tuple):
+            arg = (arg, cohdl.BitVector)
+
+        span: slice = arg[0]
+
+        assert isinstance(span, slice)
+        assert isinstance(span.start, int)
+        assert isinstance(span.stop, int)
+        assert span.step is None
+        assert arg[1] in (cohdl.BitVector, cohdl.Signed, cohdl.Unsigned)
+
+        self.start = span.start
+        self.stop = span.stop
+        self.type = arg[1]
+
+    @_intrinsic
+    def __str__(self) -> str:
+        return f"{self.start}:{self.stop},{self.type}"
+
+    def __hash__(self) -> int:
+        return hash((self.start, self.stop, self.type))
+
+    def __eq__(self, other: BitVectorArg):
+        return (
+            self.start == other.start
+            and self.stop == other.stop
+            and self.type is other.type
+        )
+
+
+class FieldBitVector(Template[BitVectorArg]):
+    _start_: BitVectorArg.start
+    _stop_: BitVectorArg.stop
+    _type_: BitVectorArg.type
+
+    BitVector: FieldBitVector[BitVectorArg.start : BitVectorArg.stop, cohdl.BitVector]
+    Signed: FieldBitVector[BitVectorArg.start : BitVectorArg.stop, cohdl.Signed]
+    Unsigned: FieldBitVector[BitVectorArg.start : BitVectorArg.stop, cohdl.Unsigned]
+
+    @_intrinsic
+    def __new__(cls, source: cohdl.BitVector):
+        if cls._type_ is cohdl.BitVector:
+            return source[cls._start_ : cls._stop_]
+        elif cls._type_ is cohdl.Unsigned:
+            return source[cls._start_ : cls._stop_].unsigned
+        elif cls._type_ is cohdl.Signed:
+            return source[cls._start_ : cls._stop_].signed
+        else:
+            fail("invalid target type {}", cls._type_)
+
 
 class Field:
-    def __class_getitem__(cls, *args):
-        assert len(args) == 1
-        arg = args[0]
-
+    def __class_getitem__(cls, arg):
         if isinstance(arg, int):
-            return Field.Bit[arg]
+            return FieldBit[arg]
         else:
-            assert isinstance(arg, slice)
+            return FieldBitVector[arg]
+
+
+_bitfield_classes: dict[int, type[BitField]] = {}
+
+
+class BitField(AssignableType):
+    @_intrinsic
+    def __class_getitem__(cls, arg):
+        assert isinstance(arg, int)
+
+        if arg not in _bitfield_classes:
+            newtype = type(
+                f"BitField[{arg}]",
+                (_BitFieldInst,),
+                {
+                    "_cohdlstd_is_bitfield_base": True,
+                    "_width_": arg,
+                    "_offset_": None,
+                },
+            )
+
+            _bitfield_classes[arg] = newtype
+
+        return _bitfield_classes[arg]
+
+    def __init__(self, vec: cohdl.BitVector | None = None, *, _qualifier_=Ref):
+        if vec is None:
+            self._vec = _qualifier_[cohdl.BitVector[self._width_]]()
+        elif vec is cohdl.Null or vec is cohdl.Full:
+            self._vec = _qualifier_[cohdl.BitVector[self._width_]](vec)
+        elif isinstance(vec, BitField):
+            assert isinstance(vec, type(self))
+            self._vec = _qualifier_(vec._vec)
+        else:
+            assert vec.width == self._width_
+            self._vec = _qualifier_(vec)
+
+        for name, Field in self._fields_.items():
+            if issubclass(Field, (FieldBit, FieldBitVector)):
+                setattr(self, name, Field(self._vec))
+            else:
+                assert issubclass(Field, BitField)
+                assert (
+                    Field._offset_ is not None
+                ), "the offset of sub-BitFields must be specified"
+
+                subvec = self._vec.msb(rest=Field._offset_).lsb(Field._width_)
+                setattr(self, name, Field(subvec, _qualifier_=Ref))
+
+    def _assign_(self, source, mode: cohdl.AssignMode):
+        if isinstance(source, BitField):
+            assert isinstance(source, type(self))
+            self._vec._assign_(source._vec, mode)
+        elif isinstance(source, dict):
+            for name, value in source.items():
+                getattr(self, name)._assign_(value, mode)
+        else:
+            assert instance_check(source, cohdl.BitVector[self._width_])
+            self._vec._assign_(source, mode)
+
+    @classmethod
+    @_intrinsic
+    def _count_bits_(cls):
+        return cls._width_
+
+    @classmethod
+    def _from_bits_(cls, bitvector: cohdl.BitVector, qualifier):
+        return cls(bitvector, _qualifier_=qualifier)
+
+    def _to_bits_(self):
+        return cohdl.Temporary(self._vec)
+
+    @_intrinsic
+    def __str__(self):
+        fields = {name: str(getattr(self, name)) for name in self._fields_}
+        return f"{type(self).__name__}({self._vec}, {fields})"
+
+
+BitField.Field = Field
+
+
+class BitfieldArgs:
+    def __init__(self, arg):
+        assert isinstance(arg, int)
+        self.offset: int = arg
+
+    @_intrinsic
+    def __str__(self) -> str:
+        return str(self.offset)
+
+    def __hash__(self) -> int:
+        return hash(self.offset)
+
+    def __eq__(self, other: BitfieldArgs) -> bool:
+        return self.offset == other.offset
+
+
+class _BitFieldInst(BitField):
+    # _offset_: int
+    # _fields_: dict[str, type]
+
+    @_intrinsic
+    def __class_getitem__(cls, arg):
+        if isinstance(arg, slice):
+            assert isinstance(arg.start, int)
+            assert isinstance(arg.stop, int)
             assert arg.step is None
-            return Field.BitVector[arg.start : arg.stop]
+            assert arg.start - arg.stop + 1 == cls._width_
+            arg = arg.stop
 
-    class Bit:
-        offset: int
+        assert isinstance(arg, int)
+        subclasses = cls._cohdlstd_subclasses
 
-        @_intrinsic
-        def __new__(cls, source):
-            return source[cls.offset]
+        if arg in subclasses:
+            return subclasses[arg]
 
-        def __class_getitem__(cls, offset_):
-            class Bit(Field.Bit):
-                offset = offset_
-
-            return Bit
-
-    class BitVector:
-        start: int
-        stop: int
-
-        @_intrinsic
-        def __new__(cls, source):
-            return source[cls.start : cls.stop].bitvector
-
-        def __class_getitem__(cls, arg):
-            class BitVector(Field.BitVector):
-                start = arg.start
-                stop = arg.stop
-
-            class Unsigned(BitVector):
-                def __new__(cls, source):
-                    return source[cls.start : cls.stop].unsigned
-
-            class Signed(BitVector):
-                def __new__(cls, source):
-                    return source[cls.start : cls.stop].signed
-
-            BitVector.BitVector = BitVector
-            BitVector.Unsigned = Unsigned
-            BitVector.Signed = Signed
-
-            return BitVector
-
-    class Unsigned:
-        pass
-
-    class Signed:
-        pass
-
-
-class _BitfieldClass(AssignableType):
-    ...
-
-
-def bitfield(cls_=None, *, offset=0):
-    def helper(cls):
-        assert (
-            cls.__init__ is object.__init__ or cls.__init__ is AssignableType.__init__
+        newtype = type(
+            f"{cls.__name__}[{arg}]",
+            (subclasses[None],),
+            {"_offset_": arg, "_cohdlstd_is_offset_bitfield": False},
         )
-        assert not hasattr(cls, "_assign_") or cls._assign_ is AssignableType._assign_
-        assert (
-            not hasattr(cls, "init_from")
-            or cls.init_from.__func__ is AssignableType.init_from.__func__
-        )
+        subclasses[arg] = newtype
+        return newtype
 
-        fixed_width = cls_ if isinstance(cls_, int) else None
+    @_intrinsic
+    def __init_subclass__(cls):
+        if "_cohdlstd_is_bitfield_base" in cls.__dict__:
+            return
 
-        fields = {
-            name: value
-            for name, value in typing.get_type_hints(cls).items()
-            if issubclass(value, (Field.Bit, Field.BitVector, _BitfieldClass))
-        }
+        if hasattr(cls, "_cohdlstd_bitfield_init_done"):
+            assert (
+                cls._cohdlstd_is_offset_bitfield == False
+            ), "BitFields may not be derived"
+            cls._cohdlstd_is_offset_bitfield = True
+            return
 
-        subbitfields = {
-            name: value
-            for name, value in cls.__dict__.items()
-            if isinstance(value, type) and issubclass(value, _BitfieldClass)
-        }
+        fields = {}
+        for name, value in typing.get_type_hints(cls).items():
+            assert issubclass(value, (FieldBit, FieldBitVector, _BitFieldInst))
+            fields[name] = value
 
-        class BitfieldClass(_BitfieldClass, cls):
-            __name__ = cls.__name__
-
-            def __init__(self, input_vector, *, extract_sub=False):
-                offset_ = offset
-                if extract_sub:
-                    assert fixed_width is not None
-                    input_vector = input_vector[offset_ + fixed_width - 1 : offset_]
-                    offset_ = 0
-
-                if fixed_width is not None:
-                    assert fixed_width == len(input_vector)
-
-                for name, Field in fields.items():
-                    setattr(self, name, Field(input_vector.msb(rest=offset_)))
-
-                for name, Sub in subbitfields.items():
-                    setattr(self, name, Sub(input_vector, extract_sub=True))
-
-                self._input_vector = input_vector
-
-            def _assign_(self, source, mode: cohdl.AssignMode):
-                if isinstance(source, _BitfieldClass):
-                    assert isinstance(source, type(self))
-
-                    for name in fields:
-                        getattr(self, name)._assign_(getattr(source, name), mode)
-
-                    for name_ in subbitfields:
-                        getattr(self, name_)._assign_(getattr(source, name_), mode)
-                elif isinstance(source, dict):
-                    for name, value in source.items():
-                        getattr(self, name)._assign_(value, mode)
-                else:
-                    self._input_vector._assign_(source, mode)
-
-            def _assign(self, source):
-                if isinstance(source, _BitfieldClass):
-                    assert isinstance(source, type(self))
-
-                    for name in fields:
-                        getattr(self, name)._assign(getattr(source, name))
-
-                    for name_ in subbitfields:
-                        getattr(self, name_)._assign(getattr(source, name_))
-                elif isinstance(source, dict):
-                    for name, value in source.items():
-                        getattr(self, name)._assign(value)
-                else:
-                    self._input_vector._assign(source)
-
-            @classmethod
-            def _init_qualified_(cls, TypeQualifyer, **defaults):
-                assert fixed_width is not None
-
-                if not evaluated():
-                    initial = cohdl.BitVector[fixed_width]()
-
-                    if len(defaults) != 0:
-                        inital_view = cls(initial)
-                        inital_view._assign(defaults)
-                else:
-                    initial = cohdl.Variable[cohdl.BitVector[fixed_width]]()
-
-                    if len(defaults) != 0:
-                        inital_view = cls(initial)
-                        inital_view._assign_(defaults, cohdl.AssignMode.VALUE)
-
-                return cls(TypeQualifyer(initial))
-
-        for name, value in fields.items():
-            setattr(BitfieldClass, name, value)
-
-        for name, value in subbitfields.items():
-            setattr(BitfieldClass, name, value)
-
-        BitfieldClass.__name__ = cls.__name__
-        return BitfieldClass
-
-    if cls_ is None or isinstance(cls_, int):
-        return helper
-    return helper(cls_)
-
-
-def make_bitfield(source, **fields):
-    @bitfield
-    class _BitField:
-        __annotations__ = fields
-
-    return _BitField(source)
-
-
-def underlying_value(source):
-    return source._input_vector
+        cls._fields_ = fields
+        setattr(cls, "_cohdlstd_bitfield_init_done", True)
+        setattr(cls, "_cohdlstd_subclasses", {None: cls})
