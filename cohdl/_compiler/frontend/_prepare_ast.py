@@ -131,12 +131,11 @@ def _add_exception_frame(
 
         if _prev_traceback is not None:
             custom_tb = TracebackType(_prev_traceback.tb, new_frame, 1, fn_linenumber)
+            exception.__traceback__.tb_next = custom_tb
         else:
-            custom_tb = TracebackType(
-                exception.__traceback__.tb_next, new_frame, 1, fn_linenumber
-            )
+            custom_tb = TracebackType(None, new_frame, 1, fn_linenumber)
+            exception.with_traceback(custom_tb)
 
-        exception.__traceback__.tb_next = custom_tb
         _prev_traceback = _PrevCustomTb(custom_tb, fn_name, fn_file, fn_linenumber)
 
 
@@ -258,13 +257,26 @@ class PrepareAst:
         return out.Value(subresult, bound)
 
     def convert_intrinsic(self, fn, args, kwargs):
-        if not _has_intrinsic_replacement(fn):
-            return out.Value(fn(*args, **kwargs), [])
 
-        replacement = _intrinsic_replacements[fn]
+        try:
+            if not _has_intrinsic_replacement(fn):
+                return out.Value(fn(*args, **kwargs), [])
 
-        if not replacement.is_special_case:
-            return out.Value(replacement.fn(*args, **kwargs), [])
+            replacement = _intrinsic_replacements[fn]
+
+            if not replacement.is_special_case:
+                return out.Value(replacement.fn(*args, **kwargs), [])
+        except BaseException as err:
+            # an exception occurred in an intrinsic function, set the global
+            # _prev_traceback variable so the cohdl internals are skipped when
+            # the pretty_traceback option is set.
+            # Only the first argument of _PrevCustomTb is relevant.
+            # The others are only used to detect duplicate frames that
+            # refer to the same code line.
+
+            global _prev_traceback
+            _prev_traceback = _PrevCustomTb(err.__traceback__.tb_next, "", "", 0)
+            raise err
 
         if replacement.evaluate:
             return self.subcall(replacement.fn, args, kwargs)
