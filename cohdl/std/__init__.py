@@ -68,6 +68,7 @@ from ._core_utility import (
     concat,
     stretch,
     apply_mask,
+    Mask,
     as_bitvector,
     rol,
     ror,

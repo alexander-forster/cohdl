@@ -52,5 +52,7 @@ from ._core import SourceLocation, is_primitive, is_primitive_type
 
 from ._core import _InlineCode, inline_raw, vhdl
 
+from ._compiler.frontend import use_pretty_traceback
+
 from . import std
 from . import utility

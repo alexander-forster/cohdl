@@ -27,19 +27,21 @@ class _TemplateMeta:
         self.arg = arg
         self.mode = mode
         self.argtype = argtype
-        self.instances = instances
+        self.instances: dict[type, dict[any, type]] = instances
         self.original_class_getitem = original_class_getitem
         self.annotations = annotations
 
-    def instance_exists(self, template_arg):
-        return template_arg in self.instances
+    def instance_exists(self, specialized_type: type, template_arg):
+        specialized_cache = self.instances.setdefault(specialized_type, {})
+        return template_arg in specialized_cache
 
-    def get_instance(self, template_arg):
-        return self.instances[template_arg]
+    def get_instance(self, specialized_type: type, template_arg):
+        return self.instances[specialized_type][template_arg]
 
-    def add_instance(self, template_arg, instance):
-        assert template_arg not in self.instances
-        self.instances[template_arg] = instance
+    def add_instance(self, specialized_type: type, template_arg, instance):
+        specialized_cache = self.instances.setdefault(specialized_type, {})
+        assert template_arg not in specialized_cache
+        specialized_cache[template_arg] = instance
 
 
 @_intrinsic
@@ -48,8 +50,8 @@ def class_getitem_specialize(cls: type[Template], args):
 
     template_arg = meta.argtype(args)
 
-    if meta.instance_exists(template_arg):
-        return meta.get_instance(template_arg)
+    if meta.instance_exists(cls, template_arg):
+        return meta.get_instance(cls, template_arg)
 
     # instantiate and add new type early
     # so nested template types are possible
@@ -64,25 +66,25 @@ def class_getitem_specialize(cls: type[Template], args):
         {"__init_subclass__": nop},
     )
 
-    meta.add_instance(template_arg, newtype)
+    meta.add_instance(cls, template_arg, newtype)
 
     class_members = {}
 
     if hasattr(cls, "__class_getitem__"):
         class_members["__class_getitem__"] = cls.__class_getitem__
 
-    module_dict = inspect.getmodule(cls).__dict__
-
-    template_scope = {
-        name: value if value is not meta.argtype else template_arg
-        for name, value in module_dict.items()
-    }
-
     template_annotations = {}
 
     for parent_type in cls.mro():
         if parent_type is Template:
             break
+
+        module_dict = inspect.getmodule(parent_type).__dict__
+
+        template_scope = {
+            name: value if value is not meta.argtype else template_arg
+            for name, value in module_dict.items()
+        }
 
         for name, value in parent_type.__annotations__.items():
             assert not name in template_annotations
@@ -103,6 +105,8 @@ def class_getitem_specialize(cls: type[Template], args):
 
     for name, value in newdict.items():
         setattr(newtype, name, value)
+
+    newtype._template_specialize_()
 
     # remove __init_subclass__ defined at the start
     # of this function
@@ -156,3 +160,7 @@ class Template:
         result_type = cls._template_deduce_(*args, **kwargs)
         result = object.__new__(result_type)
         return result
+
+    @classmethod
+    def _template_specialize_(cls):
+        pass

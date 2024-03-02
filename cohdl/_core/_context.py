@@ -208,8 +208,7 @@ class Entity(Block):
                 info.architecture(self)
                 info.instantiated = self
 
-    def architecture(self):
-        ...
+    def architecture(self): ...
 
 
 #

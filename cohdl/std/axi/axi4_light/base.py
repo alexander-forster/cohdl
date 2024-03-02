@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from cohdl.std._context import SequentialContext
 from cohdl.std.axi._axi4_channel import Channel
+from cohdl.std._core_utility import Mask, stretch
 
 import cohdl
 
@@ -66,9 +68,11 @@ class Axi4Light:
             S[Bit](Null, name=f"{prefix}awvalid"),
             S[Bit](Null, name=f"{prefix}awready"),
             S[BitVector[addr_width]](Null, name=f"{prefix}awaddr"),
-            S[BitVector[prot_width]](Null, name=f"{prefix}awprot")
-            if prot_width is not None
-            else None,
+            (
+                S[BitVector[prot_width]](Null, name=f"{prefix}awprot")
+                if prot_width is not None
+                else None
+            ),
         )
 
         wrdata = Axi4Light.WrData(
@@ -88,9 +92,11 @@ class Axi4Light:
             S[Bit](Null, name=f"{prefix}arvalid"),
             S[Bit](Null, name=f"{prefix}arready"),
             S[BitVector[addr_width]](Null, name=f"{prefix}araddr"),
-            S[BitVector[prot_width]](Null, name=f"{prefix}arprot")
-            if prot_width is not None
-            else None,
+            (
+                S[BitVector[prot_width]](Null, name=f"{prefix}arprot")
+                if prot_width is not None
+                else None
+            ),
         )
 
         rddata = Axi4Light.RdData(
@@ -314,3 +320,63 @@ class Axi4Light:
         byte_3 = new_data[31:24] if wstrb[3] else old_data[31:24]
 
         return byte_3 @ byte_2 @ byte_1 @ byte_0
+
+    def connect_root_device(self, root):
+        from cohdl.std.reg import RegisterTools
+        from cohdl.std._core_utility import as_awaitable
+
+        assert isinstance(root, RegisterTools.RootDevice)
+        assert root._word_width_() == 32
+        assert root._register_tools_._addr_unit_width_ == 8
+
+        regs = root._flatten_()
+
+        ctx = SequentialContext(self.clk, self.reset)
+
+        for reg in regs:
+            reg._implement_synthesizable_contexts_(ctx)
+
+        @ctx
+        async def proc_read():
+            while True:
+                request = await self.await_read_request()
+
+                result = cohdl.Variable[cohdl.BitVector[32]](cohdl.Null)
+
+                for reg in regs:
+                    if (
+                        reg._global_offset_
+                        <= request.addr.unsigned
+                        < reg._global_offset_ + reg._unit_count_()
+                    ):
+                        result @= await as_awaitable(
+                            reg._basic_read_, request.addr.unsigned, None
+                        )
+                        break
+
+                await self.send_read_resp(result)
+                continue
+
+        @ctx
+        async def proc_write():
+            while True:
+                request = await self.await_write_request()
+                mask = cohdl.Variable(stretch(request.strb, 8))
+
+                for reg in regs:
+                    if (
+                        reg._global_offset_
+                        <= request.addr.unsigned
+                        < reg._global_offset_ + reg._unit_count_()
+                    ):
+                        await as_awaitable(
+                            reg._basic_write_,
+                            request.addr.unsigned,
+                            request.data,
+                            Mask(mask),
+                            None,
+                        )
+                        break
+
+                await self.send_write_response()
+                continue

@@ -55,6 +55,90 @@ from cohdl._core._collect_ast_and_scope import (
     _Unbound,
 )
 
+from types import TracebackType, FrameType
+
+_pretty_traceback = True
+
+
+def use_pretty_traceback(val: bool = True):
+    """
+    CoHDL inserts stack frames from traced python functions
+    into the exception trace back. This makes it a lot easier to debug
+    compilation errors because the call stack contains the actual code,
+    that caused the issue and not the compiler functions used to
+    translate it.
+
+    This mode can be switched of using `cohdl.use_pretty_traceback(False)`.
+
+    You probably only want to set this value to False if you want to debug an internal compiler issue.
+    """
+
+    global _pretty_traceback
+    _pretty_traceback = val
+
+
+class _PrevCustomTb:
+    def __init__(self, tb: TracebackType, fn_name, fn_file, fn_linenumber):
+        self.tb = tb
+        self.fn_name = fn_name
+        self.fn_file = fn_file
+        self.fn_linenumber = fn_linenumber
+
+    def same_source(self, fn_name, fn_file, fn_linenumber):
+        return (
+            self.fn_name == fn_name
+            and self.fn_file == fn_file
+            and self.fn_linenumber == fn_linenumber
+        )
+
+
+_prev_traceback: _PrevCustomTb = None
+
+
+def _add_exception_frame(
+    exception: BaseException, fn_name, fn_file, fn_linenumber, globals_dict, locals_dict
+):
+    # helper function to insert stack frames from traced python code
+    # to the exception traceback
+
+    global _prev_traceback
+
+    if _prev_traceback is not None:
+        if _prev_traceback.same_source(fn_name, fn_file, fn_linenumber):
+            return
+
+    # It is not possible to construct the python builtin FrameType from
+    # user code. As a workaround we create a fake by constructing a string of python code
+    # that contains a function with the same name, at the same line number as
+    # in the actual source code. The fake function raises an assertion
+    # so we can extract the frame object after a call to `exec`.
+    code_str = (
+        "\n" * fn_linenumber
+        + f"def {fn_name}():\n\traise AssertionError('dummy')\n{fn_name}()\n"
+    )
+
+    compiled_fn = compile(code_str, filename=fn_file, mode="exec")
+
+    try:
+        # Use the fake function of create a frame object with the correct
+        # function name, line number, filename and local/global variables
+        exec(compiled_fn, globals_dict, locals_dict)
+    except BaseException as dummy_err:
+        new_frame = dummy_err.__traceback__.tb_next.tb_next.tb_frame
+
+        for name, val in locals_dict.items():
+            new_frame.f_locals[name] = val
+
+        if _prev_traceback is not None:
+            custom_tb = TracebackType(_prev_traceback.tb, new_frame, 1, fn_linenumber)
+        else:
+            custom_tb = TracebackType(
+                exception.__traceback__.tb_next, new_frame, 1, fn_linenumber
+            )
+
+        exception.__traceback__.tb_next = custom_tb
+        _prev_traceback = _PrevCustomTb(custom_tb, fn_name, fn_file, fn_linenumber)
+
 
 #
 #
@@ -457,20 +541,50 @@ class PrepareAst:
     def apply(self, inp):
         try:
             return self.apply_impl(inp)
-        except Exception as err:
-            if isinstance(inp, ast.AST):
-                lineno = inp.lineno
-            else:
-                lineno = None
-
-            if not hasattr(err, "_cohdl_trace"):
+        except BaseException as err:
+            if _pretty_traceback:
                 if isinstance(inp, ast.AST):
-                    print(self.error(str(err), lineno))
-                err._cohdl_trace = True
-            else:
-                print(self.error(f"used in {type(inp)}", lineno))
+                    lineno = inp.lineno
+                else:
+                    raise err
 
-            raise err
+                if isinstance(
+                    inp, (ast.If, ast.While, ast.For, ast.With, ast.AsyncWith)
+                ):
+                    # statements in traceback because only function calls
+                    # and the expression, that caused the error are relevant
+                    raise err
+
+                fn_def = self._fn_def
+
+                ctx_location = fn_def.location()
+                fn_name = fn_def.name()
+
+                _add_exception_frame(
+                    err,
+                    fn_name,
+                    ctx_location.file,
+                    ctx_location.line + lineno - 1,
+                    {},
+                    self._scope,
+                )
+                raise err
+            else:
+                if isinstance(inp, ast.AST):
+                    lineno = inp.lineno
+                else:
+                    lineno = None
+
+                self.context_location().file
+
+                if not hasattr(err, "_cohdl_trace"):
+                    if isinstance(inp, ast.AST):
+                        print(self.error(str(err), lineno))
+                    err._cohdl_trace = True
+                else:
+                    print(self.error(f"used in {type(inp)}", lineno))
+
+                raise err
 
     def throw_error(self, msg: str, offset: int):
         raise AssertionError(self.error(msg, offset))
@@ -576,8 +690,7 @@ class PrepareAst:
         return self._scope[name] is not _Unbound
 
     class Target:
-        class _LockVar:
-            ...
+        class _LockVar: ...
 
         def __init__(self, ast_target, converter: PrepareAst, is_top=True):
             self.converter = converter
@@ -597,7 +710,7 @@ class PrepareAst:
             if isinstance(self.target, str):
                 self.converter.set_local(self.target, item)
             else:
-                for target, elem in zip(self.target, item):
+                for target, elem in zip(self.target, item, strict=True):
                     target.unpack(elem)
 
         def restore_locals(self):
@@ -782,7 +895,9 @@ class PrepareAst:
 
                 if ObjTraits.hasattr(value, inp.attr):
                     if inp.attr in vars(value):
-                        assert rhs.aug_assign is not None
+                        assert (
+                            rhs.aug_assign is not None
+                        ), "assignments to existing attributes require one of the following operators '<<=', '^='  or '@='"
                         return self._do_aug_assign(
                             rhs.aug_assign, getattr(value, inp.attr), rhs.value
                         )
@@ -1145,6 +1260,29 @@ class PrepareAst:
             return out.Value(value, cast(list[out.Statement], bound))
 
         if isinstance(inp, ast.Dict):
+            result = {}
+            bound_statements = []
+
+            for key_expr, val_expr in zip(inp.keys, inp.values, strict=True):
+                if key_expr is None:
+                    value = self.apply(val_expr)
+                    bound_statements.append(value)
+                    r = value.result()
+                    result.update(value.result())
+                else:
+                    key = self.apply(key_expr)
+                    bound_statements.append(key)
+                    value = self.apply(val_expr)
+                    bound_statements.append(value)
+                    r = value.result()
+                    result[key.result()] = value.result()
+
+            return out.Value(result, bound_statements)
+
+            #
+            #
+            #
+
             keys = [cast(out.Expression, self.apply(key)) for key in inp.keys]
             values = [cast(out.Expression, self.apply(value)) for value in inp.values]
 
@@ -2007,9 +2145,17 @@ class ConvertPythonInstance:
         if isinstance(inp, Context):
             ctx_type = inp.context_type()
 
-            if ctx_type is ContextType.CONCURRENT:
-                return PrepareAst.convert_concurrent(inp)
-            elif ctx_type is ContextType.SEQUENTIAL:
-                return PrepareAst.convert_sequential(inp)
+            try:
+                if ctx_type is ContextType.CONCURRENT:
+                    return PrepareAst.convert_concurrent(inp)
+                elif ctx_type is ContextType.SEQUENTIAL:
+                    return PrepareAst.convert_sequential(inp)
+            except BaseException as err:
+                if not _pretty_traceback:
+                    raise err
+
+                if _prev_traceback is not None:
+                    err.__traceback__.tb_next = _prev_traceback.tb
+                    raise err
 
             raise AssertionError(f"invalid context type '{ctx_type}'")

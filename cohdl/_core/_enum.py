@@ -47,7 +47,10 @@ class DynamicEnum(_PrimitiveType):
     @classmethod
     def _make_new(cls, val: int, name: str | None):
         if name is None:
-            name = f"{cls.__name__}_{val}"
+            if cls.__name__.endswith("_"):
+                name = f"{cls.__name__}{val}"
+            else:
+                name = f"{cls.__name__}_{val}"
         for existing in cls.__members__:
             assert name != existing.name
 

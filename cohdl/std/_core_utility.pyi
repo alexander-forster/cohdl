@@ -17,9 +17,6 @@ from cohdl._core import (
     BitVector,
     Signed,
     Unsigned,
-    Port,
-    expr_fn,
-    Null,
 )
 
 from cohdl._core import Signal as CohdlSignal
@@ -27,6 +24,9 @@ from cohdl._core import Variable as CohdlVariable
 from cohdl._core import Temporary as CohdlTemporary
 
 from ._context import Duration, Context, SequentialContext
+
+class Null: ...
+class Full: ...
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -133,6 +133,10 @@ class _TemporaryQualifierWrapper:
     def __call__(self, arg: U) -> U: ...
 
 Ref: _RefQualifierWrapper
+"""
+std.Ref asfdasdf
+"""
+
 Value: _ValueQualifierWrapper
 Signal: _SignalQualifierWrapper
 Variable: _VariableQualifierWrapper
@@ -431,6 +435,13 @@ def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
     `result_bit = new_bit if mask_bit else old_bit`
     """
 
+class Mask:
+    def __init__(self, val: BitVector | Null | Full): ...
+    def __and__(self, other) -> BitVector: ...
+    def __or__(self, other) -> BitVector: ...
+    def __xor__(self, other) -> BitVector: ...
+    def apply(self, old: BitVector, new: BitVector) -> BitVector: ...
+
 def as_bitvector(inp: BitVector | Bit | str) -> BitVector:
     """
     Returns a BitVector constructed from the argument.
@@ -467,14 +478,19 @@ def ror(inp: BitVector, n: int = 1) -> BitVector:
 
 def lshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
     """
-    Left shift `val` by the width of `fill` and
+    Concatenate `val` and `full` and drop msbs from the result
+    so its width matches that of `val`.
 
     >>> lshift_fill(abcdef, XYZ) == defXYZ
-    >>> lshift_fill()
     """
 
 def rshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
-    """ """
+    """
+    Concatenate `fill` and `val` and drop lsbs from the result
+    so its width matches that of `val`.
+
+    >>> rshift_fill(abcdef, XYZ) == XYZabc
+    """
 
 def batched(input: BitVector, n: int) -> list[BitVector]:
     """

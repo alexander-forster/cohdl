@@ -69,4 +69,12 @@ class Template(Generic[TemplateArg]):
         Given a set of constructor arguments, this classmethod
         should return the type fitting the arguments.
         """
+
+    @classmethod
+    def _template_specialize_(cls):
+        """
+        Called at the and of each new template specialization.
+        Use to customize the generated types similar to __init_subclass__
+        """
+
     def __class_getitem__(cls: Self, args) -> Self: ...

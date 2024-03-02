@@ -25,7 +25,10 @@ class _Prefix:
         if cnt == 0:
             self._prefix = prefix
         else:
-            self._prefix = f"{prefix}_{cnt}"
+            if prefix.endswith("_"):
+                self._prefix = f"{prefix}{cnt}"
+            else:
+                self._prefix = f"{prefix}_{cnt}"
 
         self._scope_active = False
         self._used_names = []

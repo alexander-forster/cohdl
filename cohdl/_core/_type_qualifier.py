@@ -161,14 +161,34 @@ class _TypeQualifier(type):
         if type_spec in cls._SubTypes:
             return cls._SubTypes[type_spec]
 
-        if cls is Port:
+        # issubclass(Signal[BitVector[32]], Signal[BitVector]) should return True
+        if issubclass(WrappedType, BitVector) and hasattr(WrappedType, "_width"):
+            if issubclass(WrappedType, Unsigned):
+                parent_cls = (
+                    cls[Unsigned] if direction is None else cls[Unsigned, direction]
+                )
+            elif issubclass(WrappedType, Signed):
+                parent_cls = (
+                    cls[Signed] if direction is None else cls[Signed, direction]
+                )
+            else:
+                parent_cls = (
+                    cls[BitVector] if direction is None else cls[BitVector, direction]
+                )
+        else:
+            parent_cls = cls
+
+        if issubclass(parent_cls, Port):
             assert isinstance(direction, Port.Direction)
+
             new_type = type(
-                cls.__name__, (cls,), {"_Wrapped": WrappedType, "_direction": direction}
+                cls.__name__,
+                (parent_cls,),
+                {"_Wrapped": WrappedType, "_direction": direction},
             )
         else:
             assert direction is None
-            new_type = type(cls.__name__, (cls,), {"_Wrapped": WrappedType})
+            new_type = type(cls.__name__, (parent_cls,), {"_Wrapped": WrappedType})
 
         cls._SubTypes[type_spec] = new_type
         return new_type
@@ -1218,8 +1238,7 @@ class Temporary(TypeQualifier):
     _SubTypes = {}
 
 
-class Generic:
-    ...
+class Generic: ...
 
 
 Signal._Qualifier = Signal

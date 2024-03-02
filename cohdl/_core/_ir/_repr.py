@@ -100,8 +100,9 @@ class Statement:
         return operation(self)
 
     @abstractmethod
-    def visit_objects(self, operation: Callable[[typing.Any, AccessFlags], typing.Any]):
-        ...
+    def visit_objects(
+        self, operation: Callable[[typing.Any, AccessFlags], typing.Any]
+    ): ...
 
     visit_referenced_objects = _visit_referenced_objects
 
@@ -123,8 +124,7 @@ class Statement:
         raise AssertionError("abstract method called")
 
     @abstractmethod
-    def dump(self) -> IndentBlock:
-        ...
+    def dump(self) -> IndentBlock: ...
 
 
 class Expression(Statement):
@@ -143,8 +143,7 @@ class Expression(Statement):
         raise AssertionError("abstract method called")
 
     @abstractmethod
-    def dump(self) -> IndentBlock:
-        ...
+    def dump(self) -> IndentBlock: ...
 
     @abstractmethod
     def visit_objects(self, operation):
@@ -648,8 +647,7 @@ class _SignalAlias(Statement):
         self.signal = signal
         self.replacement = replacement
 
-    def visit_objects(self, operation: Callable):
-        ...
+    def visit_objects(self, operation: Callable): ...
 
     def copy(self) -> _SignalAlias:
         raise AssertionError("_SignalAlias should not be present after parsing")
@@ -1182,13 +1180,19 @@ class Statemachine(Statement):
         if name is None:
             enum_name = "process_state"
         else:
-            enum_name = f"state_{name}"
+            if name.startswith("_"):
+                enum_name = f"state{name}"
+            else:
+                enum_name = f"state_{name}"
 
         self._state_type = cohdl_enum.Enum(
             enum_name, [f"state_{nr}" for nr in range(len(states))]
         )
+
+        state_name = f"s{name}" if name.startswith("_") else f"s_{name}"
+
         self._current_state = Signal[self._state_type](
-            self._state_type(1), name=f"s_{name}"
+            self._state_type(1), name=state_name
         )
 
         ctx._set_state_signal(self._current_state)
@@ -1446,9 +1450,11 @@ class Sequential(Context):
             if isinstance(stmt, _ResetContext):
                 return CodeBlock(
                     [
-                        SignalAssignment(r, r.default())
-                        if isinstance(r, Signal)
-                        else VariableAssignment(r, r.default())
+                        (
+                            SignalAssignment(r, r.default())
+                            if isinstance(r, Signal)
+                            else VariableAssignment(r, r.default())
+                        )
                         for r in resettable
                     ],
                     None,

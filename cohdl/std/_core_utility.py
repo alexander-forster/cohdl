@@ -71,7 +71,10 @@ class _Value:
             arg = args[0]
 
             if isinstance(arg, TypeQualifier):
-                return Temporary[T](arg)
+                if isinstance(arg, Temporary[T]):
+                    return arg
+                else:
+                    return Temporary[T](arg)
             elif isinstance(arg, TypeQualifierBase):
                 return TypeQualifierBase.decay(arg)
             else:
@@ -474,7 +477,9 @@ def concat(first, *args):
         if instance_check(first, Bit):
             return as_bitvector(first)
         else:
-            assert instance_check(first, BitVector)
+            assert instance_check(
+                first, BitVector
+            ), "first is {} and not a BitVector".format(first)
             return Value[BitVector[len(first)]](first)
     else:
         return _concat_impl([first, *args])
@@ -500,6 +505,19 @@ def stretch(val: Bit | BitVector, factor: int):
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
     assert old.width == new.width
     return (old & ~mask) | (new & mask)
+
+
+class Mask:
+    def __init__(self, val):
+        self._val = val
+
+    def apply(self, old, new):
+        if self._val is Null:
+            return Temporary(old)
+        elif self._val is Full:
+            return Temporary(new.copy())
+        else:
+            return apply_mask(old, new, self._val)
 
 
 def as_bitvector(inp: BitVector | Bit | str):

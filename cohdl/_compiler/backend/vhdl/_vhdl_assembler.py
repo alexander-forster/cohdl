@@ -312,10 +312,20 @@ class VhdlAssembler:
                 if port.has_default():
                     buffer = Signal[port.type](
                         port.default(),
-                        name=f"buffer_{port.name()}",
+                        name=(
+                            f"buffer{port.name()}"
+                            if port.name().endswith("_")
+                            else f"buffer_{port.name()}"
+                        ),
                     )
                 else:
-                    buffer = Signal[port.type](name=f"buffer_{port.name()}")
+                    buffer = Signal[port.type](
+                        name=(
+                            f"buffer{port.name()}"
+                            if port.name().endswith("_")
+                            else f"buffer_{port.name()}"
+                        )
+                    )
 
                 buffer_assignments.append(
                     vhdl.SignalAssignment(vhdl.Target(port), vhdl.Value(buffer))

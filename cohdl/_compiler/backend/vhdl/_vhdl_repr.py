@@ -704,7 +704,11 @@ class VhdlScope:
             base_name = name
             while name.lower() in used_names:
                 cnt += 1
-                name = base_name + "_" + str(cnt)
+
+                if not base_name.endswith("_"):
+                    name = base_name + "_" + str(cnt)
+                else:
+                    name = base_name + str(cnt)
 
             decl.name = name
             used_names.add(name.lower())
