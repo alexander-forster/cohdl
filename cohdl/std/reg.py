@@ -207,24 +207,13 @@ class RegisterObject(std.Template[GenericArg]):
     def _print_(self, *args, **kwargs):
         print(self._impl_print().dump(), *args, **kwargs)
 
-    def _implement_synthesizable_contexts_(self, ctx: SequentialContext):
-
-        if hasattr(self, "_impl_"):
-            self._impl_(ctx)
-
-        if hasattr(self, "_impl_sequential_"):
-            ctx(self._impl_sequential_)
-
-        if hasattr(self, "_impl_concurrent_"):
-            concurrent(self._impl_concurrent_)
-
-    def _impl_flatten(
-        self,
-    ) -> list[RegisterObject] | RegisterObject:
+    def _impl_flatten(self, include_devices) -> list[RegisterObject] | RegisterObject:
         return self
 
-    def _flatten_(self) -> list[RegisterObject]:
-        object_list: list[RegisterObject] = _expand_lists(self._impl_flatten())
+    def _flatten_(self, include_devices=False) -> list[RegisterObject]:
+        object_list: list[RegisterObject] = _expand_lists(
+            self._impl_flatten(include_devices=include_devices)
+        )
 
         assert all(isinstance(obj, RegisterObject) for obj in object_list)
 
@@ -234,12 +223,13 @@ class RegisterObject(std.Template[GenericArg]):
 
         object_list = sorted(object_list, key=lambda obj: obj._global_word_offset_)
 
-        for current, next in zip(object_list, object_list[1:]):
-            assert current._global_word_offset_ < next._global_word_offset_
-            assert (
-                current._global_word_offset_ + current._word_count_
-                <= next._global_word_offset_
-            )
+        if not include_devices:
+            for current, next in zip(object_list, object_list[1:]):
+                assert current._global_word_offset_ < next._global_word_offset_
+                assert (
+                    current._global_word_offset_ + current._word_count_
+                    <= next._global_word_offset_
+                )
 
         return object_list
 
@@ -298,6 +288,7 @@ class RegisterDevice(RegisterObject):
 
         if parent is None:
             self._global_offset_ = 0
+            self._global_word_offset_ = 0
         else:
             self._global_offset_ = parent._global_offset_ + type(self)._parent_offset_
 
@@ -334,10 +325,18 @@ class RegisterDevice(RegisterObject):
 
         return block
 
-    def _impl_flatten(self) -> list[RegisterObject]:
-        return [
-            getattr(self, name)._impl_flatten() for name in type(self)._member_types_
+    def _impl_flatten(self, include_devices) -> list[RegisterObject]:
+        if include_devices:
+            result = [self]
+        else:
+            result = []
+
+        result += [
+            getattr(self, name)._impl_flatten(include_devices=include_devices)
+            for name in type(self)._member_types_
         ]
+
+        return result
 
     def _basic_read_(self, addr, meta):
         # RegisterDevice is a collection of RegisterObjects
@@ -348,18 +347,6 @@ class RegisterDevice(RegisterObject):
         # RegisterDevice is a collection of RegisterObjects
         # _basic_write_ should be called on them, not on the device
         raise AssertionError("_basic_write_ called on RegiserDevice")
-
-    def _impl_(self, ctx: std.SequentialContext):
-        for name in type(self)._member_types_:
-            getattr(self, name)._impl_(ctx)
-
-    def _impl_sequential_(self):
-        for name in type(self)._member_types_:
-            getattr(self, name)._impl_sequential_()
-
-    def _impl_concurrent_(self):
-        for name in type(self)._member_types_:
-            getattr(self, name)._impl_concurrent_()
 
     def __init_subclass__(cls, *, word_count=_None, readonly=False, writeonly=False):
         if word_count is _None:
@@ -403,6 +390,19 @@ class RegisterDevice(RegisterObject):
 
 
 class RootDevice(RegisterDevice):
+    def _implement_synthesizable_contexts_(self, ctx: SequentialContext):
+        content = self._flatten_(include_devices=True)
+
+        for elem in content:
+            if hasattr(elem, "_impl_"):
+                elem._impl_(ctx)
+
+            if hasattr(elem, "_impl_sequential_"):
+                ctx(elem._impl_sequential_)
+
+            if hasattr(elem, "_impl_concurrent_"):
+                concurrent(elem._impl_concurrent_)
+
     def __init__(self, *args, **kwargs):
         super().__init__(
             parent=None, name=type(self).__name__, args=args, kwargs=kwargs
@@ -434,8 +434,14 @@ class _FieldArg:
     offset: int
     width: int
     is_bit: bool
+    default: None
 
     def __init__(self, arg):
+        if isinstance(arg, tuple):
+            arg, self.default = arg
+        else:
+            self.default = None
+
         if isinstance(arg, int):
             self.offset = arg
             self.width = 1
@@ -458,13 +464,14 @@ class _FieldArg:
             return f"{self.offset+self.width-1}:{self.offset}"
 
     def __hash__(self) -> int:
-        return hash((self.offset, self.width, self.is_bit))
+        return hash((self.offset, self.width, self.is_bit, type(self.default)))
 
     def __eq__(self, value: _FieldArg) -> bool:
         return (
             self.offset == value.offset
             and self.width == value.width
             and self.is_bit == value.is_bit
+            and self.default == value.default
         )
 
 
@@ -523,7 +530,10 @@ class Field(std.Template[_FieldArg], FieldBase):
                 assert value._field_arg.is_bit == self._field_arg.is_bit
                 other_value = value._value
             else:
-                other_value = value
+                if value is None:
+                    other_value = arg.default
+                else:
+                    other_value = value
 
             if arg.is_bit:
                 self._value = _qualifier_[Bit](other_value)
@@ -854,8 +864,11 @@ class Array(RegisterObject):
 
         return block
 
-    def _impl_flatten(self) -> list[RegisterObject] | RegisterObject:
-        return [*self._elements]
+    def _impl_flatten(self, include_devices) -> list[RegisterObject] | RegisterObject:
+        if include_devices:
+            return [self, *self._elements]
+        else:
+            return [*self._elements]
 
     def __init_subclass__(cls, readonly=False, writeonly=False):
         super().__init_subclass__(readonly, writeonly)
@@ -955,5 +968,4 @@ RegisterTools.Array = Array
 RegisterTools.AddrRange = AddrRange
 
 
-def register_tools(word_width: int = 32) -> type[RegisterTools]:
-    return RegisterTools
+reg32 = RegisterTools[32, 8]

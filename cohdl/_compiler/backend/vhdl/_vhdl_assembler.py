@@ -316,7 +316,7 @@ class VhdlAssembler:
                             f"buffer{port.name()}"
                             if port.name().endswith("_")
                             else f"buffer_{port.name()}"
-                        ),
+                        ).strip("_"),
                     )
                 else:
                     buffer = Signal[port.type](
@@ -324,7 +324,7 @@ class VhdlAssembler:
                             f"buffer{port.name()}"
                             if port.name().endswith("_")
                             else f"buffer_{port.name()}"
-                        )
+                        ).strip("_")
                     )
 
                 buffer_assignments.append(

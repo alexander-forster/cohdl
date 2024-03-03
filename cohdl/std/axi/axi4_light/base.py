@@ -329,12 +329,10 @@ class Axi4Light:
         assert root._word_width_() == 32
         assert root._register_tools_._addr_unit_width_ == 8
 
-        regs = root._flatten_()
-
         ctx = SequentialContext(self.clk, self.reset)
+        root._implement_synthesizable_contexts_(ctx)
 
-        for reg in regs:
-            reg._implement_synthesizable_contexts_(ctx)
+        regs = root._flatten_()
 
         @ctx
         async def proc_read():

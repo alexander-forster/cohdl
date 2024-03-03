@@ -700,15 +700,15 @@ class VhdlScope:
             else:
                 raise AssertionError("Internal error, cannot name object")
 
+            # remove leading and trailing underscores
+            # since they are not allowed in vhdl
+            name = name.strip("_")
+
             cnt = 0
             base_name = name
             while name.lower() in used_names:
                 cnt += 1
-
-                if not base_name.endswith("_"):
-                    name = base_name + "_" + str(cnt)
-                else:
-                    name = base_name + str(cnt)
+                name = base_name + str(cnt)
 
             decl.name = name
             used_names.add(name.lower())
