@@ -178,6 +178,10 @@ def as_writeable_vector(*parts, default=None):
 
 class _ArrayArgs:
     def __init__(self, args: tuple):
+        assert (
+            isinstance(args, tuple) and len(args) == 2
+        ), "std.Array should be declared like this: std.Array[TYPE, ELEM_CNT]"
+
         elem_type, elem_cnt = args
         self.elem_type = elem_type
         self.elem_cnt = int(elem_cnt)
@@ -189,13 +193,57 @@ class _ArrayArgs:
         return self.elem_type is other.elem_type and self.elem_cnt == other.elem_cnt
 
 
+@_intrinsic
+def _check_array_defaults(defaults: list, elem_width: int):
+    for nr, elem in enumerate(defaults):
+        assert not isinstance(
+            elem, TypeQualifierBase
+        ), f"default value at index {nr} is not compile time constant"
+
+        assert isinstance(
+            elem, BitVector[elem_width]
+        ), f"serialized type of default element {nr} ({type(elem)}) does not match type needed for array elements ({BitVector[elem_width]})"
+
+
 class Array(Template[_ArrayArgs]):
     _count_: _ArrayArgs.elem_cnt
     _elemtype_: _ArrayArgs.elem_type
 
-    def __init__(self, _qualifier_=Signal):
+    def __init__(self, val=None, _qualifier_=Signal):
         elem_width = count_bits(self._elemtype_)
-        self._content = _qualifier_[CohdlArray[BitVector[elem_width], self._count_]]()
+
+        if val is None or val is Null or val is Full:
+            self._content = _qualifier_[
+                CohdlArray[BitVector[elem_width], self._count_]
+            ](val)
+        else:
+            assert isinstance(
+                val, (list, tuple)
+            ), "default argument must be a list or a tuple"
+            assert (
+                len(val) <= self._count_
+            ), "to many default arguments for array ({} > {})".format(
+                len(val), self._count_
+            )
+
+            default_as_elemtype = [
+                (
+                    val_elem
+                    if isinstance(val_elem, self._elemtype_)
+                    else Value[self._elemtype_](val_elem)
+                )
+                for val_elem in val
+            ]
+
+            default_as_bitvector = [
+                to_bits(default_elem) for default_elem in default_as_elemtype
+            ]
+
+            _check_array_defaults(default_as_bitvector, elem_width)
+
+            self._content = _qualifier_[
+                CohdlArray[BitVector[elem_width], self._count_]
+            ](default_as_bitvector)
 
     @_intrinsic
     def __len__(self):

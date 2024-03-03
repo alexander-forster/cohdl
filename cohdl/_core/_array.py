@@ -4,6 +4,7 @@ from __future__ import annotations
 from ._primitive_type import is_primitive_type, _PrimitiveType
 from ._intrinsic import _intrinsic
 from ._enum import Enum
+from ._boolean import Null, Full
 
 
 class _MetaArray(type):
@@ -62,6 +63,8 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
                 len(val) <= self._count_
             ), "more default arguments than array elements"
             self._value = [elemtype(v) for v in val]
+        elif val is Null or val is Full:
+            self._value = [elemtype(val) for _ in range(self._count_)]
         else:
             assert val is None, "invalid array type"
             self._value = None

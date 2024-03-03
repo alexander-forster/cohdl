@@ -67,11 +67,14 @@ class ValuePair:
 
 
 class OutPair(ValuePair):
-    def assign(self, val: ConstraindValue):
-        if isinstance(val, ValuePair):
-            val = val.mockValue
-        self.mockValue.assign(val)
-        self.is_set = True
+    def assign(self, val: ConstraindValue | None):
+        if val is None:
+            self.is_set = False
+        else:
+            if isinstance(val, ValuePair):
+                val = val.mockValue
+            self.mockValue.assign(val)
+            self.is_set = True
 
     def reset(self):
         self.mockValue.reset()
@@ -107,7 +110,7 @@ class MockBase:
         print("".join(f"{pair.name:>11}" for pair in self._pairs))
         print()
         for records in zip(*[pair.history for pair in self._pairs]):
-            print("".join([f"{record[0]:>5} {record[1]:>5}" for record in records]))
+            print("".join([f"({record[0]:>5} {record[1]:>5}) " for record in records]))
 
     def zero_pairs(self):
         for pair in self._pairs:
@@ -128,11 +131,11 @@ class MockBase:
                     if pair.name is None:
                         assert (
                             pair.dutValue == pair.mockValue.value
-                        ), f"{pair.dutValue} != {pair.mockValue}"
+                        ), f"{pair.dutValue.value} != {pair.mockValue}"
                     else:
                         assert (
                             pair.dutValue == pair.mockValue.value
-                        ), f"{pair.dutValue} != {pair.mockValue} ({pair.name})"
+                        ), f"{pair.dutValue.value} != {pair.mockValue} ({pair.name})"
         except BaseException as e:
             print(f"error on {pair.name}")
             self.dump_record()

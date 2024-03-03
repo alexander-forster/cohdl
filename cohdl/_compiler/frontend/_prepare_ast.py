@@ -911,7 +911,10 @@ class PrepareAst:
                             rhs.aug_assign is not None
                         ), "assignments to existing attributes require one of the following operators '<<=', '^='  or '@='"
                         return self._do_aug_assign(
-                            rhs.aug_assign, getattr(value, inp.attr), rhs.value
+                            rhs.aug_assign,
+                            getattr(value, inp.attr),
+                            rhs.value,
+                            bound=[value_expr],
                         )
                     else:
                         cls_value = getattr(ObjTraits.gettype(value), inp.attr)
@@ -927,7 +930,10 @@ class PrepareAst:
                         else:
                             assert rhs.aug_assign is not None
                             return self._do_aug_assign(
-                                rhs.aug_assign, getattr(value, inp.attr), rhs.value
+                                rhs.aug_assign,
+                                getattr(value, inp.attr),
+                                rhs.value,
+                                bound=[value_expr],
                             )
 
                         if rhs.aug_assign is None:
@@ -935,7 +941,10 @@ class PrepareAst:
                         else:
                             getter = self.subcall(fget, [fself], {})
                             assignment = self._do_aug_assign(
-                                rhs.aug_assign, getter.result(), rhs.value, [getter]
+                                rhs.aug_assign,
+                                getter.result(),
+                                rhs.value,
+                                [value_expr, getter],
                             )
 
                             # per definition aug assignment operators must return the self object
@@ -1909,7 +1918,8 @@ class PrepareAst:
                     )
 
                 result = self.subcall(func_ref, args, kwargs)
-                result._bound_statements = [
+
+                result._bound_statements += [
                     *bound_expressions,
                     *result._bound_statements,
                 ]
