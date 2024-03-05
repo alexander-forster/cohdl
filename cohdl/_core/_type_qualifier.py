@@ -162,28 +162,72 @@ class _TypeQualifier(type):
             return cls._SubTypes[type_spec]
 
         # issubclass(Signal[BitVector[32]], Signal[BitVector]) should return True
-        if issubclass(WrappedType, BitVector) and hasattr(WrappedType, "_width"):
-            if issubclass(WrappedType, Unsigned):
-                parent_cls = (
-                    cls[Unsigned] if direction is None else cls[Unsigned, direction]
-                )
-            elif issubclass(WrappedType, Signed):
-                parent_cls = (
-                    cls[Signed] if direction is None else cls[Signed, direction]
-                )
+        if issubclass(WrappedType, BitVector):
+            if hasattr(WrappedType, "_width"):
+                if issubclass(WrappedType, Unsigned):
+                    if direction is None:
+                        parent_cls = type(
+                            cls.__name__,
+                            (
+                                cls[Unsigned],
+                                cls[BitVector[WrappedType._width]],
+                            ),
+                            {},
+                        )
+                    else:
+                        parent_cls = type(
+                            cls.__name__,
+                            (
+                                cls[Unsigned, direction],
+                                cls[BitVector[WrappedType._width], direction],
+                            ),
+                            {},
+                        )
+                elif issubclass(WrappedType, Signed):
+                    if direction is None:
+                        parent_cls = type(
+                            cls.__name__,
+                            (
+                                cls[Signed],
+                                cls[BitVector[WrappedType._width]],
+                            ),
+                            {},
+                        )
+                    else:
+                        print(cls, WrappedType._width, direction)
+                        parent_cls = type(
+                            cls.__name__,
+                            (
+                                cls[Signed, direction],
+                                cls[BitVector[WrappedType._width], direction],
+                            ),
+                            {},
+                        )
+                else:
+                    parent_cls = (
+                        cls[BitVector]
+                        if direction is None
+                        else cls[BitVector, direction]
+                    )
             else:
-                parent_cls = (
-                    cls[BitVector] if direction is None else cls[BitVector, direction]
-                )
+                if WrappedType is BitVector:
+                    parent_cls = cls
+                elif WrappedType is Unsigned or WrappedType is Signed:
+                    if direction is None:
+                        parent_cls = cls[BitVector]
+                    else:
+                        parent_cls = cls[BitVector, direction]
+                else:
+                    raise AssertionError(f"invalid generic argument to type qualifier")
         else:
             parent_cls = cls
 
         if issubclass(parent_cls, Port):
-            assert isinstance(direction, Port.Direction)
+            assert isinstance(direction, Port.Direction), f"direction = {direction}"
 
             new_type = type(
                 cls.__name__,
-                (parent_cls,),
+                (parent_cls, Signal[WrappedType]),
                 {"_Wrapped": WrappedType, "_direction": direction},
             )
         else:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import sys
 
 import enum
 
@@ -75,20 +76,25 @@ def class_getitem_specialize(cls: type[Template], args):
 
     template_annotations = {}
 
-    for parent_type in cls.mro():
-        if parent_type is Template:
-            break
+    # adopted from typing.get_type_hints
+    for base in reversed(cls.__mro__):
+        base_globals = getattr(sys.modules.get(base.__module__, None), "__dict__", {})
+        ann = base.__dict__.get("__annotations__", {})
 
-        module_dict = inspect.getmodule(parent_type).__dict__
-
-        template_scope = {
-            name: value if value is not meta.argtype else template_arg
-            for name, value in module_dict.items()
+        base_locals = {
+            name: val if val is not meta.argtype else template_arg
+            for name, val in vars(base).items()
         }
 
-        for name, value in parent_type.__annotations__.items():
-            assert not name in template_annotations
-            template_annotations[name] = eval(value, template_scope)
+        base_globals = {
+            name: val if val is not meta.argtype else template_arg
+            for name, val in base_globals.items()
+        }
+
+        base_globals, base_locals = base_locals, base_globals
+
+        for name, value in ann.items():
+            template_annotations[name] = eval(value, base_globals, base_locals)
 
     newdict = {
         **class_members,
