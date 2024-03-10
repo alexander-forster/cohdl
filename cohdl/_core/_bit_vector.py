@@ -56,7 +56,15 @@ class _BitVector(type):
         if shape in cls._SubTypes:
             return cls._SubTypes[shape]
 
-        new_type = type(cls.__name__, (cls,), {"_width": width, "_order": order})
+        if cls._SubTypes is BitVector._SubTypes:
+            new_type = type(cls.__name__, (cls,), {"_width": width, "_order": order})
+        else:
+            new_type = type(
+                cls.__name__,
+                (cls, BitVector[width]),
+                {"_width": width, "_order": order},
+            )
+
         cls._SubTypes[shape] = new_type
         return new_type
 

@@ -95,7 +95,15 @@ def class_getitem_specialize(cls: type[Template], args):
         base_globals, base_locals = base_locals, base_globals
 
         for name, value in ann.items():
-            template_annotations[name] = eval(value, base_globals, base_locals)
+            try:
+                template_annotations[name] = eval(value, base_globals, base_locals)
+            except TypeError as err:
+                err.add_note(
+                    f"maybe you are missing 'from __future__ import annotations' in {base.__module__}"
+                )
+                raise err
+            except BaseException as err:
+                raise err
 
     newdict = {
         **class_members,
