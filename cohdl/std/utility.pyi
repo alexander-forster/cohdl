@@ -138,7 +138,7 @@ class Array(Generic[T, N]):
     limited to builtins. Any serializable type can be stored.
     """
 
-    def __init__(self, _qualifier_=Signal): ...
+    def __init__(self, val=None, _qualifier_=Signal): ...
     def __len__(self) -> int:
         """
         returns the number of elements in the Array

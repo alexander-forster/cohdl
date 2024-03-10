@@ -33,14 +33,6 @@ def _expand_lists(inp):
     return [inp]
 
 
-class _32_:
-    pass
-
-
-class _64_:
-    pass
-
-
 class _None: ...
 
 
@@ -166,8 +158,6 @@ class RegisterObject(std.Template[GenericArg]):
     _generic_arg_: GenericArg
     _global_offset_: int
     _parent_offset_: GenericArg.offset
-    _global_word_offset_: int
-    # _word_count_: int
     _access_: AccessMode = AccessMode.READ_WRITE
     __metadata__ = ()
 
@@ -175,6 +165,14 @@ class RegisterObject(std.Template[GenericArg]):
     _writable_: bool = True
 
     _cohdlstd_objhasconfig: bool = False
+
+    @_intrinsic
+    def _global_word_offset_(self):
+        offset, stride = self._global_offset_, self._register_tools_._word_stride_
+        assert (
+            offset % stride == 0
+        ), f"RegisterObject of type {self} is not word aligned"
+        return offset // stride
 
     @classmethod
     def _template_specialize_(cls):
@@ -189,10 +187,6 @@ class RegisterObject(std.Template[GenericArg]):
         assert (
             self._global_offset_ % self._register_tools_._word_stride_ == 0
         ), "all RegisterObjects must be word aligned"
-
-        self._global_word_offset_ = (
-            self._global_offset_ // self._register_tools_._word_stride_
-        )
 
     def _impl_print(self) -> TextBlock:
         import inspect
@@ -221,14 +215,14 @@ class RegisterObject(std.Template[GenericArg]):
 
         assert all(obj._register_tools_ is reg_tools for obj in object_list)
 
-        object_list = sorted(object_list, key=lambda obj: obj._global_word_offset_)
+        object_list = sorted(object_list, key=lambda obj: obj._global_word_offset_())
 
         if not include_devices:
             for current, next in zip(object_list, object_list[1:]):
-                assert current._global_word_offset_ < next._global_word_offset_
+                assert current._global_word_offset_() < next._global_word_offset_()
                 assert (
-                    current._global_word_offset_ + current._word_count_
-                    <= next._global_word_offset_
+                    current._global_word_offset_() + current._word_count_
+                    <= next._global_word_offset_()
                 )
 
         return object_list
@@ -278,6 +272,7 @@ class RegisterDevice(RegisterObject):
         kwargs=None,
         _cohdlstd_initguard=None,
     ):
+        print(f"    # {name} ")
         if isinstance(self, RootDevice):
             assert parent is None
         else:
@@ -288,7 +283,6 @@ class RegisterDevice(RegisterObject):
 
         if parent is None:
             self._global_offset_ = 0
-            self._global_word_offset_ = 0
         else:
             self._global_offset_ = parent._global_offset_ + type(self)._parent_offset_
 
@@ -413,10 +407,10 @@ class GenericRegister(RegisterObject):
     _word_count_ = 1
 
     async def _basic_read_(self, addr, meta):
-        return await std.as_awaitable(self._on_read_(self))
+        return await std.as_awaitable(self._on_read_)
 
     async def _basic_write_(self, addr, data, mask, meta):
-        return await std.as_awaitable(self._on_write_(self, data, mask))
+        return await std.as_awaitable(self._on_write_, data, mask)
 
     def _on_read_(self):
         return Null
@@ -626,6 +620,12 @@ class FlagField(std.Template[_FlagArg], FieldBase):
         else:
             return self._val
 
+    async def __aenter__(self):
+        await self._flag.__aenter__()
+
+    async def __aexit__(self, val, type, traceback):
+        await self._flag.__aexit__(val, type, traceback)
+
 
 class Register(GenericRegister):
     # _field_types_: dict[str, std.bitfield.FieldBit | std.bitfield.FieldBitVector]
@@ -742,8 +742,10 @@ class Register(GenericRegister):
         if result is None:
             # assert self contains no memory
             assert not any(
-                isinstance(field, (MemField, FlagField))
-                for field in result._fields_.values()
+                [
+                    isinstance(field, (MemField, FlagField))
+                    for field in self._fields_.values()
+                ]
             )
         else:
             for name, field in self._fields_.items():
@@ -816,41 +818,94 @@ class Register(GenericRegister):
         cls._field_types_ = {name: field_type for name, field_type in fields}
 
 
-# class R(Register, readonly=True):
-#    pass
-
-
-# class W(Register, writeonly=True):
-#    pass
-
-
 class Input(GenericRegister, readonly=True):
     def _on_read_(self):
-        reg_width = self._register_tools_._word_width_
-
-        if self._width == reg_width:
-            return self._signal.copy()
+        if self._offset == 0:
+            with_offset = self._signal.copy()
         else:
-            return std.zeros(reg_width - self._width) @ self._signal
+            with_offset = self._signal @ std.zeros(self._offset)
 
-    def _config_(self, signal):
+        if self._padding == 0:
+            with_padding = with_offset
+        else:
+            with_padding = std.zeros(self._padding) @ with_offset
+
+        return with_padding
+
+    def _config_(self, signal, /, offset=None, padding=None, lsbs=False, msbs=False):
         assert isinstance(signal, Signal[BitVector])
-        assert signal.width <= self._register_tools_._word_width_
+        width = self._register_tools_._word_width_
+
+        if lsbs:
+            assert not msbs
+            assert offset is None
+            assert padding is None
+
+            offset = 0
+            padding = width - signal.width
+        elif msbs:
+            assert offset is None
+            assert padding is None
+
+            offset = width - signal.width
+            padding = 0
+        else:
+            offset = 0 if offset is None else offset
+            padding = 0 if padding is None else padding
+
+        assert signal.width + offset + padding == width
+
         self._signal = signal
         self._width = signal.width
+        self._offset = offset
+        self._padding = padding
 
 
 class Output(GenericRegister, writeonly=True):
     def _on_write_(self, data, mask):
-        self._signal <<= std.apply_mask(
-            self._signal, data.lsb(self._width), mask.lsb(self._width)
+        if self._offset == 0:
+            with_offset = self._signal
+        else:
+            with_offset = self._signal @ std.zeros(self._offset)
+
+        if self._padding == 0:
+            with_padding = with_offset
+        else:
+            with_padding = std.zeros(self._padding) @ with_offset
+
+        self._signal <<= (
+            mask.apply(with_padding, data)
+            .lsb(rest=self._padding)
+            .msb(rest=self._offset)
         )
 
-    def _config_(self, signal):
+    def _config_(self, signal, offset=None, padding=None, lsbs=False, msbs=False):
         assert isinstance(signal, Signal[BitVector])
-        assert signal.width <= self._register_tools_._word_width_
+        width = self._register_tools_._word_width_
+
+        if lsbs:
+            assert not msbs
+            assert offset is None
+            assert padding is None
+
+            offset = 0
+            padding = width - signal.width
+        elif msbs:
+            assert offset is None
+            assert padding is None
+
+            offset = width - signal.width
+            padding = 0
+        else:
+            offset = 0 if offset is None else offset
+            padding = 0 if padding is None else padding
+
+        assert signal.width + offset + padding == width
+
         self._signal = signal
         self._width = signal.width
+        self._offset = offset
+        self._padding = padding
 
 
 class Array(RegisterObject):
@@ -877,9 +932,8 @@ class Array(RegisterObject):
             assert isinstance(cls._generic_arg_, GenericArg)
             assert cls._generic_arg_.array_step is not None
             cls._word_count_ = (
-                cls._generic_arg_.end
-                - cls._generic_arg_.offset // cls._register_tools_._word_stride_
-            )
+                cls._generic_arg_.end - cls._generic_arg_.offset
+            ) // cls._register_tools_._word_stride_
 
     def __init__(self, parent: RegisterDevice, name: str, _cohdlstd_initguard=None):
         super().__init__(parent, name)
@@ -941,7 +995,9 @@ class AddrRange(RegisterObject):
             ), "only one of _on_write_ and _on_write_relative_ can be specified"
             return await std.as_awaitable(self._on_write_, addr, data, mask)
         elif hasattr(self, "_on_write_relative_"):
-            return await std.as_awaitable(self._on_write_relative_, addr, data, mask)
+            return await std.as_awaitable(
+                self._on_write_relative_, addr - self._global_offset_, data, mask
+            )
 
 
 RegisterTools.RegisterObject = RegisterObject
@@ -950,9 +1006,6 @@ RegisterTools.RootDevice = RootDevice
 
 RegisterTools.GenericRegister = GenericRegister
 RegisterTools.Register = Register
-RegisterTools.RW = Register
-# RegisterTools.R = R
-# RegisterTools.W = W
 RegisterTools.Field = Field
 RegisterTools.UField = UField
 RegisterTools.SField = SField
