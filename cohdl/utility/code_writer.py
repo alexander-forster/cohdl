@@ -8,9 +8,11 @@ class TextBlock:
         *,
         title=None,
         indent=False,
+        trailer=None,
     ):
         self._title = title
         self._indent = indent if title is None else True
+        self._trailer = trailer
 
         self._content = []
         self.add(content)
@@ -26,6 +28,8 @@ class TextBlock:
     def _dump_impl(self, indent, step=2):
         result = []
 
+        initial_indent = indent
+
         if self._title is not None:
             result.append(indent + self._title)
 
@@ -37,6 +41,9 @@ class TextBlock:
                 result.append(indent + elem)
             else:
                 result.extend(elem._dump_impl(indent, step))
+
+        if self._trailer is not None:
+            result.append(initial_indent + self._trailer)
 
         return result
 

@@ -7,7 +7,7 @@ from cohdl import std
 
 from cohdl.std._context import SequentialContext
 
-from .utility import SyncFlag
+from ..utility import SyncFlag
 
 W = TypeVar("W")
 

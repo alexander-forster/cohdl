@@ -9,9 +9,9 @@ from cohdl._core import AssignMode
 from cohdl._core._intrinsic import _intrinsic
 from cohdl.utility import TextBlock
 
-from ._context import SequentialContext, concurrent
-from .enum import Enum as StdEnum
-from ._core_utility import to_bits
+from .._context import SequentialContext, concurrent
+from ..enum import Enum as StdEnum
+from .._core_utility import to_bits
 
 
 class AccessMode(enum.Enum):
@@ -426,6 +426,13 @@ class GenericRegister(RegisterObject):
 #
 
 
+def _primitive_as_int(input):
+    if isinstance(input, Bit):
+        return 1 if input else 0
+
+    return input.unsigned.to_int()
+
+
 class _FieldArg:
     offset: int
     width: int
@@ -509,6 +516,20 @@ class _FieldArg:
             (self.offset, self.width, self.is_bit, self.underlying, type(self.default))
         )
 
+    def is_enum(self):
+        return self.underlying is not None and issubclass(self.underlying, StdEnum)
+
+    def get_default_as_int(self):
+        if self.underlying is None or self.default is None:
+            return None
+
+        default_val = self.underlying(self.default)
+
+        if self.is_enum():
+            default_val = default_val.raw
+
+        return _primitive_as_int(default_val)
+
     def __eq__(self, value: _FieldArg) -> bool:
         return (
             self.offset == value.offset
@@ -531,6 +552,35 @@ class FieldBase:
 
 class Field(std.Template[_FieldArg], FieldBase):
     _field_arg: _FieldArg
+
+    @classmethod
+    @_intrinsic
+    def _cohdlstd_underlying(cls):
+        arg = cls._field_arg
+        if issubclass(cls, UField):
+            vec_type = Unsigned
+
+            if arg.underlying is not None:
+                assert issubclass(
+                    arg.underlying, Unsigned
+                ), "explicit underlying type of UField is not unsigned"
+        elif issubclass(cls, SField):
+            vec_type = Signed
+
+            if arg.underlying is not None:
+                assert issubclass(
+                    arg.underlying, Signed
+                ), "explicit underlying type of SField is not signed"
+        else:
+            vec_type = BitVector
+
+        if arg.underlying is None:
+            if arg.is_bit:
+                return Bit
+            else:
+                return vec_type[arg.width]
+
+        return arg.underlying
 
     @classmethod
     def _count_bits_(cls):
@@ -559,31 +609,7 @@ class Field(std.Template[_FieldArg], FieldBase):
 
     def __init__(self, value=None, _qualifier_=Signal, extract=False):
         arg = self._field_arg
-
-        if isinstance(self, UField):
-            vec_type = Unsigned
-
-            if arg.underlying is not None:
-                assert issubclass(
-                    arg.underlying, Unsigned
-                ), "explicit underlying type of UField is not unsigned"
-        elif isinstance(self, SField):
-            vec_type = Signed
-
-            if arg.underlying is not None:
-                assert issubclass(
-                    arg.underlying, Signed
-                ), "explicit underlying type of SField is not signed"
-        else:
-            vec_type = BitVector
-
-        if arg.underlying is None:
-            if arg.is_bit:
-                underlying = Bit
-            else:
-                underlying = vec_type[arg.width]
-        else:
-            underlying = arg.underlying
+        underlying = self._cohdlstd_underlying()
 
         if extract:
             if underlying is Bit:
