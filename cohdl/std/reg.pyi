@@ -11,6 +11,13 @@ from .utility import SyncFlag
 
 W = TypeVar("W")
 
+# offset
+OFF = TypeVar("OFF")
+# type
+T = TypeVar("T")
+# default
+D = TypeVar("D")
+
 class GenericArg:
     offset: int
     end: int
@@ -302,7 +309,7 @@ class RegisterTools(Generic[W]):
             constructed from the provided value.
             """
 
-    class Field:
+    class Field(Generic[OFF, T, D]):
         """
         Represents a range of one or more bits in a `Register`.
 
@@ -318,7 +325,7 @@ class RegisterTools(Generic[W]):
             """
 
         @classmethod
-        def _from_bits_(cls, val, qualifier):
+        def _from_bits_(cls: type[Self], val: BitVector, qualifier) -> Self:
             """
             Part of the standard serialization api.
             See `std.from_bits`.
@@ -336,8 +343,8 @@ class RegisterTools(Generic[W]):
         def __ixor__(self, other):
             return self
 
-        def __init__(self, value: BitVector, _qualifier_=Signal): ...
-        def value(self) -> BitVector:
+        def __init__(self, value: T, _qualifier_=Signal): ...
+        def value(self) -> T:
             """
             returns the current value of the `Field`
             """

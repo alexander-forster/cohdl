@@ -10,6 +10,8 @@ from cohdl._core._intrinsic import _intrinsic
 from cohdl.utility import TextBlock
 
 from ._context import SequentialContext, concurrent
+from .enum import Enum as StdEnum
+from ._core_utility import to_bits
 
 
 class AccessMode(enum.Enum):
@@ -429,17 +431,51 @@ class _FieldArg:
     width: int
     is_bit: bool
     default: None
+    underlying: None
 
     def __init__(self, arg):
+        self.underlying = None
+        self.default = None
+        underlying_bit = False
+        underlying_width = None
+
         if isinstance(arg, tuple):
-            arg, self.default = arg
-        else:
-            self.default = None
+            arg, *rest = arg
+            if len(rest) == 0:
+                self.un
+                pass
+            elif len(rest) == 1:
+                if isinstance(rest[0], type):
+                    self.underlying = rest[0]
+                else:
+                    self.default = rest[0]
+            elif len(rest) == 2:
+                assert isinstance(
+                    rest[0], type
+                ), f"expected second argument to define the field type but got {rest[0]}"
+                self.underlying, self.default = rest
+            else:
+                raise AssertionError(f"to many arguments for field initializer")
+
+        if self.underlying is not None:
+            if self.underlying is Bit or (
+                issubclass(self.underlying, StdEnum)
+                and self.underlying._underlying_ is Bit
+            ):
+                underlying_bit = True
+                underlying_width = 1
+            else:
+                underlying_width = std.count_bits(self.underlying)
 
         if isinstance(arg, int):
             self.offset = arg
-            self.width = 1
-            self.is_bit = True
+
+            if self.underlying is not None:
+                self.width = underlying_width
+                self.is_bit = underlying_bit
+            else:
+                self.width = 1
+                self.is_bit = True
         else:
             assert isinstance(arg, slice)
             assert isinstance(arg.start, int)
@@ -451,6 +487,17 @@ class _FieldArg:
             self.width = arg.start - arg.stop + 1
             self.is_bit = False
 
+            if self.underlying is not None:
+                assert not underlying_bit
+                assert self.width == underlying_width
+
+        if self.underlying is not None:
+            if not issubclass(self.underlying, StdEnum):
+                if self.is_bit:
+                    assert issubclass(self.underlying, Bit)
+                else:
+                    assert issubclass(self.underlying, BitVector[self.width])
+
     def __str__(self) -> str:
         if self.is_bit:
             return str(self.offset)
@@ -458,13 +505,16 @@ class _FieldArg:
             return f"{self.offset+self.width-1}:{self.offset}"
 
     def __hash__(self) -> int:
-        return hash((self.offset, self.width, self.is_bit, type(self.default)))
+        return hash(
+            (self.offset, self.width, self.is_bit, self.underlying, type(self.default))
+        )
 
     def __eq__(self, value: _FieldArg) -> bool:
         return (
             self.offset == value.offset
             and self.width == value.width
             and self.is_bit == value.is_bit
+            and self.underlying is value.underlying
             and self.default == value.default
         )
 
@@ -481,7 +531,6 @@ class FieldBase:
 
 class Field(std.Template[_FieldArg], FieldBase):
     _field_arg: _FieldArg
-    _vec_type = BitVector
 
     @classmethod
     def _count_bits_(cls):
@@ -492,7 +541,7 @@ class Field(std.Template[_FieldArg], FieldBase):
         return qualifier[cls](val)
 
     def _to_bits_(self):
-        return Temporary(self._value)
+        return to_bits(self._value)
 
     def __ilshift__(self, other):
         if isinstance(other, Field):
@@ -511,13 +560,58 @@ class Field(std.Template[_FieldArg], FieldBase):
     def __init__(self, value=None, _qualifier_=Signal, extract=False):
         arg = self._field_arg
 
-        if extract:
+        if isinstance(self, UField):
+            vec_type = Unsigned
+
+            if arg.underlying is not None:
+                assert issubclass(
+                    arg.underlying, Unsigned
+                ), "explicit underlying type of UField is not unsigned"
+        elif isinstance(self, SField):
+            vec_type = Signed
+
+            if arg.underlying is not None:
+                assert issubclass(
+                    arg.underlying, Signed
+                ), "explicit underlying type of SField is not signed"
+        else:
+            vec_type = BitVector
+
+        if arg.underlying is None:
             if arg.is_bit:
-                self._value = _qualifier_[Bit](value[arg.offset])
+                underlying = Bit
             else:
-                self._value = _qualifier_[self._vec_type[arg.width]](
+                underlying = vec_type[arg.width]
+        else:
+            underlying = arg.underlying
+
+        if extract:
+            if underlying is Bit:
+                self._value = _qualifier_[Bit](value[arg.offset])
+            elif issubclass(underlying, BitVector):
+                self._value = _qualifier_[underlying[arg.width]](
                     value[arg.offset + arg.width - 1 : arg.offset]
                 )
+            else:
+                assert issubclass(
+                    underlying, StdEnum
+                ), "underlying field type must be Bit, BitVector or a std.Enum"
+
+                enum_underlying = underlying._underlying_
+
+                assert issubclass(
+                    enum_underlying, (Bit, BitVector)
+                ), "the underlying type of an enum field must be a Bit or a BitVector"
+
+                if enum_underlying is Bit:
+                    self._value = underlying._unsafe_init_(
+                        value[arg.offset], _qualifier_
+                    )
+                else:
+                    self._value = underlying._unsafe_init_(
+                        value[arg.offset + arg.width - 1 : arg.offset], _qualifier_
+                    )
+
         else:
             if isinstance(value, Field):
                 assert value._field_arg.width == self._field_arg.width
@@ -529,21 +623,27 @@ class Field(std.Template[_FieldArg], FieldBase):
                 else:
                     other_value = value
 
-            if arg.is_bit:
+            if underlying is Bit:
                 self._value = _qualifier_[Bit](other_value)
+            elif issubclass(underlying, BitVector):
+                self._value = _qualifier_[underlying[arg.width]](other_value)
             else:
-                self._value = _qualifier_[self._vec_type[arg.width]](other_value)
+                assert issubclass(
+                    underlying, StdEnum
+                ), "underlying field type must be Bit, BitVector or a std.Enum"
+
+                self._value = _qualifier_[underlying](other_value)
 
     def value(self):
         return self._value
 
 
 class UField(Field):
-    _vec_type = Unsigned
+    pass
 
 
 class SField(Field):
-    _vec_type = Signed
+    pass
 
 
 class MemField(Field): ...

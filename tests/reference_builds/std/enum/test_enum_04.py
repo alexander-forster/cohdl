@@ -85,9 +85,16 @@ class test_enum_04(cohdl.Entity):
 async def testbench_enum_04(dut: test_enum_04):
     seq = cocotb_util.SequentialTest(dut.clk)
 
+    dut.inp_index.value = 0
+    dut.inp_first.value = 0
+    dut.inp_second.value = 0
+    dut.do_write.value = 0
+    dut.out_index.value = 0
+
+    await seq.tick()
     buffer = [[0, 0] for _ in range(8)]
 
-    for _ in range(64):
+    for _ in range(128):
         inp_index = random.randint(0, 7)
         inp_first = random.randint(0, 1)
         inp_second = random.randint(0, 7)

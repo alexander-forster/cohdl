@@ -556,7 +556,10 @@ class PrepareAst:
         except BaseException as err:
             if _pretty_traceback:
                 if isinstance(inp, ast.AST):
-                    lineno = inp.lineno
+                    if hasattr(inp, "lineno"):
+                        lineno = inp.lineno
+                    else:
+                        lineno = 0
                 else:
                     raise err
 
@@ -582,7 +585,7 @@ class PrepareAst:
                 )
                 raise err
             else:
-                if isinstance(inp, ast.AST):
+                if isinstance(inp, ast.AST) and hasattr(inp, "lineno"):
                     lineno = inp.lineno
                 else:
                     lineno = None
