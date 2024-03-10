@@ -12,7 +12,7 @@ from cohdl import (
     Bit,
     Signal,
     evaluated,
-    consteval,
+    pyeval,
     Variable,
     AssignMode,
 )
@@ -85,13 +85,13 @@ class Reset:
 
 class Frequency:
     @staticmethod
-    @consteval
+    @pyeval
     def _getter(arg, factor):
         if isinstance(arg, Frequency):
             return arg._val / factor
         return Frequency(arg * factor)
 
-    @consteval
+    @pyeval
     def __init__(self, val: int | float | Frequency | Duration):
         if isinstance(val, Duration):
             val = val.frequency()
@@ -100,44 +100,44 @@ class Frequency:
 
         self._val = float(val)
 
-    @consteval
+    @pyeval
     def frequency(self) -> Frequency:
         return self
 
-    @consteval
+    @pyeval
     def period(self) -> Duration:
         return Duration(1 / self._val)
 
-    @consteval
+    @pyeval
     def gigahertz(self) -> float:
         return Frequency._getter(self, 1e9)
 
-    @consteval
+    @pyeval
     def megahertz(self) -> float:
         return Frequency._getter(self, 1e6)
 
-    @consteval
+    @pyeval
     def kilohertz(self) -> float:
         return Frequency._getter(self, 1e3)
 
-    @consteval
+    @pyeval
     def hertz(self) -> float:
         return Frequency._getter(self, 1)
 
-    @consteval
+    @pyeval
     def __eq__(self, other: Frequency):
         return self._val == other._val
 
 
 class Duration:
     @staticmethod
-    @consteval
+    @pyeval
     def _getter(arg, factor):
         if isinstance(arg, Duration):
             return factor / arg._freq._val
         return Duration(arg / factor)
 
-    @consteval
+    @pyeval
     def __init__(self, val: int | float | Frequency | Duration):
         if isinstance(val, Duration):
             self._freq = val._freq
@@ -146,39 +146,39 @@ class Duration:
         else:
             self._freq = Frequency(1 / val)
 
-    @consteval
+    @pyeval
     def frequency(self) -> Frequency:
         return self._freq
 
-    @consteval
+    @pyeval
     def period(self) -> Duration:
         return self
 
-    @consteval
+    @pyeval
     def picoseconds(self):
         return Duration._getter(self, 1e12)
 
-    @consteval
+    @pyeval
     def nanoseconds(self):
         return Duration._getter(self, 1e9)
 
-    @consteval
+    @pyeval
     def microseconds(self):
         return Duration._getter(self, 1e6)
 
-    @consteval
+    @pyeval
     def milliseconds(self):
         return Duration._getter(self, 1e3)
 
-    @consteval
+    @pyeval
     def seconds(self):
         return Duration._getter(self, 1)
 
-    @consteval
+    @pyeval
     def __eq__(self, other: Duration):
         return self._freq == other._freq
 
-    @consteval
+    @pyeval
     def count_periods(
         self, subperiod: Duration, *, allowed_delta=1e-9, float_result=False
     ):
@@ -196,7 +196,7 @@ class Duration:
             ), f"subperiod does not divide period {real_result=} {rounded=}"
             return rounded
 
-    @consteval
+    @pyeval
     def __truediv__(self, other: int | float | Duration):
         if isinstance(other, Duration):
             self_ps = self.picoseconds()
@@ -215,7 +215,7 @@ class ClockEdge(enum.Enum):
     FALLING = enum.auto()
     BOTH = enum.auto()
 
-    @consteval
+    @pyeval
     def event_type(self) -> BitSignalEvent.Type:
         if self is ClockEdge.RISING:
             return BitSignalEvent.Type.RISING
@@ -648,24 +648,24 @@ _current_context_data: _ContextData | None = None
 
 class SequentialContext:
     @staticmethod
-    @consteval
+    @pyeval
     def current() -> SequentialContext | None:
         return _current_context
 
     @staticmethod
-    @consteval
+    @pyeval
     def current_data():
         return _current_context_data
 
     @staticmethod
-    @consteval
+    @pyeval
     def _enter_context(ctx: SequentialContext, data: _ContextData | None = None):
         global _current_context, _current_context_data
         _current_context = ctx
         _current_context_data = data
 
     @staticmethod
-    @consteval
+    @pyeval
     def _exit_context():
         global _current_context, _current_context_data
         _current_context = None
@@ -898,7 +898,7 @@ class Executor:
     context.
     """
 
-    @consteval
+    @pyeval
     def _check_context(self):
         if not self._mode is ExecutorMode.parallel_process:
             current_ctx = SequentialContext.current()

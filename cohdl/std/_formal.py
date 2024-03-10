@@ -4,7 +4,7 @@ from cohdl import vhdl, Bit, Signal
 from cohdl import vhdl as raw_vhdl
 from ._context import sequential
 
-from cohdl import consteval, Attribute
+from cohdl import pyeval, Attribute
 
 #
 # inline vhdl
@@ -22,8 +22,7 @@ class vhdl(raw_vhdl):
 #
 
 
-class anyconst(Attribute, type=bool):
-    ...
+class anyconst(Attribute, type=bool): ...
 
 
 #
@@ -63,18 +62,17 @@ def conv_seq(s):
 
 
 class Formal:
-    def write(self):
-        ...
+    def write(self): ...
 
 
 class When(Formal):
-    @consteval
+    @pyeval
     def __init__(self, precond, postcond=None, immediate=True):
         self.precond = precond
         self.postcond = postcond
         self.immediate = immediate
 
-    @consteval
+    @pyeval
     def then(self, state, times=None):
         if self.postcond is None:
             self.immediate = True
@@ -85,7 +83,7 @@ class When(Formal):
             self.postcond = Sequence(self.postcond).then(state, times)
         return self
 
-    @consteval
+    @pyeval
     def next(self, state, times=None):
         if self.postcond is None:
             self.immediate = False
@@ -163,17 +161,17 @@ class Sequence(Formal):
 
         self.seq = [*seq]
 
-    @consteval
+    @pyeval
     def then(self, state, times=None, consecutive=True):
         self.seq.append(Then(state, times=times, consecutive=consecutive))
         return self
 
-    @consteval
+    @pyeval
     def next(self, state, times=None, consecutive=True):
         self.seq.append(Next(state, times=times, consecutive=consecutive))
         return self
 
-    @consteval
+    @pyeval
     def wait(self, times):
         self.seq.append(Wait(times))
         return self
@@ -201,24 +199,24 @@ class PrevCache:
         self.cache = {}
         self.cache_exact = {}
 
-    @consteval
+    @pyeval
     def get(self, cnt):
         return self.cache.get(cnt, None)
 
-    @consteval
+    @pyeval
     def get_exact(self, cnt):
         return self.cache_exact.get(cnt, None)
 
-    @consteval
+    @pyeval
     def add(self, cnt, signal):
         self.cache[cnt] = signal
 
-    @consteval
+    @pyeval
     def add_exact(self, cnt, signal):
         self.cache_exact[cnt] = signal
 
     @staticmethod
-    @consteval
+    @pyeval
     def get_cache(signal) -> PrevCache:
         for key, val in PrevCache.caches.items():
             if key == id(signal):
@@ -268,7 +266,7 @@ class Checker:
         def proc():
             self._past_valid <<= True
 
-    @consteval
+    @pyeval
     def _complete_label(self, label):
         if self._prefix is not None:
             return f"{self._prefix}{label}"

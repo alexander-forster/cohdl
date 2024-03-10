@@ -1,4 +1,4 @@
-from cohdl import Signal, Bit, consteval
+from cohdl import Signal, Bit, pyeval
 from cohdl.std._context import sequential
 
 from ._builtins import vhdl, n_prev_true
@@ -22,7 +22,7 @@ class Checker:
         def proc():
             self._past_valid <<= True
 
-    @consteval
+    @pyeval
     def _complete_label(self, label):
         if self._prefix is not None:
             return f"{self._prefix}{label}"

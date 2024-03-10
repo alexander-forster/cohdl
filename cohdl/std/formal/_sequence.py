@@ -1,4 +1,4 @@
-from cohdl import consteval
+from cohdl import pyeval
 
 from ._builtins import vhdl
 
@@ -11,21 +11,20 @@ class _SeqNode:
         else:
             return f"{vhdl:{node!r}}"
 
-    def write(self):
-        ...
+    def write(self): ...
 
 
 _write_node = _SeqNode.write_node
 
 
 class When(_SeqNode):
-    @consteval
+    @pyeval
     def __init__(self, precond, postcond=None, immediate=True):
         self.precond = precond
         self.postcond = postcond
         self.immediate = immediate
 
-    @consteval
+    @pyeval
     def then(self, state, times=None):
         if self.postcond is None:
             self.immediate = True
@@ -36,7 +35,7 @@ class When(_SeqNode):
             self.postcond = Sequence(self.postcond).then(state, times)
         return self
 
-    @consteval
+    @pyeval
     def next(self, state, times=None):
         if self.postcond is None:
             self.immediate = False
@@ -126,17 +125,17 @@ class Sequence(_SeqNode):
 
         self.seq = [*seq]
 
-    @consteval
+    @pyeval
     def then(self, state, times=None, consecutive=True):
         self.seq.append(Then(state, times=times, consecutive=consecutive))
         return self
 
-    @consteval
+    @pyeval
     def next(self, state, times=None, consecutive=True):
         self.seq.append(Next(state, times=times, consecutive=consecutive))
         return self
 
-    @consteval
+    @pyeval
     def wait(self, times):
         self.seq.append(Wait(times))
         return self

@@ -1,7 +1,7 @@
 from cohdl import Bit, Signal
 from cohdl import vhdl as raw_vhdl
 
-from cohdl import consteval, Attribute
+from cohdl import pyeval, Attribute
 
 import enum
 
@@ -16,11 +16,11 @@ class Cache:
         self._arg_types = arg_types
         self._entries = []
 
-    @consteval
+    @pyeval
     def lookup(self, args):
         assert len(args) == len(self._arg_types)
 
-        for (cached_value, cached_args) in self._entries:
+        for cached_value, cached_args in self._entries:
             for cmp_type, arg, cached in zip(self._arg_types, args, cached_args):
                 if cmp_type is CmpType.ID and arg is not cached:
                     break
@@ -31,13 +31,13 @@ class Cache:
 
         return (False, None)
 
-    @consteval
+    @pyeval
     def add_entry(self, value, args):
         assert len(args) == len(self._arg_types)
         self._entries.append((value, args))
 
 
-@consteval
+@pyeval
 def cached(*cmp_types):
     cache = Cache(cmp_types)
 
@@ -68,8 +68,7 @@ class vhdl(raw_vhdl):
 #
 
 
-class anyconst(Attribute, type=bool):
-    ...
+class anyconst(Attribute, type=bool): ...
 
 
 @cached(CmpType.ID)

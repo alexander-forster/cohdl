@@ -1,6 +1,6 @@
 import unittest
 
-from cohdl import Unsigned, Signed, Entity, consteval
+from cohdl import Unsigned, Signed, Entity, pyeval
 from cohdl import std
 
 
@@ -9,7 +9,7 @@ class CaptureTester(unittest.TestCase):
         loop_values = [*range(8)]
         captured = []
 
-        @consteval
+        @pyeval
         def capture(val):
             captured.append(val)
 
@@ -53,7 +53,7 @@ class CaptureTester(unittest.TestCase):
         loop_values = [*range(8)]
         captured = []
 
-        @consteval
+        @pyeval
         def capture(val):
             captured.append(val)
 

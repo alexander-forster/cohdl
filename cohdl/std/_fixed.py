@@ -9,7 +9,7 @@ from cohdl import (
     TypeQualifier,
     Null,
     Full,
-    consteval,
+    pyeval,
     AssignMode,
     evaluated,
     static_assert,
@@ -48,7 +48,7 @@ class FixedOverflowStyle(enum.Enum):
 
 
 class _FixedResize(typing.Generic[T]):
-    @consteval
+    @pyeval
     def __init__(self, obj, left, right):
         self._obj = obj
         self.left = left
@@ -68,11 +68,11 @@ class _FixedResize(typing.Generic[T]):
 
 
 class _Resize(typing.Generic[T]):
-    @consteval
+    @pyeval
     def __init__(self, obj=None):
         self._obj = obj
 
-    @consteval
+    @pyeval
     def __get__(self, obj, objtype=None):
         return _Resize(obj)
 
@@ -87,7 +87,7 @@ class _Resize(typing.Generic[T]):
             left, right, round_style=round_style, overflow_style=overflow_style
         )
 
-    @consteval
+    @pyeval
     def __getitem__(self, arg: slice) -> _FixedResize[T]:
         assert isinstance(arg, slice)
         assert arg.step is None
@@ -127,32 +127,32 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
     _exp: _FixedTemplateArg.exp
 
     @classmethod
-    @consteval
+    @pyeval
     def min(cls):
         return -((2 ** (cls._width - 1)) * 2**cls._exp)
 
     @classmethod
-    @consteval
+    @pyeval
     def max(cls):
         return (2 ** (cls._width - 1) - 1) * 2**cls._exp
 
     @classmethod
-    @consteval
+    @pyeval
     def _adjust_val(cls, val):
         return int(val / 2**cls._exp)
 
-    @consteval
+    @pyeval
     def __repr__(self):
         val = TypeQualifier.decay(self._val).to_int() * 2**self._exp
         return f"{type(self)}({val})"
 
     @classmethod
-    @consteval
+    @pyeval
     def right(cls):
         return cls._exp
 
     @classmethod
-    @consteval
+    @pyeval
     def left(cls):
         return cls._exp + cls._width - 1
 
@@ -455,32 +455,32 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
     _exp: _FixedTemplateArg.exp
 
     @classmethod
-    @consteval
+    @pyeval
     def min(cls):
         return 0
 
     @classmethod
-    @consteval
+    @pyeval
     def max(cls):
         return (2 ** (cls._width) - 1) * 2**cls._exp
 
     @classmethod
-    @consteval
+    @pyeval
     def _adjust_val(cls, val):
         return int(val / 2**cls._exp)
 
-    @consteval
+    @pyeval
     def __repr__(self):
         val = TypeQualifier.decay(self._val).to_int() * 2**self._exp
         return f"{type(self)}({val})"
 
     @classmethod
-    @consteval
+    @pyeval
     def right(cls):
         return cls._exp
 
     @classmethod
-    @consteval
+    @pyeval
     def left(cls):
         return cls._exp + cls._width - 1
 

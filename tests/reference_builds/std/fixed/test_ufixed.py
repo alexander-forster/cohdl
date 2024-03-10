@@ -243,13 +243,13 @@ class CoHDL_TestWriter(TestWriter):
         else:
             return Signal[type](name=name)
 
-    @cohdl.consteval
+    @cohdl.pyeval
     def make_input(self, type, name):
         port = Port[type, Port.Direction.INPUT](name=name)
         self._Entity._info.add_port(name, port)
         return port
 
-    @cohdl.consteval
+    @cohdl.pyeval
     def make_output(self, type, name):
         port = Port[type, Port.Direction.OUTPUT](name=name)
         self._Entity._info.add_port(name, port)
@@ -352,19 +352,19 @@ def make_combined(test_fn, name):
 #
 
 
-@cohdl.consteval
+@cohdl.pyeval
 def fmt_string(str: str, *args):
     return str.format(*args).replace("-", "neg")
 
 
-@cohdl.consteval
+@cohdl.pyeval
 def add_width(la, ra, lb, rb):
     w = max(la, lb) + 2 - min(ra, rb)
     name = f"out_add_{la}_{ra}_{lb}_{rb}".replace("-", "neg")
     return w, name
 
 
-@cohdl.consteval
+@cohdl.pyeval
 def round_str(la, ra, lb, rb, overflow: std.FixedOverflowStyle, round):
     return f"out_resize_{la}_{ra}_{lb}_{rb}_{overflow.name}_{round.name}".replace(
         "-", "neg"

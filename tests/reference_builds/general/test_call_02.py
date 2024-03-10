@@ -12,7 +12,7 @@ class ArgWrapper:
         self.varargs = varargs
         self.kwargs = kwargs
 
-    @cohdl.consteval
+    @cohdl.pyeval
     def check(self, expected: ArgWrapper):
         assert self.args == expected.args and self.varargs == expected.varargs, (
             self.kwargs == expected.kwargs
@@ -108,7 +108,7 @@ class test_call_02(cohdl.Entity):
                 fn_j(10, 11, **{"b": 342, "a": 55}),
             ]
 
-        @cohdl.consteval
+        @cohdl.pyeval
         def check_result(result):
             expected = run_functions()
 

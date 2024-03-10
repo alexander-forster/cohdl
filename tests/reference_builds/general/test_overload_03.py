@@ -99,13 +99,13 @@ class test_overload_03(cohdl.Entity):
     b = Port.output(cohdl.Bit)
 
     def architecture(self):
-        @cohdl.consteval
+        @cohdl.pyeval
         def static_check(value, expected):
             assert isinstance(value, int)
             assert isinstance(expected, int)
             assert value == expected, f"{value} != {expected}"
 
-        @cohdl.consteval
+        @cohdl.pyeval
         def static_check_float(value, expected):
             assert isinstance(value, float)
             assert isinstance(expected, float)
