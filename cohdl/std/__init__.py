@@ -35,8 +35,10 @@ from . import axi
 from ._core_utility import (
     nop,
     comment,
+    as_pyeval,
     fail,
     identity,
+    regenerate_defaults,
     Ref,
     Value,
     Signal,
@@ -67,6 +69,8 @@ from ._core_utility import (
     batched_fold,
     concat,
     stretch,
+    leftpad,
+    rightpad,
     apply_mask,
     Mask,
     as_bitvector,
@@ -113,7 +117,8 @@ from . import bitfield
 from . import _crc as crc
 from . import uart
 
-from ._template import Template
+from ._template import Template, template_arg
 from ._record import Record
+from .enum import Enum, FlagEnum
 
 # from . import experimental as exp

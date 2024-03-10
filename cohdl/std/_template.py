@@ -4,6 +4,7 @@ import inspect
 import sys
 
 import enum
+from dataclasses import dataclass
 
 from cohdl._core._intrinsic import _intrinsic
 from ._core_utility import nop
@@ -170,3 +171,25 @@ class Template:
     @classmethod
     def _template_specialize_(cls):
         pass
+
+
+@_intrinsic
+def _unpack_init(self, real_init, arg):
+    if isinstance(arg, tuple):
+        real_init(self, *arg)
+    else:
+        real_init(self, arg)
+
+
+@_intrinsic
+def template_arg(cls):
+    dataclassed = dataclass(cls, unsafe_hash=True)
+
+    real_init = dataclassed.__init__
+
+    def __init__(self, arg):
+        _unpack_init(self, real_init, arg)
+
+    dataclassed.__init__ = __init__
+
+    return dataclassed

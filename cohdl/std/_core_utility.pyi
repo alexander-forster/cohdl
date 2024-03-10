@@ -48,6 +48,14 @@ def comment(*lines: str) -> None:
     >>> -- B
     """
 
+def as_pyeval(fn, /, *args, **kwargs):
+    """
+    Calls `fn` with the provided arguments.
+    When used in a synthesizable context `fn` will be evaluated
+    using the python interpreter. CoHDL will not trace the function.
+    """
+    return fn(*args, **kwargs)
+
 def fail(message: str, *args, **kwargs) -> NoReturn:
     """
     Fail the compilation with an error message.
@@ -59,6 +67,32 @@ def identity(inp: T, /) -> T:
     """
     returns its argument unchanged
     """
+
+def regenerate_defaults(fn, /):
+    """
+    When functions are decorated with `std.regenerate_defaults` the default
+    arguments are regenerated every time it is called.
+    This is different from the normal python behavior where the defaults
+    are generated once when the function is declared.
+
+    >>>
+    >>> def normal(arg = [1, 2, 3]):
+    >>>     return arg
+    >>>
+    >>> @std.regenerate_defaults
+    >>> def decorated(arg = [1, 2, 3]):
+    >>>     return arg
+    >>>
+    >>> normal_a = normal()
+    >>> normal_b = normal()
+    >>>
+    >>> decorated_a = decorated()
+    >>> decorated_b = decorated()
+    >>>
+    >>> assert normal_a is normal_b
+    >>> assert decorated_a is not decorated_b
+    """
+    return fn
 
 #
 #
@@ -424,6 +458,22 @@ def stretch(val: Bit | BitVector, factor: int) -> BitVector:
     >>> stretch(Bit('1'), 2)           # -> "11"
     >>> stretch(BitVector[2]('10'), 3) # -> "111000"
     """
+
+@overload
+def leftpad(inp: BitVector, result_width: int) -> BitVector:
+    """ """
+
+@overload
+def leftpad(inp: BitVector, result_width: int, fill: Bit | Null | Full) -> BitVector:
+    """ """
+
+@overload
+def rightpad(inp: BitVector, result_width: int) -> BitVector:
+    """ """
+
+@overload
+def rightpad(inp: BitVector, result_width: int, fill: Bit | Null | Full) -> BitVector:
+    """ """
 
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
     """

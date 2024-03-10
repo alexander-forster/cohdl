@@ -574,7 +574,9 @@ class IrGenerator:
 
                 # get the codeblock that contained the continue statement
                 for continue_block in IrGenerator._continue_result.pop():
-                    assert continue_block is not open_block
+                    assert (
+                        continue_block is not open_block
+                    ), f"cannot generate statemachine for coroutine '{ctx._name}', empty while loop??"
                     # open_block contains code until first await/while statement
                     # replace continue with a copy
                     continue_block.append(open_block.copy(continue_block))

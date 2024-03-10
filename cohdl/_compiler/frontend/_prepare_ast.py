@@ -1919,7 +1919,7 @@ class PrepareAst:
 
                 result = self.subcall(func_ref, args, kwargs)
 
-                result._bound_statements += [
+                result._bound_statements = [
                     *bound_expressions,
                     *result._bound_statements,
                 ]

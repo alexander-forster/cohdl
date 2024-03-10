@@ -211,10 +211,10 @@ class Record(AssignableType, Template):
 
     def __eq__(self, other):
         return all(
-            value == other.__dict__[name] for name, value in self.__dict__.items()
+            [value == other.__dict__[name] for name, value in self.__dict__.items()]
         )
 
     def __ne__(self, other):
         return any(
-            value != other.__dict__[name] for name, value in self.__dict__.items()
+            [value != other.__dict__[name] for name, value in self.__dict__.items()]
         )

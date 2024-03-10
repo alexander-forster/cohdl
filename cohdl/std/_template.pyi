@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import enum
+from dataclasses import dataclass
 from typing import Generic, TypeVar, Self, Any
 
+T = TypeVar("T")
 TemplateArg = TypeVar("TemplateArg")
 
 class _TemplateMode(enum.Enum):
@@ -78,3 +80,9 @@ class Template(Generic[TemplateArg]):
         """
 
     def __class_getitem__(cls: Self, args) -> Self: ...
+
+def template_arg(cls: type[T]) -> type[T]:
+    """
+    Decorator that adds __init__, __hash__ and __eq__
+    to a class so it can be used as an argument for std.Template.
+    """

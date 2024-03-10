@@ -40,8 +40,70 @@ def comment(*lines):
 
 
 @_intrinsic
+def as_pyeval(fn, /, *args, **kwargs):
+    return fn(*args, **kwargs)
+
+
+@_intrinsic
 def fail(message: str = "", *args, **kwargs):
     raise AssertionError("Compilation failed: " + message.format(*args, **kwargs))
+
+
+@_intrinsic
+def identity(inp, /):
+    return inp
+
+
+@_intrinsic
+def _bind_partial(signature, args, kwargs) -> inspect.Signature:
+    return signature.bind_partial(*args, **kwargs)
+
+
+def _determine_defaults(signature: inspect.Signature, args, kwargs, scope):
+    bound = _bind_partial(signature, args, kwargs)
+
+    for name, param in as_pyeval(signature.parameters.items):
+        if name not in bound.arguments:
+            param_str = str(param)
+
+            if not as_pyeval(param_str.startswith, "*"):
+                _, default_str = as_pyeval(param_str.split, "=", maxsplit=1)
+
+                default = as_pyeval(eval, default_str, scope)
+                as_pyeval(bound.arguments.__setitem__, name, default)
+
+    return bound
+
+
+def regenerate_defaults(fn, /):
+    assert (
+        not evaluated()
+    ), "regenerate_defaults should not be called in synthesizable contexts"
+
+    is_function = inspect.isfunction(fn)
+    is_async = inspect.iscoroutinefunction(fn)
+
+    assert (
+        is_function or is_async
+    ), "the object wrapped by regnerate_defaults must be a function or async function"
+
+    scope = fn.__globals__
+    callable = fn
+    signature = inspect.signature(callable)
+
+    if not is_async:
+
+        def helper(*args, **kwargs):
+            bound = _determine_defaults(signature, args, kwargs, scope)
+            return fn(*bound.args, **bound.kwargs)
+
+    else:
+
+        async def helper(*args, **kwargs):
+            bound = _determine_defaults(signature, args, kwargs, scope)
+            return fn(*bound.args, **bound.kwargs)
+
+    return helper
 
 
 class _Value:
@@ -119,16 +181,6 @@ class _Ref:
 
     def __getitem__(self, arg):
         return _Ref(arg)
-
-
-#
-#
-#
-
-
-@_intrinsic
-def identity(inp, /):
-    return inp
 
 
 #
@@ -500,6 +552,65 @@ def stretch(val: Bit | BitVector, factor: int):
             return concat(*[stretch(b, factor) for b in val][::-1])
     else:
         raise AssertionError("invalid argument")
+
+
+def resize(inp: BitVector, result_width: int):
+    inp_width = inp.width
+
+    assert (
+        inp_width <= result_width
+    ), f"the result width of resize must be larger than the input width"
+
+    if inp_width == result_width:
+        return Value[BitVector[result_width]](inp)
+    else:
+        return zeros(inp_width) @ inp
+
+
+def leftpad(inp: BitVector, result_width: int, fill=None):
+    inp_width = inp.width
+
+    assert (
+        inp_width <= result_width
+    ), f"the result width of resize must be larger than the input width"
+
+    if inp_width == result_width:
+        return Value[BitVector[result_width]](inp)
+    else:
+        if fill is None:
+            fill_bit = Bit(False)
+        elif fill is Null or fill is Full:
+            fill_bit = Bit(fill)
+        else:
+            assert instance_check(
+                fill, Bit
+            ), f"parameter 'fill' should be Null, Full or a Bit type"
+            fill_bit = fill
+
+        return stretch(fill_bit, result_width - inp_width) @ inp
+
+
+def rightpad(inp: BitVector, result_width: int, fill=None):
+    inp_width = inp.width
+
+    assert (
+        inp_width <= result_width
+    ), f"the result width of resize must be larger than the input width"
+
+    if inp_width == result_width:
+        return Value[BitVector[result_width]](inp)
+    else:
+        if fill is None:
+            fill_bit = Bit(False)
+        elif fill is Null or fill is Full:
+            fill_bit = Bit(fill)
+        else:
+            assert instance_check(
+                fill, Bit
+            ), f"parameter 'fill' should be Null, Full or a Bit type"
+            fill_bit = fill
+
+        return inp @ stretch(fill_bit, result_width - inp_width)
 
 
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
