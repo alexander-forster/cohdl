@@ -113,8 +113,20 @@ def _impl_to_system_rdl(input, name: str | None = None):
 
             trailer_default = f" = {escape(default)}"
 
-        if name == "counter":
-            pass
+        desc = None
+        sw_access = None
+
+        for info in input._meta_args_:
+            if isinstance(info, str):
+                desc = info
+            elif isinstance(info, Access):
+                sw_access = info.name
+
+        if desc is not None:
+            content.append(f'desc = "{desc}";')
+
+        if sw_access is not None:
+            content.append(f"sw = {sw_access};")
 
         return ComponentBlock(
             "field",

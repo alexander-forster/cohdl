@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar, Generic, NoReturn, Self
+from typing import Any, TypeVar, TypeVarTuple, Generic, NoReturn, Self, Literal
+import enum
 
 from cohdl import Null, Signal, BitVector, Unsigned, Signed
 from cohdl import std
@@ -42,7 +43,19 @@ class RegisterTools(Generic[W]):
     Calculated from `_word_width_` and `_addr_unit_width_`.
     """
 
-    Field = std.bitfield.Field
+    class Access(enum.Enum):
+        na = enum.auto()
+        r = enum.auto()
+        w = enum.auto()
+        w1 = enum.auto()
+        rw = enum.auto()
+        rw1 = enum.auto()
+
+    class HwAccess(enum.Enum):
+        na = enum.auto()
+        r = enum.auto()
+        w = enum.auto()
+        rw = enum.auto()
 
     class RegisterObject(std.Template[GenericArg]):
         """
@@ -309,7 +322,12 @@ class RegisterTools(Generic[W]):
             constructed from the provided value.
             """
 
-    class Field(Generic[OFF, T, D]):
+    FieldInfo = Literal
+
+    class MetaTest:
+        def __or__(cls: Self, other) -> Self: ...
+
+    class Field(Generic[OFF, T, D], metaclass=MetaTest):
         """
         Represents a range of one or more bits in a `Register`.
 
@@ -527,3 +545,7 @@ reg32 = RegisterTools[32, 8]
 Provides register tools pre-configured with a
 word size of 32 bits and 8 bits per byte.
 """
+
+FieldInfo = RegisterTools.FieldInfo
+Access = RegisterTools.Access
+HwAccess = RegisterTools.HwAccess

@@ -14,10 +14,20 @@ from ..enum import Enum as StdEnum
 from .._core_utility import to_bits
 
 
-class AccessMode(enum.Enum):
-    READ_WRITE = enum.auto()
-    READ_ONLY = enum.auto()
-    WRITE_ONLY = enum.auto()
+class Access(enum.Enum):
+    na = enum.auto()
+    r = enum.auto()
+    w = enum.auto()
+    w1 = enum.auto()
+    rw = enum.auto()
+    rw1 = enum.auto()
+
+
+class HwAccess(enum.Enum):
+    na = enum.auto()
+    r = enum.auto()
+    w = enum.auto()
+    rw = enum.auto()
 
 
 def _expand_lists(inp):
@@ -160,7 +170,6 @@ class RegisterObject(std.Template[GenericArg]):
     _generic_arg_: GenericArg
     _global_offset_: int
     _parent_offset_: GenericArg.offset
-    _access_: AccessMode = AccessMode.READ_WRITE
     __metadata__ = ()
 
     _readable_: bool = True
@@ -546,11 +555,44 @@ class _FlagArg(_FieldArg):
         assert self.is_bit
 
 
+class _FieldInfoArg:
+    args: tuple
+
+    def __init__(self, arg):
+        if isinstance(arg, tuple):
+            self.args = arg
+        else:
+            self.args = (arg,)
+
+    def __hash__(self):
+        return hash(self.args)
+
+    def __eq__(self, other: tuple):
+        return self.args == other.args
+
+
+class FieldInfo(std.Template[_FieldInfoArg]):
+    _meta_args_: _FieldInfoArg.args
+
+
+class MetaField(type):
+    def __or__(cls, other: type[FieldInfo]):
+        if not issubclass(other, FieldInfo):
+            return cls
+
+        return type(
+            cls.__name__,
+            (cls,),
+            {"_meta_args_": tuple([*cls._meta_args_, *other._meta_args_])},
+        )
+
+
 class FieldBase:
+    _meta_args_ = ()
     pass
 
 
-class Field(std.Template[_FieldArg], FieldBase):
+class Field(std.Template[_FieldArg], FieldBase, metaclass=MetaField):
     _field_arg: _FieldArg
 
     @classmethod
@@ -913,8 +955,10 @@ class Register(GenericRegister):
 
         fields: list[tuple[str, type[Field]]] = []
         word_width = cls._register_tools_._word_width_
+        metadata = {}
 
         for name, field_type in get_type_hints(cls, include_extras=True).items():
+
             if issubclass(field_type, FieldBase):
                 fields.append((name, field_type))
 
@@ -1132,6 +1176,10 @@ RegisterTools.RootDevice = RootDevice
 
 RegisterTools.GenericRegister = GenericRegister
 RegisterTools.Register = Register
+
+RegisterTools.Access = Access
+RegisterTools.HwAccess = HwAccess
+RegisterTools.FieldInfo = FieldInfo
 RegisterTools.Field = Field
 RegisterTools.UField = UField
 RegisterTools.SField = SField
