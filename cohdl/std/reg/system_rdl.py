@@ -41,11 +41,59 @@ def _add_description(input: type, content: list):
             return
 
 
-def _impl_to_system_rdl(input, name: str | None = None):
+def _add_field_args(metadata: type, content: list):
+    if metadata is None:
+        return
+
+    desc = None
+    sw_access = None
+
+    for info in metadata:
+        if isinstance(info, str):
+            desc = info
+        elif isinstance(info, Access):
+            sw_access = info.name
+
+    if desc is not None:
+        content.append(f'desc = "{desc}";')
+
+    if sw_access is not None:
+        content.append(f"sw = {sw_access};")
+
+
+def _add_meta_args(metadata: type, content: list):
+    if metadata is None:
+        return
+
+    desc = None
+    sw_access = None
+    hw_access = None
+
+    for info in metadata:
+        if isinstance(info, str):
+            desc = info
+        elif isinstance(info, Access):
+            sw_access = info.name
+        elif isinstance(info, HwAccess):
+            hw_access = info.name
+
+    if desc is not None:
+        content.append(f'desc = "{desc}";')
+
+    if sw_access is not None:
+        content.append(f"sw = {sw_access};")
+
+    if hw_access is not None:
+        content.append(f"hw = {hw_access};")
+
+
+def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
     escape = _systemrdl_escape
 
     if issubclass(input, RegisterDevice):
         content = [""]
+
+        member_metadata = input._metadata_
 
         if name is None:
             base_name = input.__name__.split("[")[0]
@@ -71,7 +119,11 @@ def _impl_to_system_rdl(input, name: str | None = None):
 
         for member_name, member_type in input._member_types_.items():
             content.append("")
-            content.append(_impl_to_system_rdl(member_type, member_name))
+            content.append(
+                _impl_to_system_rdl(
+                    member_type, member_name, member_metadata.get(member_name, None)
+                )
+            )
             content.append("")
 
         return ComponentBlock("addrmap", base_name, content=content, trailer=trailer)
@@ -82,7 +134,11 @@ def _impl_to_system_rdl(input, name: str | None = None):
 
         for field_name, field_type in input._field_types_.items():
             content.append("")
-            content.append(_impl_to_system_rdl(field_type, field_name))
+            content.append(
+                _impl_to_system_rdl(
+                    field_type, field_name, input._metadata_.get(field_name, None)
+                )
+            )
 
         return ComponentBlock(
             "reg",
@@ -113,20 +169,7 @@ def _impl_to_system_rdl(input, name: str | None = None):
 
             trailer_default = f" = {escape(default)}"
 
-        desc = None
-        sw_access = None
-
-        for info in input._meta_args_:
-            if isinstance(info, str):
-                desc = info
-            elif isinstance(info, Access):
-                sw_access = info.name
-
-        if desc is not None:
-            content.append(f'desc = "{desc}";')
-
-        if sw_access is not None:
-            content.append(f"sw = {sw_access};")
+        _add_meta_args(metadata, content)
 
         return ComponentBlock(
             "field",
@@ -134,12 +177,17 @@ def _impl_to_system_rdl(input, name: str | None = None):
             trailer="}" + f" {escape(name)} {trailer_loc}{trailer_default};",
         )
     elif issubclass(input, FlagField):
-        arg = input._field_arg
+        content = []
 
+        arg = input._field_arg
         trailer_loc = f"[{arg.offset}:{arg.offset}]"
 
+        _add_meta_args(metadata, content)
+
         return ComponentBlock(
-            "field", trailer="}" + f" {escape(name)} {trailer_loc} = 0;"
+            "field",
+            content=content,
+            trailer="}" + f" {escape(name)} {trailer_loc} = 0;",
         )
     elif issubclass(input, StdEnum):
         content = []
@@ -162,6 +210,7 @@ def _impl_to_system_rdl(input, name: str | None = None):
         content = [""]
 
         _add_description(input, content)
+        _add_meta_args(metadata, content)
 
         if issubclass(input, Input):
             access = f"sw = r;"

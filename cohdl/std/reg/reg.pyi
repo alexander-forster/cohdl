@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar, TypeVarTuple, Generic, NoReturn, Self, Literal
+from typing import Any, TypeVar, Generic, NoReturn, Self
 import enum
 
 from cohdl import Null, Signal, BitVector, Unsigned, Signed
@@ -322,12 +322,7 @@ class RegisterTools(Generic[W]):
             constructed from the provided value.
             """
 
-    FieldInfo = Literal
-
-    class MetaTest:
-        def __or__(cls: Self, other) -> Self: ...
-
-    class Field(Generic[OFF, T, D], metaclass=MetaTest):
+    class Field(Generic[OFF, T, D]):
         """
         Represents a range of one or more bits in a `Register`.
 
@@ -546,6 +541,5 @@ Provides register tools pre-configured with a
 word size of 32 bits and 8 bits per byte.
 """
 
-FieldInfo = RegisterTools.FieldInfo
 Access = RegisterTools.Access
 HwAccess = RegisterTools.HwAccess

@@ -170,7 +170,6 @@ class RegisterObject(std.Template[GenericArg]):
     _generic_arg_: GenericArg
     _global_offset_: int
     _parent_offset_: GenericArg.offset
-    __metadata__ = ()
 
     _readable_: bool = True
     _writable_: bool = True
@@ -274,6 +273,7 @@ class RegisterObject(std.Template[GenericArg]):
 
 class RegisterDevice(RegisterObject):
     # _member_types_: dict
+    _metadata_ = {}
 
     def __init__(
         self,
@@ -373,9 +373,20 @@ class RegisterDevice(RegisterObject):
         else:
             members = {}
 
+        metadata = {}
+
         for name, member_type in get_type_hints(cls, include_extras=True).items():
+            ann_data = None
+
+            if hasattr(member_type, "__metadata__"):
+                ann_data = member_type.__metadata__
+                member_type = member_type.__origin__
+
             if issubclass(member_type, RegisterObject):
                 assert not name in members, f"{name} shadows existing member"
+
+                if ann_data is not None:
+                    metadata[name] = ann_data
 
                 for existing_name, existing_type in members.items():
                     if existing_type._parent_offset_ <= member_type._parent_offset_:
@@ -392,6 +403,7 @@ class RegisterDevice(RegisterObject):
                 members[name] = member_type
 
         cls._member_types_ = members
+        cls._metadata_ = metadata
 
 
 class RootDevice(RegisterDevice):
@@ -571,28 +583,12 @@ class _FieldInfoArg:
         return self.args == other.args
 
 
-class FieldInfo(std.Template[_FieldInfoArg]):
-    _meta_args_: _FieldInfoArg.args
-
-
-class MetaField(type):
-    def __or__(cls, other: type[FieldInfo]):
-        if not issubclass(other, FieldInfo):
-            return cls
-
-        return type(
-            cls.__name__,
-            (cls,),
-            {"_meta_args_": tuple([*cls._meta_args_, *other._meta_args_])},
-        )
-
-
 class FieldBase:
     _meta_args_ = ()
     pass
 
 
-class Field(std.Template[_FieldArg], FieldBase, metaclass=MetaField):
+class Field(std.Template[_FieldArg], FieldBase):
     _field_arg: _FieldArg
 
     @classmethod
@@ -797,6 +793,7 @@ class FlagField(std.Template[_FlagArg], FieldBase):
 
 class Register(GenericRegister):
     # _field_types_: dict[str, std.bitfield.FieldBit | std.bitfield.FieldBitVector]
+    _metadata_ = {}
 
     @classmethod
     def _template_deduce_(cls, *args, **kwargs):
@@ -958,9 +955,15 @@ class Register(GenericRegister):
         metadata = {}
 
         for name, field_type in get_type_hints(cls, include_extras=True).items():
+            if hasattr(field_type, "__metadata__"):
+                metadata[name] = field_type.__metadata__
+                field_type = field_type.__origin__
 
             if issubclass(field_type, FieldBase):
                 fields.append((name, field_type))
+
+        if len(metadata) != 0:
+            cls._metadata_ = metadata
 
         fields = sorted(fields, key=lambda pair: pair[1]._field_arg.offset)
 
@@ -1179,7 +1182,6 @@ RegisterTools.Register = Register
 
 RegisterTools.Access = Access
 RegisterTools.HwAccess = HwAccess
-RegisterTools.FieldInfo = FieldInfo
 RegisterTools.Field = Field
 RegisterTools.UField = UField
 RegisterTools.SField = SField
