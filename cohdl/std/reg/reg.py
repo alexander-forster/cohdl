@@ -137,10 +137,10 @@ class RegisterTools(std.Template[_RegisterToolsArg]):
             if not isinstance(subtype, type):
                 continue
 
-            if issubclass(subtype, RootDevice):
+            if issubclass(subtype, AddrMap):
                 continue
 
-            if issubclass(subtype, (RegisterDevice, AddrRange)):
+            if issubclass(subtype, (RegFile, AddrRange)):
                 setattr(
                     cls,
                     name,
@@ -162,7 +162,7 @@ class RegisterTools(std.Template[_RegisterToolsArg]):
                     ),
                 )
 
-        cls.RootDevice = type("RootDevice", (RootDevice, cls.RegisterDevice[0]), {})
+        cls.AddrMap = type("AddrMap", (AddrMap, cls.RegFile[0]), {})
 
 
 class RegisterObject(std.Template[GenericArg]):
@@ -190,7 +190,7 @@ class RegisterObject(std.Template[GenericArg]):
             cls._parent_offset_ % cls._register_tools_._word_stride_ == 0
         ), "all RegisterObjects must be word aligned"
 
-    def __init__(self, parent: RegisterDevice, name: str, _cohdlstd_initguard=None):
+    def __init__(self, parent: RegFile, name: str, _cohdlstd_initguard=None):
         self._name_ = name
         self._global_offset_ = parent._global_offset_ + type(self)._parent_offset_
 
@@ -271,20 +271,20 @@ class RegisterObject(std.Template[GenericArg]):
         return f"{self._name_} : 0x{self._global_offset_:08x} : {type(self).__name__}"
 
 
-class RegisterDevice(RegisterObject):
+class RegFile(RegisterObject):
     # _member_types_: dict
     _metadata_ = {}
 
     def __init__(
         self,
-        parent: RegisterDevice | None,
+        parent: RegFile | None,
         name: str,
         args=None,
         kwargs=None,
         _cohdlstd_initguard=None,
     ):
         print(f"    # {name} ")
-        if isinstance(self, RootDevice):
+        if isinstance(self, AddrMap):
             assert parent is None
         else:
             assert parent is not None
@@ -311,7 +311,7 @@ class RegisterDevice(RegisterObject):
                 member_type(parent=self, name=name, _cohdlstd_initguard=True),
             )
 
-        if isinstance(self, RootDevice):
+        if isinstance(self, AddrMap):
             if hasattr(self, "_config_"):
                 self._config_(*args, **kwargs)
 
@@ -344,12 +344,12 @@ class RegisterDevice(RegisterObject):
         return result
 
     def _basic_read_(self, addr, meta):
-        # RegisterDevice is a collection of RegisterObjects
+        # RegFile is a collection of RegisterObjects
         # _basic_read_ should be called on them, not on the device
         raise AssertionError("_basic_read_ called on RegiserDevice")
 
     def _basic_write_(self, addr, data, mask, meta):
-        # RegisterDevice is a collection of RegisterObjects
+        # RegFile is a collection of RegisterObjects
         # _basic_write_ should be called on them, not on the device
         raise AssertionError("_basic_write_ called on RegiserDevice")
 
@@ -357,13 +357,10 @@ class RegisterDevice(RegisterObject):
         if word_count is _None:
             return
 
-        assert cls.__new__ is RegisterDevice.__new__
-        assert (
-            cls.__init__ is RegisterDevice.__init__
-            or cls.__init__ is RootDevice.__init__
-        )
-        assert cls._basic_read_ is RegisterDevice._basic_read_
-        assert cls._basic_write_ is RegisterDevice._basic_write_
+        assert cls.__new__ is RegFile.__new__
+        assert cls.__init__ is RegFile.__init__ or cls.__init__ is AddrMap.__init__
+        assert cls._basic_read_ is RegFile._basic_read_
+        assert cls._basic_write_ is RegFile._basic_write_
 
         super().__init_subclass__(readonly=readonly, writeonly=writeonly)
         cls._word_count_ = word_count
@@ -406,7 +403,7 @@ class RegisterDevice(RegisterObject):
         cls._metadata_ = metadata
 
 
-class RootDevice(RegisterDevice):
+class AddrMap(RegFile):
     def _implement_synthesizable_contexts_(self, ctx: SequentialContext):
         content = self._flatten_(include_devices=True)
 
@@ -799,7 +796,7 @@ class Register(GenericRegister):
     def _template_deduce_(cls, *args, **kwargs):
         return cls[0]
 
-    # from RegisterDevice
+    # from RegFile
     def _init_from_device(self, parent, name):
         super().__init__(parent, name)
         self._init_from_config()
@@ -1108,7 +1105,7 @@ class Array(RegisterObject):
                 cls._generic_arg_.end - cls._generic_arg_.offset
             ) // cls._register_tools_._word_stride_
 
-    def __init__(self, parent: RegisterDevice, name: str, _cohdlstd_initguard=None):
+    def __init__(self, parent: RegFile, name: str, _cohdlstd_initguard=None):
         super().__init__(parent, name)
 
         arg = type(self)._generic_arg_
@@ -1174,8 +1171,8 @@ class AddrRange(RegisterObject):
 
 
 RegisterTools.RegisterObject = RegisterObject
-RegisterTools.RegisterDevice = RegisterDevice
-RegisterTools.RootDevice = RootDevice
+RegisterTools.RegFile = RegFile
+RegisterTools.AddrMap = AddrMap
 
 RegisterTools.GenericRegister = GenericRegister
 RegisterTools.Register = Register

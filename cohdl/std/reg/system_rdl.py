@@ -19,9 +19,9 @@ class ComponentBlock(TextBlock):
         super().__init__(title=title, content=content, trailer=trailer)
 
 
-def _find_enums(root: RegisterDevice, result_set: set):
+def _find_enums(root: RegFile, result_set: set):
     for subtype in root._member_types_.values():
-        if issubclass(subtype, RegisterDevice):
+        if issubclass(subtype, RegFile):
             _find_enums(subtype, result_set)
         elif issubclass(subtype, Register):
             for fieldtype in subtype._field_types_.values():
@@ -90,7 +90,7 @@ def _add_meta_args(metadata: type, content: list):
 def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
     escape = _systemrdl_escape
 
-    if issubclass(input, RegisterDevice):
+    if issubclass(input, RegFile):
         content = [""]
 
         member_metadata = input._metadata_
@@ -104,7 +104,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
 
         _add_description(input, content)
 
-        if issubclass(input, RootDevice):
+        if issubclass(input, AddrMap):
             content.append(f"default regwidth = {input._register_tools_._word_width_};")
             content.append("")
 
@@ -228,7 +228,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
     raise AssertionError(f"invalid input {input}")
 
 
-def to_system_rdl(input: RootDevice | type[RootDevice]):
+def to_system_rdl(input: AddrMap | type[AddrMap]):
     if not isinstance(input, type):
         input = type(input)
 

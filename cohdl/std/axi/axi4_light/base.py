@@ -325,7 +325,7 @@ class Axi4Light:
         from cohdl.std.reg import RegisterTools
         from cohdl.std._core_utility import as_awaitable
 
-        assert isinstance(root, RegisterTools.RootDevice)
+        assert isinstance(root, RegisterTools.AddrMap)
         assert root._word_width_() == 32
         assert root._register_tools_._addr_unit_width_ == 8
 

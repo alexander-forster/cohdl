@@ -98,7 +98,7 @@ class RegisterTools(Generic[W]):
             """
             Classes derived from `RegisterObject` can override this method to configure
             objects after they have been initialized. If a `RegisterObject` overrides this method
-            but does not call it during `RootDevice._config_` it will be called without
+            but does not call it during `AddrMap._config_` it will be called without
             any arguments to provide a default configuration.
             """
 
@@ -118,7 +118,7 @@ class RegisterTools(Generic[W]):
             Called by the bus master to implement register object behavior.
             """
 
-        def __init__(self, parent: RegisterTools.RegisterDevice, name: str): ...
+        def __init__(self, parent: RegisterTools.RegFile, name: str): ...
         def _flatten_(self) -> list[RegisterTools.RegisterObject]:
             """
             Returns all register objects contained in a register device.
@@ -168,14 +168,14 @@ class RegisterTools(Generic[W]):
         def _info_(self): ...
         def __init_subclass__(cls, readonly=False, writeonly=False): ...
 
-    class RegisterDevice(RegisterObject):
+    class RegFile(RegisterObject):
         _member_types_: dict[str, type[RegisterTools[W].RegisterObject]]
 
         def __init_subclass__(
             cls, *, word_count, readonly=False, writeonly=False
         ) -> None: ...
 
-    class RootDevice(RegisterDevice[0]):
+    class AddrMap(RegFile[0]):
         def __init__(self, *args, **kwargs): ...
 
     class GenericRegister(RegisterObject):
@@ -463,7 +463,7 @@ class RegisterTools(Generic[W]):
         >>>
         >>> # A register device, that provides access to hardware buttons
         >>> # and LEDs.
-        >>> class ExampleInOut(reg32.RegisterDevice, word_count=2):
+        >>> class ExampleInOut(reg32.RegFile, word_count=2):
         >>>     reg_btn: reg32.Input[0x0]   # input register at offset 0x00
         >>>     reg_led: reg32.Output[0x4]  # output register at offset 0x04
         >>>

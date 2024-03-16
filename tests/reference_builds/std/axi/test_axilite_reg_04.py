@@ -38,7 +38,7 @@ class MyRelativeRange(reg32.AddrRange, word_count=16):
         self._wr_data <<= data
 
 
-class MyRoot(reg32.RootDevice, word_count=128):
+class MyRoot(reg32.AddrMap, word_count=128):
     range_low: MyRange[0]
     range_high: MyRelativeRange[64]
 

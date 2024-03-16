@@ -39,7 +39,7 @@ class MyRegister(reg32.Register):
         self.field_c <<= EnumC.c
 
 
-class MyRoot(reg32.RootDevice, word_count=4):
+class MyRoot(reg32.AddrMap, word_count=4):
     reg_a: MyRegister[0]
     reg_b: MyRegister[4]
     reg_c: MyRegister[8]
