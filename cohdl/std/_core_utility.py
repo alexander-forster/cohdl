@@ -615,7 +615,7 @@ def rightpad(inp: BitVector, result_width: int, fill=None):
 
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
     assert old.width == new.width
-    return (old & ~mask) | (new & mask)
+    return (old.bitvector & ~mask) | (new.bitvector & mask)
 
 
 class Mask:

@@ -43,7 +43,7 @@ from cohdl._core._intrinsic_definitions import (
 )
 
 from cohdl._core._context import Context, ContextType
-from cohdl.utility.id_map import IdMap
+from cohdl.utility.virtual_traceback import VirtualFrame
 
 from ._value_branch import _MergedBranch, ObjTraits
 from . import _prepare_ast_out as out
@@ -55,89 +55,9 @@ from cohdl._core._collect_ast_and_scope import (
     _Unbound,
 )
 
-from types import TracebackType, FrameType
+from ._traceback import pretty_traceback_active
 
-_pretty_traceback = True
-
-
-def use_pretty_traceback(val: bool = True):
-    """
-    CoHDL inserts stack frames from traced python functions
-    into the exception trace back. This makes it a lot easier to debug
-    compilation errors because the call stack contains the actual code,
-    that caused the issue and not the compiler functions used to
-    translate it.
-
-    This mode can be switched of using `cohdl.use_pretty_traceback(False)`.
-
-    You probably only want to set this value to False if you want to debug an internal compiler issue.
-    """
-
-    global _pretty_traceback
-    _pretty_traceback = val
-
-
-class _PrevCustomTb:
-    def __init__(self, tb: TracebackType, fn_name, fn_file, fn_linenumber):
-        self.tb = tb
-        self.fn_name = fn_name
-        self.fn_file = fn_file
-        self.fn_linenumber = fn_linenumber
-
-    def same_source(self, fn_name, fn_file, fn_linenumber):
-        return (
-            self.fn_name == fn_name
-            and self.fn_file == fn_file
-            and self.fn_linenumber == fn_linenumber
-        )
-
-
-_prev_traceback: _PrevCustomTb = None
-
-
-def _add_exception_frame(
-    exception: BaseException, fn_name, fn_file, fn_linenumber, globals_dict, locals_dict
-):
-    # helper function to insert stack frames from traced python code
-    # to the exception traceback
-
-    global _prev_traceback
-
-    if _prev_traceback is not None:
-        if _prev_traceback.same_source(fn_name, fn_file, fn_linenumber):
-            return
-
-    # It is not possible to construct the python builtin FrameType from
-    # user code. As a workaround we create a fake by constructing a string of python code
-    # that contains a function with the same name, at the same line number as
-    # in the actual source code. The fake function raises an assertion
-    # so we can extract the frame object after a call to `exec`.
-    code_str = (
-        "\n" * fn_linenumber
-        + f"def {fn_name}():\n\traise AssertionError('dummy')\n{fn_name}()\n"
-    )
-
-    compiled_fn = compile(code_str, filename=fn_file, mode="exec")
-
-    try:
-        # Use the fake function of create a frame object with the correct
-        # function name, line number, filename and local/global variables
-        exec(compiled_fn, globals_dict, locals_dict)
-    except BaseException as dummy_err:
-        new_frame = dummy_err.__traceback__.tb_next.tb_next.tb_frame
-
-        for name, val in locals_dict.items():
-            new_frame.f_locals[name] = val
-
-        if _prev_traceback is not None:
-            custom_tb = TracebackType(_prev_traceback.tb, new_frame, 1, fn_linenumber)
-            exception.__traceback__.tb_next = custom_tb
-        else:
-            custom_tb = TracebackType(None, new_frame, 1, fn_linenumber)
-            exception.with_traceback(custom_tb)
-
-        _prev_traceback = _PrevCustomTb(custom_tb, fn_name, fn_file, fn_linenumber)
-
+_parent_frame: None | VirtualFrame = None
 
 #
 #
@@ -267,16 +187,11 @@ class PrepareAst:
             if not replacement.is_special_case:
                 return out.Value(replacement.fn(*args, **kwargs), [])
         except BaseException as err:
-            # an exception occurred in an intrinsic function, set the global
-            # _prev_traceback variable so the cohdl internals are skipped when
-            # the pretty_traceback option is set.
-            # Only the first argument of _PrevCustomTb is relevant.
-            # The others are only used to detect duplicate frames that
-            # refer to the same code line.
+            if pretty_traceback_active() and _parent_frame is not None:
+                _parent_frame.apply_to_exception(err, extend=True)
+                err._cohdl_virtual = True
 
-            global _prev_traceback
-            _prev_traceback = _PrevCustomTb(err.__traceback__.tb_next, "", "", 0)
-            raise err
+            raise
 
         if replacement.evaluate:
             return self.subcall(replacement.fn, args, kwargs)
@@ -509,6 +424,10 @@ class PrepareAst:
         self._scope = {**fn_def.scope()}
         self._super_arg = fn_def.super_arg()
 
+        self._frame = VirtualFrame(
+            fn_def._location, self._scope, None if parent is None else parent._frame
+        )
+
         # required to resolve super()
         # not used otherwise
         self._first_arg = first_arg
@@ -551,39 +470,25 @@ class PrepareAst:
             self._parent.add_always_expr(expr)
 
     def apply(self, inp):
+        global _parent_frame
+        prev_parent_frame = _parent_frame
+
         try:
-            return self.apply_impl(inp)
+            frame = out.AstVirtualFrame(inp, self._frame, prev_parent_frame)
+
+            _parent_frame = frame
+            result = self.apply_impl(inp)
+            result._frame = frame
+            _parent_frame = prev_parent_frame
+
+            return result
         except BaseException as err:
-            if _pretty_traceback:
-                if isinstance(inp, ast.AST):
-                    if hasattr(inp, "lineno"):
-                        lineno = inp.lineno
-                    else:
-                        lineno = 0
-                else:
-                    raise err
-
-                if isinstance(
-                    inp, (ast.If, ast.While, ast.For, ast.With, ast.AsyncWith)
-                ):
-                    # statements in traceback because only function calls
-                    # and the expression, that caused the error are relevant
-                    raise err
-
-                fn_def = self._fn_def
-
-                ctx_location = fn_def.location()
-                fn_name = fn_def.name()
-
-                _add_exception_frame(
-                    err,
-                    fn_name,
-                    ctx_location.file,
-                    ctx_location.line + lineno - 1,
-                    {},
-                    self._scope,
-                )
-                raise err
+            if pretty_traceback_active():
+                if not hasattr(err, "_cohdl_virtual"):
+                    frame = self._frame if _parent_frame is None else _parent_frame
+                    frame.apply_to_exception(err)
+                    err._cohdl_virtual = True
+                raise
             else:
                 if isinstance(inp, ast.AST) and hasattr(inp, "lineno"):
                     lineno = inp.lineno
@@ -600,6 +505,8 @@ class PrepareAst:
                     print(self.error(f"used in {type(inp)}", lineno))
 
                 raise err
+        finally:
+            _parent_frame = prev_parent_frame
 
     def throw_error(self, msg: str, offset: int):
         raise AssertionError(self.error(msg, offset))
@@ -782,6 +689,8 @@ class PrepareAst:
             result_expr = self.subcall(target.__ixor__, [src], {})
         elif isinstance(op, ast.MatMult):
             result_expr = self.subcall(target.__imatmul__, [src], {})
+        else:
+            raise AssertionError(f"invalid assignment operator '{op}'")
 
         assert (
             result_expr.result() is target
@@ -796,7 +705,7 @@ class PrepareAst:
     #
     #
 
-    def apply_impl(self, inp):
+    def apply_impl(self, inp) -> out.Statement:
         last_inp = self._last_apply_inp
         self._last_apply_inp = inp
 
@@ -1968,6 +1877,7 @@ class PrepareAst:
                     global_dict={},
                     nonlocal_dict=self._scope,
                     default_converter=default_converter,
+                    location=self._fn_def.location().relative(inp.lineno),
                 ),
             )
 
@@ -1990,6 +1900,7 @@ class PrepareAst:
                     global_dict={},
                     nonlocal_dict=self._scope,
                     default_converter=default_converter,
+                    location=self._fn_def.location().relative(inp.lineno),
                 ),
                 bound_statements=bound_stmt,
             )
@@ -2170,17 +2081,9 @@ class ConvertPythonInstance:
         if isinstance(inp, Context):
             ctx_type = inp.context_type()
 
-            try:
-                if ctx_type is ContextType.CONCURRENT:
-                    return PrepareAst.convert_concurrent(inp)
-                elif ctx_type is ContextType.SEQUENTIAL:
-                    return PrepareAst.convert_sequential(inp)
-            except BaseException as err:
-                if not _pretty_traceback:
-                    raise err
-
-                if _prev_traceback is not None:
-                    err.__traceback__.tb_next = _prev_traceback.tb
-                    raise err
+            if ctx_type is ContextType.CONCURRENT:
+                return PrepareAst.convert_concurrent(inp)
+            elif ctx_type is ContextType.SEQUENTIAL:
+                return PrepareAst.convert_sequential(inp)
 
             raise AssertionError(f"invalid context type '{ctx_type}'")

@@ -7,6 +7,7 @@ from cohdl._core._ir import _repr as ir
 from cohdl._core._ir import AccessFlags
 
 from . import _prepare_ast_out as out
+from ._traceback import pretty_traceback_active
 from cohdl._core._primitive_type import is_primitive
 
 
@@ -146,7 +147,21 @@ class IrGenerator:
     #
     #
 
-    def apply(self, inp, open_blocks: list[ir.CodeBlock]):
+    def apply(self, inp: out.Statement, open_blocks: list[ir.CodeBlock]):
+        prev_frame = ir.Statement._current_frame
+
+        try:
+            ir.Statement._current_frame = inp._frame
+        except AttributeError:
+            pass
+
+        result = self._apply_impl(inp, open_blocks)
+
+        ir.Statement._current_frame = prev_frame
+
+        return result
+
+    def _apply_impl(self, inp, open_blocks: list[ir.CodeBlock]):
         if isinstance(inp, out.Statement) and not isinstance(
             inp, (out.While, out.Await)
         ):
@@ -971,6 +986,7 @@ class ConvertInstance:
     @staticmethod
     def detect_uninitialized_temporaries(ctx: ir.Context):
         invalid_temporaries = set()
+        written_temporaries = set()
 
         def check_used_temporaries(obj, access: AccessFlags):
             if access is AccessFlags.READ:
@@ -986,9 +1002,16 @@ class ConvertInstance:
                     # >>> if some_signal:
                     # >>>     var = inp_a | inp_b
                     # >>> some_output <<= var        # error occurs in this line
+                    root_id = id(obj._root)
                     assert (
-                        id(obj._root) not in invalid_temporaries
+                        root_id not in invalid_temporaries
                     ), "temporary might not be initialized"
+
+                    assert (
+                        root_id in written_temporaries
+                    ), "temporary read before it was written (defined outside current context?)"
+            elif access is AccessFlags.WRITE:
+                written_temporaries.add(id(obj._root))
 
             return obj
 
@@ -1146,73 +1169,94 @@ class ConvertInstance:
     #
 
     def apply(self, inp):
-        if isinstance(inp, out.EntityTemplate):
-            ir_template = self.lookup_template(inp)
+        try:
+            if isinstance(inp, out.EntityTemplate):
+                ir_template = self.lookup_template(inp)
 
-            if ir_template is None:
-                ir_template = ir.EntityTemplate(
-                    inp._info,
-                    [self.apply(block) for block in inp.subblocks()],
+                if ir_template is None:
+                    ir_template = ir.EntityTemplate(
+                        inp._info,
+                        [self.apply(block) for block in inp.subblocks()],
+                        [self.apply(ctx) for ctx in inp.contexts()],
+                    )
+
+                    self.add_template(inp, ir_template)
+
+                return ir_template
+
+            if isinstance(inp, out.Entity):
+                template = self.apply(inp.template())
+
+                return ir.Entity(
+                    template,
+                    inp._info.name,
+                    inp.port_definitions(),
+                    inp.generic_definitions(),
+                )
+            if isinstance(inp, out.Block):
+                return ir.Block(
+                    "<BLOCK>",
+                    [self.apply(subinst) for subinst in inp.subblocks()],
                     [self.apply(ctx) for ctx in inp.contexts()],
+                    inp._attributes,
                 )
 
-                self.add_template(inp, ir_template)
+            if isinstance(inp, out.Concurrent):
+                result = IrGenerator.convert_concurrent(inp)
 
-            return ir_template
+                written_temporaries = set()
 
-        if isinstance(inp, out.Entity):
-            template = self.apply(inp.template())
+                def check_variables_and_temporaries(obj, access):
+                    assert not isinstance(
+                        obj, Variable
+                    ), "variables cannot be used in concurrent contexts"
 
-            return ir.Entity(
-                template,
-                inp._info.name,
-                inp.port_definitions(),
-                inp.generic_definitions(),
-            )
-        if isinstance(inp, out.Block):
-            return ir.Block(
-                "<BLOCK>",
-                [self.apply(subinst) for subinst in inp.subblocks()],
-                [self.apply(ctx) for ctx in inp.contexts()],
-                inp._attributes,
-            )
-
-        if isinstance(inp, out.Concurrent):
-            result = IrGenerator.convert_concurrent(inp)
-
-            def check_for_variables(obj, access):
-                assert not isinstance(
-                    obj, Variable
-                ), "variables cannot be used in concurrent contexts"
-                return obj
-
-            result.visit_referenced_objects(check_for_variables)
-
-            if result.attributes.get("cleanup_unused", True):
-                result = ConvertInstance.cleanup_unused(result)
-
-            if result.attributes.get("zero_init_temporaries", False):
-                # only used for unit tests
-                # (required because ghdl terminates with an overflow error
-                # when uninitialized integer values are used)
-
-                def visit_obj(obj, access):
                     if isinstance(obj, Temporary):
-                        obj._default = obj.type(Null)
+                        if access is AccessFlags.READ:
+                            assert (
+                                id(obj._root) in written_temporaries
+                            ), "temporary read before it was written (defined outside current context?)"
+                        else:
+                            written_temporaries.add(id(obj._root))
+
                     return obj
 
-                result.visit_referenced_objects(visit_obj)
-            return result
+                result.visit_referenced_objects(check_variables_and_temporaries)
 
-        if isinstance(inp, out.Sequential):
-            result = IrGenerator.convert_sequential(inp)
+                if result.attributes.get("cleanup_unused", True):
+                    result = ConvertInstance.cleanup_unused(result)
 
-            ConvertInstance.detect_uninitialized_temporaries(result)
+                if result.attributes.get("zero_init_temporaries", False):
+                    # only used for unit tests
+                    # (required because ghdl terminates with an overflow error
+                    # when uninitialized integer values are used)
 
-            if result.attributes.get("cleanup_unused", True):
-                result = ConvertInstance.cleanup_unused(result)
-            if result.attributes.get("cleanup_bool_cast", True):
-                result = ConvertInstance.cleanup_bool_cast(result)
-            return result
+                    def visit_obj(obj, access):
+                        if isinstance(obj, Temporary):
+                            obj._default = obj.type(Null)
+                        return obj
 
-        raise AssertionError(f"cannot convert {inp}")
+                    result.visit_referenced_objects(visit_obj)
+                return result
+
+            if isinstance(inp, out.Sequential):
+                result = IrGenerator.convert_sequential(inp)
+
+                ConvertInstance.detect_uninitialized_temporaries(result)
+
+                if result.attributes.get("cleanup_unused", True):
+                    result = ConvertInstance.cleanup_unused(result)
+                if result.attributes.get("cleanup_bool_cast", True):
+                    result = ConvertInstance.cleanup_bool_cast(result)
+                return result
+
+            raise AssertionError(f"cannot convert {inp}")
+        except ir.VisitException as err:
+            if pretty_traceback_active():
+                src = err.src_statement
+
+                if src._frame is not None:
+                    src._frame.apply_to_exception(err.original)
+
+                raise err.original
+            raise

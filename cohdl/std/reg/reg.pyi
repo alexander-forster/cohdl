@@ -204,6 +204,56 @@ class RegisterTools(Generic[W]):
             This method can be overridden with a function or an async-coroutine.
             """
 
+    class Word(GenericRegister):
+        """
+        Represents a single register word.
+        Similar to register fields, bus write accesses to a Word
+        have no effect. Use MemWord to create a writeable version.
+        """
+
+        value: BitVector
+        def _config_(self, default=Null):
+            """
+            optional method to configure the default value of the Word
+            """
+
+        def __bool__(self) -> bool: ...
+        @property
+        def next(): ...
+        @next.setter
+        def next(self, src) -> None: ...
+        def __ilshift__(self, src):
+            return self
+
+    class UWord(Word):
+        """
+        same as `Word` but the contained value is unsigned
+        """
+
+        value: Unsigned
+
+    class SWord(Word):
+        """
+        same as `Word` but the contained value is signed
+        """
+
+        value: Unsigned
+
+    class MemWord(Word):
+        """
+        writeable version of `Word`
+        """
+
+    class MemUWord(UWord):
+        """
+        writeable version of `UWord`
+        """
+
+    class MemSWord(SWord):
+        """
+        writeable version of `SWord`
+        """
+
     #
     #
     #
@@ -455,6 +505,95 @@ class RegisterTools(Generic[W]):
 
         async def __aenter__(self): ...
         async def __aexit__(self, val, type, traceback): ...
+
+    class MetaNotifyBase(type):
+        @property
+        def Read(cls):
+            return cls
+
+        @property
+        def Write(cls):
+            return cls
+
+    class NotifyBase(metaclass=MetaNotifyBase):
+        """
+        Register notifications are used to inform HDL code, that a
+        read or write operations was performed on a register.
+
+        Like fields, notifications are defined using annotations on a register type.
+        Unlike fields, notifications are not associated with register bits.
+        The class properties `Read` and `Write` are used to select, when
+        the notification should be triggered.
+
+        Checkout the examples of `PushOnNotify` and `FlagOnNotify`.
+        """
+
+        def notify(self):
+            """
+            called when the selected event (read or write) occurs on the register
+            """
+
+        def __bool__(self) -> bool:
+            """
+            returns true when a notification is pending
+            """
+
+    class PushOnNotify(NotifyBase):
+        """
+        Defines a single bit signal, that is set to true for one clock cycle
+        when the corresponding event (read or write) occurs on the register.
+
+        >>> class ExamplePush(reg32.Register):
+        >>>     data: reg32.MemField[15:0, Null]
+        >>>     rd_cnt: reg32.UField[23:16, Null]
+        >>>     wr_cnt: reg32.UField[31:14, Null]
+        >>>
+        >>>     rd_notification: reg32.PushOnNotify.Read   # use .Read/.Write to select the monitored
+        >>>     wr_notification: reg32.PushOnNotify.Write  # type of event
+        >>>
+        >>>     def _impl_sequential_(self):
+        >>>         if self.rd_notification:
+        >>>             # self.rd_notification is true for one clock cycle after each
+        >>>             # read from the current register
+        >>>             self.rd_cnt <<= self.rd_cnt.value() + 1
+        >>>         if self.wr_notification:
+        >>>             # self.wr_notification is true for one clock cycle after each
+        >>>             # write to the current register
+        >>>             self.wr_cnt <<= self.wr_cnt.value() + 1
+        """
+
+    class FlagOnNotify(NotifyBase):
+        """
+        Defines a std.SyncFlag that is set when the corresponding event (read or write)
+        occurs on the register.
+
+        >>> class ExampleFlag(reg32.Register):
+        >>>     data: reg32.MemField[15:0, Null]
+        >>>     rd_cnt: reg32.UField[23:16, Null]
+        >>>
+        >>>     rd_notification: reg32.FlagOnNotify.Read
+        >>>
+        >>>     async def _impl_sequential_(self):
+        >>>         # wait for notification, then increment
+        >>>         # the read counter register
+        >>>         async with self.rd_notification:
+        >>>             self.rd_cnt <<= self.rd_cnt.value() + 1
+        """
+
+        def clear(self):
+            """
+            reset the flag
+            """
+
+        async def __aenter__(self):
+            """
+            wait until the notification is received
+            """
+
+        async def __aexit__(self, val, type, traceback):
+            """
+            clear the notification
+            """
 
     class Input(GenericRegister, readonly=True):
         """

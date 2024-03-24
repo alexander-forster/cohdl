@@ -1,6 +1,7 @@
 from __future__ import annotations
 from _ast import Lambda
-from ._source_location import SourceLocation
+from cohdl.utility.source_location import SourceLocation
+from cohdl.utility.virtual_traceback import VirtualFrame
 
 
 from abc import abstractmethod
@@ -180,7 +181,8 @@ class FunctionDefinition:
         vararg: str | None = None,
         kwarg: str | None = None,
         self_arg=_Unbound,
-        location: SourceLocation | None = None,
+        *,
+        location: SourceLocation,
     ):
         posonly = optional(posonly, list)
         args = optional(args, list)
@@ -212,9 +214,11 @@ class FunctionDefinition:
         nonlocal_dict: dict,
         self_arg=_Unbound,
         default_converter=lambda x: x,
-        captured_defaults: dict
-        | None = None,  # if set to None ast representation is used for defaults
-        location: SourceLocation | None = None,
+        captured_defaults: (
+            dict | None
+        ) = None,  # if set to None ast representation is used for defaults
+        *,
+        location: SourceLocation,
     ):
         if isinstance(fn_def, (ast.FunctionDef, ast.Lambda)):
             is_async = False
@@ -239,9 +243,14 @@ class FunctionDefinition:
 
         names = _ClassifyNames(fn_args, fn_def.body)
 
-        scope_ref = ScopeRef(
-            names.local_names, names.nonlocals(), global_dict, nonlocal_dict
-        )
+        try:
+            scope_ref = ScopeRef(
+                names.local_names, names.nonlocals(), global_dict, nonlocal_dict
+            )
+        except Exception as err:
+            frame = VirtualFrame(location, {**global_dict, **nonlocal_dict}, None)
+            frame.apply_to_exception(err)
+            raise
 
         if captured_defaults is None:
             defaults = fn_def.args.defaults
@@ -320,7 +329,7 @@ class FunctionDefinition:
 
         name = coroutine.__name__
         body = parse_source(inspect.getsource(frame)).body[0]
-        location = SourceLocation(code.co_filename, code.co_firstlineno)
+        location = SourceLocation(code.co_filename, code.co_firstlineno, name)
 
         global_dict = frame.f_globals
         locals_dict = frame.f_locals
@@ -427,7 +436,7 @@ class FunctionDefinition:
         }
 
         code = fn.__code__
-        location = SourceLocation(code.co_filename, code.co_firstlineno)
+        location = SourceLocation(code.co_filename, code.co_firstlineno, name)
 
         result = FunctionDefinition.from_ast_fn(
             body,
@@ -458,9 +467,10 @@ class FunctionDefinition:
         vararg: str | None,
         kwarg: str | None,
         self_arg=_Unbound,
-        location: SourceLocation | None = None,
+        *,
+        location: SourceLocation,
     ):
-        self._location = location if location is not None else SourceLocation()
+        self._location = location
 
         self._body = body
         self._name = name
@@ -480,7 +490,6 @@ class FunctionDefinition:
         self._self_arg = self_arg
 
     def location(self) -> SourceLocation:
-        assert self._location is not None
         return self._location
 
     def name(self) -> str:
@@ -508,11 +517,9 @@ class FunctionDefinition:
         # the arguments in order (pop removes and returns last element of list)
         args = args[::-1]
 
-        class _Dummy:
-            ...
+        class _Dummy: ...
 
-        class _NoSuperArg:
-            ...
+        class _NoSuperArg: ...
 
         super_arg = _Dummy
 
@@ -589,6 +596,7 @@ class InstantiatedFunction:
         super_arg=_Unbound,
     ):
         self._definition = definition
+        self._location = definition.location()
         self._scope = scope
         self._super_arg = super_arg
 

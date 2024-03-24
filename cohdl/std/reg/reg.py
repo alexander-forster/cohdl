@@ -439,9 +439,137 @@ class GenericRegister(RegisterObject):
         pass
 
 
+class Word(GenericRegister):
+    _cohdlstd_vector_type = BitVector
+
+    def _config_(self, default=Null):
+        self.value = Signal[
+            self._cohdlstd_vector_type[self._register_tools_._word_width_ - 1 : 0]
+        ](default)
+
+    def _on_read_(self):
+        return self.value
+
+    def __bool__(self):
+        return bool(self.value)
+
+    def __ilshift__(self, src):
+        if isinstance(src, Word):
+            self.value <<= src.value
+        else:
+            self.value <<= src
+        return self
+
+    @property
+    def next(self):
+        raise AssertionError("read from next property not supported")
+
+    def next(self, src):
+        self <<= src
+
+
+class UWord(Word):
+    _cohdlstd_vector_type = Unsigned
+
+
+class SWord(Word):
+    _cohdlstd_vector_type = Signed
+
+
+class MemWord(Word):
+    def _on_write_(self, data, mask: std.Mask):
+        self.value <<= mask.apply(self.value, data)
+
+
+class MemUWord(MemWord):
+    _cohdlstd_vector_type = Unsigned
+
+
+class MemSWord(MemWord):
+    _cohdlstd_vector_type = Signed
+
+
 #
 #
 #
+
+
+class _NotifyOnRead: ...
+
+
+class _NotifyOnWrite: ...
+
+
+class MetaNotifyBase(type):
+    @property
+    def Read(cls):
+        assert not hasattr(cls, "_cohdlstd_onread")
+        return cls[_NotifyOnRead]
+
+    @property
+    def Write(cls):
+        assert not hasattr(cls, "_cohdlstd_onread")
+        return cls[_NotifyOnWrite]
+
+
+class NotifyArg:
+    def __init__(self, arg):
+        assert (
+            arg is _NotifyOnRead or arg is _NotifyOnWrite
+        ), "use NotifyType.Read of NotifyType.Write instead of NotifyType[...]"
+        self.arg = arg
+
+    def __hash__(self):
+        return hash(self.arg)
+
+    def __eq__(self, other):
+        return self.arg is other.arg
+
+    def __str__(self):
+        if self.arg is _NotifyOnRead:
+            return "on_read"
+        return "on_write"
+
+
+class NotifyBase(std.Template[NotifyArg], metaclass=MetaNotifyBase):
+    _cohdlstd_notify_mode: NotifyArg.arg
+
+    def notify(self):
+        raise AssertionError("abstract method called")
+
+    def __bool__(self):
+        raise AssertionError("abstract method called")
+
+
+class PushOnNotify(NotifyBase):
+    def __init__(self):
+        self._bit = Signal[Bit](False)
+
+    def notify(self):
+        self._bit ^= True
+
+    def __bool__(self):
+        return self._bit
+
+
+class FlagOnNotify(NotifyBase):
+    def __init__(self):
+        self._flag = std.SyncFlag()
+
+    def notify(self):
+        self._flag.set()
+
+    def __bool__(self):
+        return self._flag.is_set()
+
+    def clear(self):
+        self._flag.clear()
+
+    async def __aenter__(self):
+        await self._flag.__aenter__()
+
+    async def __aexit__(self, val, type, traceback):
+        await self._flag.__aexit__(val, type, traceback)
 
 
 def _primitive_as_int(input):
@@ -799,6 +927,11 @@ class Register(GenericRegister):
     # from RegFile
     def _init_from_device(self, parent, name):
         super().__init__(parent, name)
+        self._notifications_ = {}
+        for name, notification_type in self._notification_types_.items():
+            setattr(self, name, notification_type())
+            self._notifications_[name] = getattr(self, name)
+
         self._init_from_config()
 
     # from user code
@@ -896,9 +1029,17 @@ class Register(GenericRegister):
         )
 
     async def _basic_read_(self, addr, meta):
+        for value in self._notifications_.values():
+            if value._cohdlstd_notify_mode is _NotifyOnRead:
+                value.notify()
+
         return (await std.as_awaitable(self._on_read_))._to_bits_()
 
     async def _basic_write_(self, addr, data, mask, meta):
+        for value in self._notifications_.values():
+            if value._cohdlstd_notify_mode is _NotifyOnWrite:
+                value.notify()
+
         result = await std.as_awaitable(self._on_write_, type(self)._from_bits_(data))
 
         if result is None:
@@ -948,6 +1089,7 @@ class Register(GenericRegister):
         super().__init_subclass__(readonly=readonly, writeonly=writeonly)
 
         fields: list[tuple[str, type[Field]]] = []
+        notifications: list[tuple[str, type[NotifyBase]]] = []
         word_width = cls._register_tools_._word_width_
         metadata = {}
 
@@ -958,6 +1100,9 @@ class Register(GenericRegister):
 
             if issubclass(field_type, FieldBase):
                 fields.append((name, field_type))
+
+            if issubclass(field_type, NotifyBase):
+                notifications.append((name, field_type))
 
         if len(metadata) != 0:
             cls._metadata_ = metadata
@@ -986,6 +1131,9 @@ class Register(GenericRegister):
             cls._field_layout_.append(word_width - offset)
 
         cls._field_types_ = {name: field_type for name, field_type in fields}
+        cls._notification_types_ = {
+            name: notification_type for name, notification_type in notifications
+        }
 
 
 class Input(GenericRegister, readonly=True):
@@ -1174,8 +1322,19 @@ RegisterTools.RegisterObject = RegisterObject
 RegisterTools.RegFile = RegFile
 RegisterTools.AddrMap = AddrMap
 
+RegisterTools.NotifyBase = NotifyBase
+RegisterTools.PushOnNotify = PushOnNotify
+RegisterTools.FlagOnNotify = FlagOnNotify
+
 RegisterTools.GenericRegister = GenericRegister
 RegisterTools.Register = Register
+
+RegisterTools.Word = Word
+RegisterTools.UWord = UWord
+RegisterTools.SWord = SWord
+RegisterTools.MemWord = MemWord
+RegisterTools.MemUWord = MemUWord
+RegisterTools.MemSWord = MemSWord
 
 RegisterTools.Access = Access
 RegisterTools.HwAccess = HwAccess

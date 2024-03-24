@@ -8,7 +8,6 @@ import enum
 import cohdl
 from cohdl import (
     BitSignalEvent,
-    SourceLocation,
     Bit,
     Signal,
     evaluated,
@@ -16,6 +15,8 @@ from cohdl import (
     Variable,
     AssignMode,
 )
+
+from cohdl.utility.source_location import SourceLocation
 
 from ._prefix import _Prefix
 

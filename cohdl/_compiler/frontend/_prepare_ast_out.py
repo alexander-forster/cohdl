@@ -5,7 +5,7 @@ from typing import Tuple
 
 import cohdl
 import typing
-
+import ast
 
 from cohdl._core import _type_qualifier
 
@@ -19,8 +19,54 @@ from cohdl import Temporary, Signal
 
 from cohdl import Bit
 from cohdl.utility.code_writer import IndentBlock, TextBlock
+from cohdl.utility.virtual_traceback import VirtualFrame
 
 from ._value_branch import _ValueBranchHook, _ValueBranch, _MergedBranch
+
+
+class AstVirtualFrame(VirtualFrame):
+    """
+    A virtual frame derived from an ast entry relative to the function frame
+    it is used in
+    """
+
+    def __init__(
+        self, ast: ast.AST, fn_frame: VirtualFrame, parent_frame: VirtualFrame | None
+    ):
+        super().__init__(fn_frame._location, fn_frame._scope, parent_frame)
+        self._ast = ast
+
+    def location(self):
+        try:
+            return self._location.relative(self._ast.lineno)
+        except AttributeError:
+            # self._ast might not have a lineno attribute
+            # fall back to function location
+            return self._location
+
+    def ignore(self, prev: VirtualFrame) -> bool:
+        # ignore statements in traceback because only function calls
+        # and the expression, that caused the error are relevant
+        if isinstance(
+            self._ast,
+            (
+                list,
+                ast.If,
+                ast.While,
+                ast.For,
+                ast.With,
+                ast.AsyncWith,
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+            ),
+        ):
+            return True
+
+        # only generate one traceback frame per source line
+        if self.location() == prev.location():
+            return True
+
+        return False
 
 
 class Statement:
@@ -37,6 +83,7 @@ class Statement:
         self._bound_statements = [] if bound_statements is None else bound_statements
         self._contains_break = contains_break
         self._contains_continue = contains_continue
+        self._frame: AstVirtualFrame
 
     def add_bound_statement(self, stmt: Statement):
         self._bound_statements.append(stmt)

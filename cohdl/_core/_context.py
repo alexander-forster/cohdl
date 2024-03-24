@@ -4,7 +4,7 @@ from typing import Callable
 
 from ._type_qualifier import Port, Generic
 from ._collect_ast_and_scope import FunctionDefinition, InstantiatedFunction
-from ._source_location import SourceLocation
+from cohdl.utility.source_location import SourceLocation
 import enum
 import inspect
 

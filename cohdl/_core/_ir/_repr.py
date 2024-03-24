@@ -24,15 +24,29 @@ from cohdl._core._intrinsic import (
 )
 
 from cohdl.utility import IndentBlock, IdMap, IdSet
+from cohdl.utility.source_location import SourceLocation
+from cohdl.utility.virtual_traceback import VirtualFrame
 
 from cohdl._core._intrinsic import _SensitivitySpec, _SensitivityAll, _SensitivityList
 from cohdl._core._primitive_type import is_primitive
 from cohdl._core import enum as cohdl_enum
 from cohdl._core._context import EntityInfo
 
-from cohdl._core._source_location import SourceLocation
 from cohdl._core import _InlineCode
 from cohdl._core import _intrinsic_operations as intr_op
+
+
+class VisitException(Exception):
+    def __init__(self, src_statement: Statement, original: Exception):
+
+        if isinstance(original, VisitException):
+            self.with_traceback(original.original.__traceback__)
+            self.src_statement = original.src_statement
+            self.original = original.original
+        else:
+            self.with_traceback(original.__traceback__)
+            self.src_statement = src_statement
+            self.original = original
 
 
 class AccessFlags(enum.Flag):
@@ -89,15 +103,21 @@ def _visit_referenced_objects(self, operation):
 
 
 class Statement:
+    _current_frame = None
+
     @staticmethod
     def _obj_str(obj) -> str:
         return f"id: {id(obj):#x}, {obj}"
 
     def __init__(self):
         self._parent_state: _State | None = None
+        self._frame: VirtualFrame = Statement._current_frame
 
     def visit(self, operation):
-        return operation(self)
+        try:
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     @abstractmethod
     def visit_objects(
@@ -147,7 +167,10 @@ class Expression(Statement):
 
     @abstractmethod
     def visit_objects(self, operation):
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def update_transitions(self, state_map: IdMap):
         pass
@@ -235,12 +258,18 @@ class CodeBlock(Statement):
             blocks = [block._parent for block in blocks]
 
     def visit(self, operation):
-        self._content = [stmt.visit(operation) for stmt in self._content]
-        return operation(self)
+        try:
+            self._content = [stmt.visit(operation) for stmt in self._content]
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
-        for stmt in self._content:
-            stmt.visit_objects(operation)
+        try:
+            for stmt in self._content:
+                stmt.visit_objects(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def update_transitions(self, state_map: IdMap):
         for stmt in self._content:
@@ -323,10 +352,16 @@ class Event:
         self.event_type = event.event_type
 
     def visit(self, operation):
-        return operation(self)
+        try:
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
-        self.sig = operation(self.sig, AccessFlags.READ)
+        try:
+            self.sig = operation(self.sig, AccessFlags.READ)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self) -> IndentBlock:
         return IndentBlock(
@@ -351,12 +386,18 @@ class EventGroup:
                 self.events.append(EventGroup(event.operation, event.events))
 
     def visit(self, operation):
-        self.events = [operation(event) for event in self.events]
-        return operation(self)
+        try:
+            self.events = [operation(event) for event in self.events]
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
-        for event in self.events:
-            event.visit_objects(operation)
+        try:
+            for event in self.events:
+                event.visit_objects(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self) -> IndentBlock:
         return IndentBlock(
@@ -388,21 +429,27 @@ class If(Statement):
         super().__init__()
 
     def visit(self, operation):
-        if isinstance(self._test, (Event, EventGroup)):
-            self._test = self._test.visit(operation)
+        try:
+            if isinstance(self._test, (Event, EventGroup)):
+                self._test = self._test.visit(operation)
 
-        self._body = self._body.visit(operation)
-        self._orelse = self._orelse.visit(operation)
-        return operation(self)
+            self._body = self._body.visit(operation)
+            self._orelse = self._orelse.visit(operation)
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
-        if isinstance(self._test, (Event, EventGroup)):
-            self._test.visit_objects(operation)
-        else:
-            self._test = operation(self._test, AccessFlags.READ)
+        try:
+            if isinstance(self._test, (Event, EventGroup)):
+                self._test.visit_objects(operation)
+            else:
+                self._test = operation(self._test, AccessFlags.READ)
 
-        self._body.visit_objects(operation)
-        self._orelse.visit_objects(operation)
+            self._body.visit_objects(operation)
+            self._orelse.visit_objects(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     # TODO: check if copy is used
     def copy(self) -> If:
@@ -440,9 +487,12 @@ class Compare(Expression):
         super().__init__(result)
 
     def visit_objects(self, operation: Callable):
-        self._lhs = operation(self._lhs, AccessFlags.READ)
-        self._rhs = operation(self._rhs, AccessFlags.READ)
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self._lhs = operation(self._lhs, AccessFlags.READ)
+            self._rhs = operation(self._rhs, AccessFlags.READ)
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> Compare:
         return Compare(self._op, self._lhs, self._rhs, self.result())
@@ -477,8 +527,11 @@ class UnaryOp(Expression):
         super().__init__(result)
 
     def visit_objects(self, operation: Callable):
-        self._arg = operation(self._arg, AccessFlags.READ)
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self._arg = operation(self._arg, AccessFlags.READ)
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> UnaryOp:
         return UnaryOp(self._op, self._arg, self.result())
@@ -512,9 +565,12 @@ class BinOp(Expression):
         )
 
     def visit_objects(self, operation: Callable):
-        self._lhs = operation(self._lhs, AccessFlags.READ)
-        self._rhs = operation(self._rhs, AccessFlags.READ)
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self._lhs = operation(self._lhs, AccessFlags.READ)
+            self._rhs = operation(self._rhs, AccessFlags.READ)
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> BinOp:
         return BinOp(self._op, self._lhs, self._rhs, self.result())
@@ -541,8 +597,11 @@ class All(Expression):
         super().__init__(result)
 
     def visit_objects(self, operation: Callable):
-        self._args = [operation(arg, AccessFlags.READ) for arg in self._args]
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self._args = [operation(arg, AccessFlags.READ) for arg in self._args]
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> All:
         return All([*self._args], self.result())
@@ -567,8 +626,11 @@ class Any(Expression):
         super().__init__(result)
 
     def visit_objects(self, operation: Callable):
-        self._args = [operation(arg, AccessFlags.READ) for arg in self._args]
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self._args = [operation(arg, AccessFlags.READ) for arg in self._args]
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> Any:
         return Any([*self._args], self.result())
@@ -583,15 +645,21 @@ class Any(Expression):
 
 
 class SignalAssignment(Statement):
-    def __init__(self, target_signal: Signal, source):
+    def __init__(self, target_signal: Signal, source, frame=None):
         self._target = target_signal
         self._source = source
 
         super().__init__()
 
+        if frame is not None:
+            self._frame = frame
+
     def visit_objects(self, operation: Callable):
-        self._target = operation(self._target, AccessFlags.WRITE)
-        self._source = operation(self._source, AccessFlags.READ)
+        try:
+            self._target = operation(self._target, AccessFlags.WRITE)
+            self._source = operation(self._source, AccessFlags.READ)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> SignalAssignment:
         return SignalAssignment(self._target, self._source)
@@ -617,8 +685,11 @@ class SignalPush(Statement):
         super().__init__()
 
     def visit_objects(self, operation: Callable):
-        self._target = operation(self._target, AccessFlags.PUSH)
-        self._source = operation(self._source, AccessFlags.READ)
+        try:
+            self._target = operation(self._target, AccessFlags.PUSH)
+            self._source = operation(self._source, AccessFlags.READ)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> SignalPush:
         return SignalPush(self._target, self._source)
@@ -673,8 +744,11 @@ class VariableAssignment(Statement):
         super().__init__()
 
     def visit_objects(self, operation: Callable):
-        self._target = operation(self._target, AccessFlags.WRITE)
-        self._source = operation(self._source, AccessFlags.READ)
+        try:
+            self._target = operation(self._target, AccessFlags.WRITE)
+            self._source = operation(self._source, AccessFlags.READ)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> VariableAssignment:
         return VariableAssignment(self._target, self._source)
@@ -704,7 +778,10 @@ class ResetInstance(Statement):
         super().__init__()
 
     def visit_objects(self, operation: Callable):
-        self._obj = operation(self._obj, AccessFlags.WRITE)
+        try:
+            self._obj = operation(self._obj, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self) -> ResetInstance:
         return ResetInstance(self._obj)
@@ -733,8 +810,11 @@ class Boolean(Expression):
         super().__init__(result)
 
     def visit_objects(self, operation: Callable):
-        self._arg = operation(self._arg, AccessFlags.READ)
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self._arg = operation(self._arg, AccessFlags.READ)
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self) -> str:
         return "Boolean"
@@ -758,17 +838,20 @@ class SelectWith(Expression):
         super().__init__(result)
 
     def visit_objects(self, operation: Callable):
-        self._arg = operation(self._arg, AccessFlags.READ)
+        try:
+            self._arg = operation(self._arg, AccessFlags.READ)
 
-        self._branches = [
-            [operation(a, AccessFlags.READ), operation(b, AccessFlags.READ)]
-            for a, b in self._branches
-        ]
+            self._branches = [
+                [operation(a, AccessFlags.READ), operation(b, AccessFlags.READ)]
+                for a, b in self._branches
+            ]
 
-        if self._default is not None:
-            self._default = operation(self._default, AccessFlags.READ)
+            if self._default is not None:
+                self._default = operation(self._default, AccessFlags.READ)
 
-        self._result = operation(self._result, AccessFlags.WRITE)
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self) -> IndentBlock:
         if self._default is None:
@@ -801,40 +884,46 @@ class CaseWhen(Statement):
             return iter((self.cond, self.code))
 
     def __init__(
-        self,
-        value,
-        branches: list[Tuple],
-        default: CodeBlock | None,
+        self, value, branches: list[Tuple], default: CodeBlock | None, frame=None
     ):
         self._value = value
         self._branches = [CaseWhen.Branch(cond, body) for cond, body in branches]
         self._default = default
         super().__init__()
 
+        if frame is not None:
+            self._frame = frame
+
     def visit(self, operation):
-        for branch in self._branches:
-            branch.code = branch.code.visit(operation)
+        try:
+            for branch in self._branches:
+                branch.code = branch.code.visit(operation)
 
-        if self._default is not None:
-            self._default = self._default.visit(operation)
+            if self._default is not None:
+                self._default = self._default.visit(operation)
 
-        return operation(self)
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
-        new_branches = []
+        try:
+            new_branches = []
 
-        for branch in self._branches:
-            cond = operation(branch.cond, AccessFlags.READ)
-            branch.code.visit_objects(operation)
+            for branch in self._branches:
+                cond = operation(branch.cond, AccessFlags.READ)
+                branch.code.visit_objects(operation)
 
-            new_branches.append(CaseWhen.Branch(cond, branch.code))
+                new_branches.append(CaseWhen.Branch(cond, branch.code))
 
-        self._branches = new_branches
+            self._branches = new_branches
 
-        if self._default is not None:
-            self._default.visit_objects(operation)
+            if self._default is not None:
+                self._default.visit_objects(operation)
 
-        self._value = operation(self._value, AccessFlags.READ)
+            self._value = operation(self._value, AccessFlags.READ)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self) -> IndentBlock:
         if self._default is None:
@@ -879,23 +968,29 @@ class CondSelect(Statement):
         super().__init__()
 
     def visit(self, operation):
-        self._branches = [
-            (expr.visit(operation), branch.visit(operation))
-            for expr, branch in self._branches
-        ]
+        try:
+            self._branches = [
+                (expr.visit(operation), branch.visit(operation))
+                for expr, branch in self._branches
+            ]
 
-        if self._default is not None:
-            self._default = self._default.visit(operation)
+            if self._default is not None:
+                self._default = self._default.visit(operation)
 
-        return operation(self)
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
-        for branch in self._branches:
-            branch[0].visit_objects(operation)
-            branch[1].visit_objects(operation)
+        try:
+            for branch in self._branches:
+                branch[0].visit_objects(operation)
+                branch[1].visit_objects(operation)
 
-        if self._default is not None:
-            self._default.visit_objects(operation)
+            if self._default is not None:
+                self._default.visit_objects(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self) -> IndentBlock:
         if self._default is None:
@@ -957,8 +1052,11 @@ class _State(Statement):
         self._code._fix_alias()
 
     def visit(self, operation):
-        self._code = self._code.visit(operation)
-        return operation(self)
+        try:
+            self._code = self._code.visit(operation)
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
         self._code.visit_objects(operation)
@@ -1052,8 +1150,11 @@ class BitSignalEvent(Expression):
         self.event_type = event_type
 
     def visit_objects(self, operation: Callable):
-        self.arg = operation(self.arg, AccessFlags.READ)
-        self._result = operation(self._result, AccessFlags.WRITE)
+        try:
+            self.arg = operation(self.arg, AccessFlags.READ)
+            self._result = operation(self._result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self):
         return BitSignalEvent(self.event_type, self.arg, self.result())
@@ -1130,7 +1231,7 @@ class StatemachineContext:
                         # state it is valid in
                         assert (
                             access is AccessFlags.WRITE
-                        ), f"Temporary objects my not be shared between states (in {self._name})"
+                        ), "Temporary objects my not be shared between states"
                         used_temporaries[obj._root] = True
                 return obj
 
@@ -1209,7 +1310,7 @@ class Statemachine(Statement):
         def replace_transition(stmt):
             if isinstance(stmt, _Transition):
                 return SignalAssignment(
-                    self._current_state, self._state_id[stmt._next_state]
+                    self._current_state, self._state_id[stmt._next_state], stmt._frame
                 )
             else:
                 return stmt
@@ -1221,17 +1322,24 @@ class Statemachine(Statement):
             self._current_state,
             [(self._state_id[state], state.code()) for state in self._ctx._states],
             None,
+            self._frame,
         )
 
     def visit(self, operation):
-        self._ctx._states = [state.visit(operation) for state in self._ctx._states]
-        return operation(self)
+        try:
+            self._ctx._states = [state.visit(operation) for state in self._ctx._states]
+            return operation(self)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation):
-        self._current_state = operation(self._current_state, AccessFlags.READ)
+        try:
+            self._current_state = operation(self._current_state, AccessFlags.READ)
 
-        for state in self._ctx._states:
-            state.visit_objects(operation)
+            for state in self._ctx._states:
+                state.visit_objects(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self):
         return IndentBlock("Statemachine")
@@ -1263,7 +1371,10 @@ class Assert(Statement):
         super().__init__()
 
     def visit_objects(self, operation: Callable):
-        self._cond = operation(self._cond, AccessFlags.READ)
+        try:
+            self._cond = operation(self._cond, AccessFlags.READ)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def update_transitions(self, state_map: IdMap):
         pass
@@ -1286,31 +1397,35 @@ class InlineCode(Statement):
         self.result = result
 
     def visit_objects(self, operation):
-        def visit_nodes(nodes: list[_InlineCode.Node]):
-            updated = []
+        try:
 
-            for node in nodes:
-                if isinstance(node, _InlineCode.Text):
-                    updated.append(node)
-                elif isinstance(node, _InlineCode.Object):
-                    access = AccessFlags.READ if node.read else AccessFlags.WRITE
-                    updated.append(
-                        _InlineCode.Object(operation(node.obj, access), node.read)
-                    )
-                elif isinstance(node, _InlineCode.SubCode):
-                    for option in node.options:
-                        assert isinstance(option, _InlineCode)
-                        visit_nodes(option.content)
-                else:
-                    raise AssertionError("invalid content")
+            def visit_nodes(nodes: list[_InlineCode.Node]):
+                updated = []
 
-            return updated
+                for node in nodes:
+                    if isinstance(node, _InlineCode.Text):
+                        updated.append(node)
+                    elif isinstance(node, _InlineCode.Object):
+                        access = AccessFlags.READ if node.read else AccessFlags.WRITE
+                        updated.append(
+                            _InlineCode.Object(operation(node.obj, access), node.read)
+                        )
+                    elif isinstance(node, _InlineCode.SubCode):
+                        for option in node.options:
+                            assert isinstance(option, _InlineCode)
+                            visit_nodes(option.content)
+                    else:
+                        raise AssertionError("invalid content")
 
-        for option in self.options:
-            visit_nodes(option.content)
+                return updated
 
-        if self.result is not None:
-            self.result = operation(self.result, AccessFlags.WRITE)
+            for option in self.options:
+                visit_nodes(option.content)
+
+            if self.result is not None:
+                self.result = operation(self.result, AccessFlags.WRITE)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def copy(self):
         return InlineCode([o.copy() for o in self.options])
@@ -1390,7 +1505,10 @@ class Context:
         self._source_location = source_location
 
     def visit(self, operation):
-        self._code = self._code.visit(operation)
+        try:
+            self._code = self._code.visit(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation):
         self._code.visit_objects(operation)
@@ -1451,7 +1569,7 @@ class Sequential(Context):
                 return CodeBlock(
                     [
                         (
-                            SignalAssignment(r, r.default())
+                            SignalAssignment(r, r.default(), stmt._frame)
                             if isinstance(r, Signal)
                             else VariableAssignment(r, r.default())
                         )
@@ -1461,7 +1579,10 @@ class Sequential(Context):
                 )
             elif isinstance(stmt, _ResetPushed):
                 return CodeBlock(
-                    [SignalAssignment(sig, sig.default()) for sig in pushed],
+                    [
+                        SignalAssignment(sig, sig.default(), stmt._frame)
+                        for sig in pushed
+                    ],
                     None,
                 )
 
@@ -1499,21 +1620,27 @@ class Sequential(Context):
         code._fix_alias()
 
     def visit(self, operation):
-        if self._always_expr is not None:
-            self._always_expr._code = self._always_expr._code.visit(operation)
-        super().visit(operation)
+        try:
+            if self._always_expr is not None:
+                self._always_expr._code = self._always_expr._code.visit(operation)
+            super().visit(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def visit_objects(self, operation: Callable):
-        if self._always_expr is not None:
-            self._always_expr.code().visit_objects(operation)
+        try:
+            if self._always_expr is not None:
+                self._always_expr.code().visit_objects(operation)
 
-        if isinstance(self._sensitivity, _SensitivityList):
-            signals = self._sensitivity.signals
-            signals = [operation(sig, AccessFlags.READ) for sig in signals]
-        else:
-            assert isinstance(self._sensitivity, _SensitivityAll)
+            if isinstance(self._sensitivity, _SensitivityList):
+                signals = self._sensitivity.signals
+                signals = [operation(sig, AccessFlags.READ) for sig in signals]
+            else:
+                assert isinstance(self._sensitivity, _SensitivityAll)
 
-        super().visit_objects(operation)
+            super().visit_objects(operation)
+        except Exception as err:
+            raise VisitException(self, err)
 
     def dump(self) -> IndentBlock:
         return IndentBlock(

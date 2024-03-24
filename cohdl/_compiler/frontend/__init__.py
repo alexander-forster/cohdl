@@ -1,2 +1,2 @@
 from ._frontend import generate_internal_representation
-from ._prepare_ast import use_pretty_traceback
+from ._traceback import use_pretty_traceback

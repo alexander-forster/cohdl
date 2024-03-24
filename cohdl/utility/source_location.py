@@ -4,27 +4,23 @@ import inspect
 
 @dataclass
 class SourceLocation:
-    file: str | None = None
+    file: str | None
     line: int | None = None
     function: str | None = None
 
-    def relative(self, offset: int, indent: int | None = None):
+    def relative(self, offset: int):
         if self.line is None:
             new_line = None
         else:
             new_line = self.line + offset - 1
 
-        if indent is None or self.indent is None:
-            return SourceLocation(self.file, new_line)
-        return SourceLocation(self.file, new_line, self.indent + indent)
-
-    @staticmethod
-    def empty():
-        return SourceLocation(None, 0)
+        return SourceLocation(self.file, new_line, self.function)
 
     @staticmethod
     def from_function(fn):
-        return SourceLocation(inspect.getfile(fn), inspect.getsourcelines(fn)[1])
+        return SourceLocation(
+            inspect.getfile(fn), inspect.getsourcelines(fn)[1], fn.__name__
+        )
 
     def __str__(self):
         if self.function is not None:

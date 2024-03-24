@@ -5,7 +5,8 @@ from typing import Callable, overload, TypeVar
 import enum
 
 import cohdl
-from cohdl import BitSignalEvent, SourceLocation, Bit, Signal
+from cohdl import BitSignalEvent, Bit, Signal
+from cohdl.utility.source_location import SourceLocation
 
 T = TypeVar("T")
 
@@ -34,18 +35,21 @@ class Frequency:
 
         alternatively std.kHz, std.MHz or std.GHz can be used
         """
+
     @overload
     def __init__(self, val: Frequency):
         """
         create a new Frequency object with the same
         frequency as the given value
         """
+
     @overload
     def __init__(self, val: Duration):
         """
         create a new Frequency object with a frequency
         corresponding to the given period
         """
+
     def frequency(self) -> Frequency:
         """
         returns self
@@ -53,54 +57,64 @@ class Frequency:
         this method exists to make it easier to write code
         that works with both Frequency and Duration objects
         """
+
     def period(self) -> Duration:
         """
         converts the Frequency to the corresponding Duration
         """
+
     @overload
     def gigahertz(self: Frequency) -> float:
         """
         returns the frequency in GHz
         """
+
     @overload
     @staticmethod
     def gigahertz(val: int | float) -> Frequency:
         """
         construct a Frequency with a value given in gigahertz
         """
+
     @overload
     def megahertz(self: Frequency) -> float:
         """
         returns the frequency in MHz
         """
+
     @overload
     @staticmethod
     def megahertz(val: int | float) -> Frequency:
         """
         construct a Frequency with a value given in megahertz
         """
+
     @overload
     def kilohertz(self: Frequency) -> float:
         """
         returns the frequency in kHz
         """
+
     @overload
     @staticmethod
     def kilohertz(val: int | float) -> Frequency:
         """
         construct a Frequency with a value given in kilohertz
         """
+
     @overload
     def hertz(self: Frequency) -> float:
         """
         returns the frequency in Hz
         """
+
     @overload
     @staticmethod
     def hertz(val: int | float) -> Frequency:
         """
         construct a Frequency with a value given in hertz
         """
+
     def __eq__(self, other: Frequency) -> bool: ...
 
 class Duration:
@@ -114,23 +128,27 @@ class Duration:
 
         alternatively std.ps, std.ns, std.us, std.ms can be used
         """
+
     @overload
     def __init__(self, val: Frequency):
         """
         create a new Duration object with a duration
         corresponding to the given frequency
         """
+
     @overload
     def __init__(self, val: Duration):
         """
         create a new Duration object with the same duration
         as the given value
         """
+
     def frequency(self) -> Frequency:
         """
         Interprets the `Duration` as the period of a signal
         and returns the corresponding frequency.
         """
+
     def period(self) -> Duration:
         """
         returns self
@@ -138,11 +156,13 @@ class Duration:
         this method exists to make it easier to write code
         that works with both Frequency and Duration objects
         """
+
     @overload
     def picoseconds(self: Duration) -> float:
         """
         returns the number of picoseconds in the Duration
         """
+
     @overload
     @staticmethod
     def picoseconds(val: int | float) -> Duration:
@@ -150,11 +170,13 @@ class Duration:
         construct a Duration that lasts the given
         number of picoseconds
         """
+
     @overload
     def nanoseconds(self: Duration) -> float:
         """
         returns the number of nanoseconds in the Duration
         """
+
     @overload
     @staticmethod
     def nanoseconds(val: int | float) -> Duration:
@@ -162,11 +184,13 @@ class Duration:
         construct a Duration that lasts the given
         number of nanoseconds
         """
+
     @overload
     def microseconds(self: Duration) -> float:
         """
         returns the number of microseconds in the Duration
         """
+
     @overload
     @staticmethod
     def microseconds(val: int | float) -> Duration:
@@ -174,11 +198,13 @@ class Duration:
         construct a Duration that lasts the given
         number of microseconds
         """
+
     @overload
     def milliseconds(self: Duration) -> float:
         """
         returns the number of milliseconds in the Duration
         """
+
     @overload
     @staticmethod
     def milliseconds(val: int | float) -> Duration:
@@ -186,11 +212,13 @@ class Duration:
         construct a Duration that lasts the given
         number of milliseconds
         """
+
     @overload
     def seconds(self: Duration) -> float:
         """
         returns the number of seconds in the Duration
         """
+
     @overload
     @staticmethod
     def seconds(val: int | float) -> Duration:
@@ -198,6 +226,7 @@ class Duration:
         construct a Duration that lasts the given
         number of seconds
         """
+
     def __eq__(self, other: Duration) -> bool: ...
     def count_periods(
         self, subperiod: Duration, *, allowed_delta=1e-9, float_result: bool = False
@@ -331,6 +360,7 @@ class SequentialContext:
         returns the currently used context
         or None when no such context exists
         """
+
     def __init__(
         self,
         clk: Clock,
@@ -344,24 +374,29 @@ class SequentialContext:
         when applied to a function it is equivalent to
         | std.sequential(`clk`, `reset`, step_cond=`step_cond`)
         """
+
     def clk(self) -> Clock:
         """
         returns the instance of Clock
         """
+
     def reset(self) -> Reset | None:
         """
         returns the instance of Reset
         """
+
     def step_cond(self) -> Callable[[], bool] | None:
         """
         returns the step cond expression of the context
         """
+
     def with_params(
         self, *, clk: Clock | None = None, reset: Reset | None = None, step_cond=None
     ) -> SequentialContext:
         """
         returns a copy of self with all supplied parameters changed
         """
+
     @overload
     def or_reset(
         self,
@@ -382,6 +417,7 @@ class SequentialContext:
         When `is_async` is specified it defines the reset behavior of the new
         context, otherwise this value is inherited from the parent.
         """
+
     @overload
     def or_reset(
         self,
@@ -402,6 +438,7 @@ class SequentialContext:
         When `is_async` is specified it defines the reset behavior of the new
         context, otherwise this value is inherited from the parent.
         """
+
     @overload
     def and_reset(
         self,
@@ -422,6 +459,7 @@ class SequentialContext:
         When `is_async` is specified it defines the reset behavior of the new
         context, otherwise this value is inherited from the parent.
         """
+
     @overload
     def and_reset(
         self,
@@ -442,6 +480,7 @@ class SequentialContext:
         When `is_async` is specified it defines the reset behavior of the new
         context, otherwise this value is inherited from the parent.
         """
+
     def __call__(self, fn=None, *, executors: list[Executor] | None = None):
         """
         __call__ is defined to be used as a decorator
@@ -507,6 +546,7 @@ class Executor:
         it possible to pass constant parameters, that do not support
         assignments in __init__.
         """
+
     async def exec(self, *args, **kwargs):
         """
         Start the Executor, wait until the execution is completed
@@ -515,12 +555,14 @@ class Executor:
         Check the documentation of `start` for limitations of the
         `args` and `kwargs`.
         """
+
     def ready(self) -> bool:
         """
         Check if the Executor is ready for a call to start/exec.
 
         The returned Signal is false while the Executor is active or in reset.
         """
+
     def result(self):
         """
         returns the result of the last execution of the executor

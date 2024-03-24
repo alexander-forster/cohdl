@@ -48,7 +48,7 @@ from ._core._intrinsic import _intrinsic as pyeval
 from ._core import AssignMode
 from ._core import _BitSignalEvent as BitSignalEvent
 from ._core import sequential_context, concurrent_context
-from ._core import SourceLocation, is_primitive, is_primitive_type
+from ._core import is_primitive, is_primitive_type
 
 from ._core import _InlineCode, inline_raw, vhdl
 

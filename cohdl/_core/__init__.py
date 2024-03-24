@@ -47,7 +47,6 @@ from ._array import Array
 from ._primitive_type import is_primitive, is_primitive_type
 
 from ._boolean import true, false, Null, Full, _NullFullType, _Boolean
-from ._source_location import SourceLocation
 
 
 from ._inline import InlineCode as _InlineCode
