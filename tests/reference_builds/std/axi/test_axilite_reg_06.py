@@ -26,8 +26,8 @@ class MyRoot(reg32.AddrMap, word_count=8):
 
     def _impl_concurrent_(self) -> None:
         self.reg_word <<= self.reg_mem_word
-        self.reg_uword <<= self.reg_mem_uword.value
-        self.reg_sword.value <<= self.reg_mem_sword.value
+        self.reg_uword <<= self.reg_mem_uword.val()
+        self.reg_sword.raw <<= self.reg_mem_sword.raw
 
 
 class test_axilite_reg_06(cohdl.Entity):

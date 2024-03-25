@@ -138,8 +138,17 @@ class Entity(Block):
 
         name = cls.__name__ if name is None else name
 
-        ports = {}
-        generics = {}
+        if hasattr(cls, "_info"):
+            ports = dict(cls._info.ports)
+            generics = dict(cls._info.generics)
+
+            if attributes is None:
+                attributes = dict(cls._info.attributes)
+            else:
+                attributes = {**cls._info.attributes, **attributes}
+        else:
+            ports = {}
+            generics = {}
 
         for key, value in cls.__dict__.items():
             if isinstance(value, Port):
@@ -159,6 +168,10 @@ class Entity(Block):
         )
 
     def __init__(self, **kwargs):
+        if hasattr(self, "_cohdl_init_started"):
+            return
+        self._cohdl_init_started = True
+
         info = self._info
         super().__init__(info.name, info.attributes)
 

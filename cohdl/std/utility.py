@@ -205,9 +205,24 @@ def _check_array_defaults(defaults: list, elem_width: int):
         ), f"serialized type of default element {nr} ({type(elem)}) does not match type needed for array elements ({BitVector[elem_width]})"
 
 
-class Array(Template[_ArrayArgs]):
+class Array(Template[_ArrayArgs], AssignableType):
     _count_: _ArrayArgs.elem_cnt
     _elemtype_: _ArrayArgs.elem_type
+
+    def _assign_(self, source, mode: AssignMode) -> None:
+        if isinstance(source, (Array, list, CohdlArray)):
+            assert self._count_ == len(source)
+
+            for index in range(self._count_):
+                self[index]._assign_(source[index], mode)
+        elif isinstance(source, dict):
+            for index, val in source.items():
+                self[index]._assign_(val, mode)
+        else:
+            assert source is Null or source is Full
+
+            for index in range(self._count_):
+                self[index]._assign_(source, mode)
 
     def __init__(self, val=None, _qualifier_=Signal):
         elem_width = count_bits(self._elemtype_)

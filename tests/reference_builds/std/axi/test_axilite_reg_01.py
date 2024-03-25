@@ -16,7 +16,7 @@ class MyRegister(reg32.Register):
     upper: reg32.MemField[31:16, Null]
 
     def _impl_concurrent_(self) -> None:
-        self.lower <<= ~self.upper.value()
+        self.lower <<= ~self.upper.val()
 
 
 class MyRoot(reg32.AddrMap, word_count=4):

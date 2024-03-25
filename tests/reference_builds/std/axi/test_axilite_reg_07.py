@@ -23,11 +23,11 @@ class ExamplePush(reg32.Register):
         if self.rd_notification:
             # self.rd_notification is true for one clock cycle after each
             # read from the current register
-            self.rd_cnt <<= self.rd_cnt.value() + 1
+            self.rd_cnt <<= self.rd_cnt.val() + 1
         if self.wr_notification:
             # self.wr_notification is true for one clock cycle after each
             # write to the current register
-            self.wr_cnt <<= self.wr_cnt.value() + 1
+            self.wr_cnt <<= self.wr_cnt.val() + 1
 
 
 class ExampleFlag(reg32.Register):
@@ -40,7 +40,7 @@ class ExampleFlag(reg32.Register):
         # wait for notification, then increment
         # the read counter register
         async with self.rd_notification:
-            self.rd_cnt <<= self.rd_cnt.value() + 1
+            self.rd_cnt <<= self.rd_cnt.val() + 1
 
 
 class MyReg(reg32.Register):
@@ -87,7 +87,7 @@ class MyReg(reg32.Register):
             nonlocal write_2
 
             await cohdl.expr(bool(self.notify_flag_write))
-            self.write_cnt_2 <<= self.write_cnt_2.value() + 1
+            self.write_cnt_2 <<= self.write_cnt_2.val() + 1
             self.notify_flag_write.clear()
 
 

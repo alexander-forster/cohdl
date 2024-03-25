@@ -189,15 +189,39 @@ def _unpack_init(self, real_init, arg):
         real_init(self, arg)
 
 
-@_intrinsic
-def template_arg(cls):
-    dataclassed = dataclass(cls, unsafe_hash=True)
+class _TemplateArg:
+    @property
+    @_intrinsic
+    def Type(self):
+        class _Type:
+            def __new__(cls, arg):
+                assert isinstance(arg, type)
+                return arg
 
-    real_init = dataclassed.__init__
+            def __hash__(self):
+                raise AssertionError(
+                    "should never be called since __new__ never prevents this class from being instantiated"
+                )
 
-    def __init__(self, arg):
-        _unpack_init(self, real_init, arg)
+            def __eq__(self, other):
+                raise AssertionError(
+                    "should never be called since __new__ never prevents this class from being instantiated"
+                )
 
-    dataclassed.__init__ = __init__
+        return _Type
 
-    return dataclassed
+    @_intrinsic
+    def __call__(self, cls):
+        dataclassed = dataclass(cls, unsafe_hash=True)
+
+        real_init = dataclassed.__init__
+
+        def __init__(self, arg):
+            _unpack_init(self, real_init, arg)
+
+        dataclassed.__init__ = __init__
+
+        return dataclassed
+
+
+template_arg = _TemplateArg()

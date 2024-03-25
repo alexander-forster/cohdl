@@ -81,8 +81,13 @@ class Template(Generic[TemplateArg]):
 
     def __class_getitem__(cls: Self, args) -> Self: ...
 
-def template_arg(cls: type[T]) -> type[T]:
-    """
-    Decorator that adds __init__, __hash__ and __eq__
-    to a class so it can be used as an argument for std.Template.
-    """
+class _TemplateArg:
+    Type: type
+
+    def __call__(self, cls: type[T]) -> type[T]:
+        """
+        Decorator that adds __init__, __hash__ and __eq__
+        to a class so it can be used as an argument for std.Template.
+        """
+
+template_arg = _TemplateArg()

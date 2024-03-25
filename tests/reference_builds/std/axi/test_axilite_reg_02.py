@@ -22,7 +22,7 @@ class MyRegister(reg32.Register):
         async with self.flag.flag():
             while counter < 16:
                 counter <<= counter + 1
-            self.cnt <<= self.cnt.value() + 1
+            self.cnt <<= self.cnt.val() + 1
 
 
 class MyRoot(reg32.AddrMap, word_count=4):

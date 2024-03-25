@@ -32,7 +32,13 @@ def _find_enums(root: RegFile, result_set: set):
                     result_set.add(arg.underlying)
 
 
-def _add_description(input: type, content: list):
+def _add_description(input: type, content: list, metadata: list | None = None):
+    if metadata is not None:
+        for entry in metadata:
+            if isinstance(entry, str):
+                content.append(f'desc = "{entry.strip()}";')
+                return
+
     for elem in input.mro():
         if elem is object:
             return
@@ -102,7 +108,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             base_name = name
             content.append(f'name = "{escape(name)}";')
 
-        _add_description(input, content)
+        _add_description(input, content, metadata)
 
         if issubclass(input, AddrMap):
             content.append(f"default regwidth = {input._register_tools_._word_width_};")
@@ -130,7 +136,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
     elif issubclass(input, Register):
         content = [""]
 
-        _add_description(input, content)
+        _add_description(input, content, metadata)
 
         for field_name, field_type in input._field_types_.items():
             content.append("")
@@ -206,7 +212,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             content.append(enum_def)
 
         return ComponentBlock("enum", _systemrdl_escape(enum_name), content=content)
-    elif issubclass(input, (Input, Output)):
+    elif issubclass(input, (Input, Output, GenericRegister)):
         content = [""]
 
         _add_description(input, content)

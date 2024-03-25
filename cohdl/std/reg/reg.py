@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TypeVar, Generic, Literal, get_type_hints
 import enum
 
-from cohdl import Null, Signal, BitVector, Unsigned, Signed, Bit, Temporary
+from cohdl import Null, Signal, BitVector, Unsigned, Signed, Bit, Temporary, expr_fn
 from cohdl import std
 from cohdl._core import AssignMode
 from cohdl._core._intrinsic import _intrinsic
@@ -315,7 +315,7 @@ class RegFile(RegisterObject):
             if hasattr(self, "_config_"):
                 self._config_(*args, **kwargs)
 
-            for obj in self._flatten_():
+            for obj in self._flatten_(include_devices=True):
                 if (
                     hasattr(obj, "_config_")
                     and not "_cohdlstd_objconfigured" in obj.__dict__
@@ -346,12 +346,12 @@ class RegFile(RegisterObject):
     def _basic_read_(self, addr, meta):
         # RegFile is a collection of RegisterObjects
         # _basic_read_ should be called on them, not on the device
-        raise AssertionError("_basic_read_ called on RegiserDevice")
+        raise AssertionError("_basic_read_ called on RegisterDevice")
 
     def _basic_write_(self, addr, data, mask, meta):
         # RegFile is a collection of RegisterObjects
         # _basic_write_ should be called on them, not on the device
-        raise AssertionError("_basic_write_ called on RegiserDevice")
+        raise AssertionError("_basic_write_ called on RegisterDevice")
 
     def __init_subclass__(cls, *, word_count=_None, readonly=False, writeonly=False):
         if word_count is _None:
@@ -443,21 +443,22 @@ class Word(GenericRegister):
     _cohdlstd_vector_type = BitVector
 
     def _config_(self, default=Null):
-        self.value = Signal[
+        self.raw = Signal[
             self._cohdlstd_vector_type[self._register_tools_._word_width_ - 1 : 0]
         ](default)
 
     def _on_read_(self):
-        return self.value
+        return self.raw
 
+    @expr_fn
     def __bool__(self):
-        return bool(self.value)
+        return bool(self.raw)
 
     def __ilshift__(self, src):
         if isinstance(src, Word):
-            self.value <<= src.value
+            self.raw <<= src.raw
         else:
-            self.value <<= src
+            self.raw <<= src
         return self
 
     @property
@@ -466,6 +467,9 @@ class Word(GenericRegister):
 
     def next(self, src):
         self <<= src
+
+    def val(self):
+        return self.raw
 
 
 class UWord(Word):
@@ -478,7 +482,7 @@ class SWord(Word):
 
 class MemWord(Word):
     def _on_write_(self, data, mask: std.Mask):
-        self.value <<= mask.apply(self.value, data)
+        self.raw <<= mask.apply(self.raw, data)
 
 
 class MemUWord(MemWord):
@@ -548,6 +552,7 @@ class PushOnNotify(NotifyBase):
     def notify(self):
         self._bit ^= True
 
+    @expr_fn
     def __bool__(self):
         return self._bit
 
@@ -559,6 +564,7 @@ class FlagOnNotify(NotifyBase):
     def notify(self):
         self._flag.set()
 
+    @expr_fn
     def __bool__(self):
         return self._flag.is_set()
 
@@ -595,7 +601,6 @@ class _FieldArg:
         if isinstance(arg, tuple):
             arg, *rest = arg
             if len(rest) == 0:
-                self.un
                 pass
             elif len(rest) == 1:
                 if isinstance(rest[0], type):
@@ -823,8 +828,12 @@ class Field(std.Template[_FieldArg], FieldBase):
 
                 self._value = _qualifier_[underlying](other_value)
 
-    def value(self):
+    def val(self):
         return self._value
+
+    @expr_fn
+    def __bool__(self):
+        return bool(self._value)
 
 
 class UField(Field):

@@ -211,7 +211,7 @@ class RegisterTools(Generic[W]):
         have no effect. Use MemWord to create a writeable version.
         """
 
-        value: BitVector
+        raw: Signal[BitVector]
         def _config_(self, default=Null):
             """
             optional method to configure the default value of the Word
@@ -225,19 +225,22 @@ class RegisterTools(Generic[W]):
         def __ilshift__(self, src):
             return self
 
+        def val(self):
+            return self.raw
+
     class UWord(Word):
         """
-        same as `Word` but the contained value is unsigned
+        same as `Word` but the contained raw is unsigned
         """
 
-        value: Unsigned
+        raw: Signal[Unsigned]
 
     class SWord(Word):
         """
-        same as `Word` but the contained value is signed
+        same as `Word` but the contained raw is signed
         """
 
-        value: Unsigned
+        raw: Signal[Unsigned]
 
     class MemWord(Word):
         """
@@ -280,7 +283,7 @@ class RegisterTools(Generic[W]):
         >>>         self.inp_b._config_(cohdl.Full)
         >>>
         >>>     def _impl_concurrent_(self):
-        >>>         self.out <<= self.inp_a.value() | self.inp_b.value()
+        >>>         self.out <<= self.inp_a.val() | self.inp_b.val()
         >>>
         >>> # Example for FlagField
         >>> # Performs a long running task every time bit 16 is set to '1'.
@@ -294,7 +297,7 @@ class RegisterTools(Generic[W]):
         >>>         # wait until the flag is set
         >>>         # and clear it once the task is done
         >>>         async with self.flag:
-        >>>             await some_long_running_task(self.inp.value())
+        >>>             await some_long_running_task(self.inp.val())
         >>>
         >>> class CustomReadWrite(reg32.Register):
         >>>     inc_on_read:  reg32.MemUField[7:0]
@@ -303,14 +306,14 @@ class RegisterTools(Generic[W]):
         >>>
         >>>     def _read_(self):
         >>>         # increments read counter and returns old value
-        >>>         self.inc_on_read <<= self.inc_on_read.value() + 1
+        >>>         self.inc_on_read <<= self.inc_on_read.val() + 1
         >>>         return self
         >>>
         >>>     def _write_(self, value: CustomReadWrite):
         >>>         # only change `inc_on_write`
         >>>         # `inc_on_read` will keep its old value
         >>>         return self(
-        >>>             inc_on_write=self.inc_on_write.value() + 1,
+        >>>             inc_on_write=self.inc_on_write.val() + 1,
         >>>             normal_mem=value.normal_mem
         >>>         )
         >>>
@@ -323,7 +326,7 @@ class RegisterTools(Generic[W]):
         >>>         # `inc_on_read` will keep its old value
         >>>         return value(
         >>>             inc_on_read=self.inc_on_read,
-        >>>             inc_on_write=self.inc_on_write.value() + 1
+        >>>             inc_on_write=self.inc_on_write.val() + 1
         >>>         )
         >>>
         """
@@ -372,7 +375,7 @@ class RegisterTools(Generic[W]):
             constructed from the provided value.
             """
 
-    class Field(Generic[OFF, T, D]):
+    class Field:
         """
         Represents a range of one or more bits in a `Register`.
 
@@ -406,8 +409,8 @@ class RegisterTools(Generic[W]):
         def __ixor__(self, other):
             return self
 
-        def __init__(self, value: T, _qualifier_=Signal): ...
-        def value(self) -> T:
+        def __init__(self, value, _qualifier_=Signal): ...
+        def val(self):
             """
             returns the current value of the `Field`
             """
@@ -419,7 +422,7 @@ class RegisterTools(Generic[W]):
         """
 
         def __init__(self, value: Unsigned, _qualifier_=Signal): ...
-        def value(self) -> Unsigned: ...
+        def val(self) -> Unsigned: ...
 
     class SField(Field):
         """
@@ -428,7 +431,7 @@ class RegisterTools(Generic[W]):
         """
 
         def __init__(self, value: Signed, _qualifier_=Signal): ...
-        def value(self) -> Signed: ...
+        def val(self) -> Signed: ...
 
     class MemField(Field):
         """
@@ -555,11 +558,11 @@ class RegisterTools(Generic[W]):
         >>>         if self.rd_notification:
         >>>             # self.rd_notification is true for one clock cycle after each
         >>>             # read from the current register
-        >>>             self.rd_cnt <<= self.rd_cnt.value() + 1
+        >>>             self.rd_cnt <<= self.rd_cnt.val() + 1
         >>>         if self.wr_notification:
         >>>             # self.wr_notification is true for one clock cycle after each
         >>>             # write to the current register
-        >>>             self.wr_cnt <<= self.wr_cnt.value() + 1
+        >>>             self.wr_cnt <<= self.wr_cnt.val() + 1
         """
 
     class FlagOnNotify(NotifyBase):
@@ -577,7 +580,7 @@ class RegisterTools(Generic[W]):
         >>>         # wait for notification, then increment
         >>>         # the read counter register
         >>>         async with self.rd_notification:
-        >>>             self.rd_cnt <<= self.rd_cnt.value() + 1
+        >>>             self.rd_cnt <<= self.rd_cnt.val() + 1
         """
 
         def clear(self):
