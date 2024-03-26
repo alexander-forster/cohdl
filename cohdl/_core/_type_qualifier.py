@@ -312,6 +312,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         *,
         name: str | None = None,
         attributes: dict | None = None,
+        noreset: bool = False,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
@@ -330,6 +331,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
             else type(self)._Wrapped(value)
         )
         self._attributes = [] if attributes is None else attributes
+        self._noreset = noreset
 
         self._root = self if _root is None else _root
 
@@ -1075,13 +1077,21 @@ class Signal(TypeQualifier):
         name: str | None = None,
         attributes: dict | None = None,
         delayed_init: bool = None,
+        noreset: bool = False,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
-        # delayed_init is handled by _init_replacement
+        assert (
+            delayed_init is None
+        ), "delayed_init can only be used in synthesizable contexts"
 
         super().__init__(
-            value, name=name, attributes=attributes, _root=_root, _ref_spec=_ref_spec
+            value,
+            name=name,
+            attributes=attributes,
+            noreset=noreset,
+            _root=_root,
+            _ref_spec=_ref_spec,
         )
 
     @_intrinsic_replacement(__init__)
@@ -1092,9 +1102,12 @@ class Signal(TypeQualifier):
         name: str | None = None,
         attributes: dict | None = None,
         delayed_init: bool = False,
+        noreset=None,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
+        assert noreset is None, "noreset is not valid in synthesizable contexts"
+
         # copy of TypeQualifier._init_replacement
         # with added support for delayed_init
 
@@ -1229,12 +1242,14 @@ class Port(Signal):
         return Port[Wrapped, Port.Direction.INPUT](name=name)
 
     @staticmethod
-    def output(Wrapped, *, default=None, name: str | None = None) -> Port:
-        return Port[Wrapped, Port.Direction.OUTPUT](default, name=name)
+    def output(
+        Wrapped, *, default=None, name: str | None = None, noreset=False
+    ) -> Port:
+        return Port[Wrapped, Port.Direction.OUTPUT](default, name=name, noreset=noreset)
 
     @staticmethod
-    def inout(Wrapped, *, default=None, name: str | None = None) -> Port:
-        return Port[Wrapped, Port.Direction.INOUT](default, name=name)
+    def inout(Wrapped, *, default=None, name: str | None = None, noreset=False) -> Port:
+        return Port[Wrapped, Port.Direction.INOUT](default, name=name, noreset=noreset)
 
     @classmethod
     @_intrinsic

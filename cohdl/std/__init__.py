@@ -45,6 +45,8 @@ from ._core_utility import (
     Variable,
     Temporary,
     Nonlocal,
+    NoresetSignal,
+    NoresetVariable,
     base_type,
     instance_check,
     subclass_check,

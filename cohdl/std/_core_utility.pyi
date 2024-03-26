@@ -176,6 +176,16 @@ Signal: _SignalQualifierWrapper
 Variable: _VariableQualifierWrapper
 Temporary: _TemporaryQualifierWrapper
 
+NoresetSignal: _SignalQualifierWrapper
+"""
+constructs Signals with the `noreset` argument set to True
+"""
+
+NoresetVariable: _VariableQualifierWrapper
+"""
+constructs Variable with the `noreset` argument set to True
+"""
+
 #
 #
 #

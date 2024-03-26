@@ -206,9 +206,42 @@ class _Nonlocal:
         return _Nonlocal(arg)
 
 
+class _Noreset:
+    _Qualifier: Signal
+
+    def __init__(self, T=None):
+        self._T = T
+
+    @_intrinsic
+    def __call__(self, *args, **kwargs):
+        if self._T is None:
+            assert len(args) == 1 and len(kwargs) == 0
+            T = type(TypeQualifierBase.decay(args[0]))
+        else:
+            T = self._T
+
+        if is_primitive_type(T) or T is bool or T is int:
+            return self._Qualifier[T](*args, **kwargs, noreset=True)
+        else:
+            return T(*args, **kwargs, _qualifier_=type(self)())
+
+    def __getitem__(self, arg):
+        return type(self)(arg)
+
+
+class _NoresetSignal(_Noreset):
+    _Qualifier = Signal
+
+
+class _NoresetVariable(_Noreset):
+    _Qualifier = Variable
+
+
 Ref = _Ref()
 Value = _Value()
 Nonlocal = _Nonlocal(None)
+NoresetSignal = _NoresetSignal()
+NoresetVariable = _NoresetVariable()
 
 #
 #

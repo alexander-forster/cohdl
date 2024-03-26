@@ -1557,7 +1557,7 @@ class Sequential(Context):
 
             if access & (AccessFlags.PUSH | AccessFlags.WRITE):
                 root = obj._root
-                if root.has_default():
+                if root.has_default() and not root._noreset:
                     resettable.add(root)
 
             return obj

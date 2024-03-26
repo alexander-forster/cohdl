@@ -47,13 +47,18 @@ class TypeQualifier(typing.Generic[T], TypeQualifierBase[T]):
         *,
         name: str | None = None,
         attributes: dict | None = None,
+        noreset: bool = False,
     ) -> None:
         """
-        Create a new Signal with an optional default `value`.
+        Create a new type qualified object with an optional default `value`.
 
         `name` is only a hint. The compiler will add a counter suffix to resolve name collisions.
         `attributes` are currently unused.
+
+        Objects declared with `noreset` will not be automatically reset in
+        synthesizable contexts (the default value is still used during initialization).
         """
+
     def name(self) -> str: ...
     def has_default(self) -> bool: ...
     def default(self): ...
