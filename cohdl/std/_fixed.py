@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 from cohdl import (
-    Bit,
     BitVector,
     Signed,
     Unsigned,
-    Signal,
     TypeQualifier,
     Null,
     Full,
     pyeval,
     AssignMode,
-    evaluated,
     static_assert,
 )
 
@@ -479,8 +476,7 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
 
     @classmethod
     def _from_bits_(cls, bits: BitVector, qualifier=Value):
-        reslt = cls(raw=bits.unsigned, _qualifier_=qualifier)
-        return reslt
+        return cls(raw=bits.unsigned, _qualifier_=qualifier)
 
     def _to_bits_(self):
         return Value(self._val.bitvector)
