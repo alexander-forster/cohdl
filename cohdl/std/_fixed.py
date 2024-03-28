@@ -128,6 +128,18 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
 
     @classmethod
     @pyeval
+    def _count_bits_(cls):
+        return cls._width
+
+    @classmethod
+    def _from_bits_(cls, bits: BitVector, qualifier=Value):
+        return cls(raw=bits.signed, _qualifier_=qualifier)
+
+    def _to_bits_(self):
+        return Value(self._val.bitvector)
+
+    @classmethod
+    @pyeval
     def min(cls):
         return -((2 ** (cls._width - 1)) * 2**cls._exp)
 
@@ -162,7 +174,7 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
         if raw is not None:
             assert val is None
             assert instance_check(raw, raw_type)
-            self._val: Signed = raw
+            self._val: Signed = _qualifier_(raw)
         else:
             if val is None or val is Full or val is Null:
                 self._val = _qualifier_[raw_type](val)
@@ -184,14 +196,17 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
                     val.resize(self._width - 1, zeros=zeros)
                 )
             elif instance_check(val, SFixed):
-                assert self.left() >= val.left()
-                assert self.right() <= val.right()
+                if self.left() == val.left() and self.right() == val.right():
+                    self._val = _qualifier_[raw_type](val._val)
+                else:
+                    assert self.left() >= val.left()
+                    assert self.right() <= val.right()
 
-                zeros = self.right() - val.right()
+                    zeros = self.right() - val.right()
 
-                self._val = _qualifier_[raw_type](
-                    val._val.resize(self._width, zeros=zeros)
-                )
+                    self._val = _qualifier_[raw_type](
+                        val._val.resize(self._width, zeros=zeros)
+                    )
             else:
                 raise AssertionError("invalid arg")
 
@@ -201,10 +216,13 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
 
     def _assign_(self, source, mode: AssignMode) -> None:
         if isinstance(source, SFixed):
-            if source._width == self._width and source._exp == self._exp:
-                self._val._assign_(source._val, mode)
-            else:
-                raise AssertionError("invalid")
+            assert (
+                source._width == self._width and source._exp == self._exp
+            ), "source type ({}) does not match target type ({})".format(
+                type(source), type(self)
+            )
+
+            self._val._assign_(source._val, mode)
         else:
             self._assign_(type(self)(source), mode)
 
@@ -456,6 +474,19 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
 
     @classmethod
     @pyeval
+    def _count_bits_(cls):
+        return cls._width
+
+    @classmethod
+    def _from_bits_(cls, bits: BitVector, qualifier=Value):
+        reslt = cls(raw=bits.unsigned, _qualifier_=qualifier)
+        return reslt
+
+    def _to_bits_(self):
+        return Value(self._val.bitvector)
+
+    @classmethod
+    @pyeval
     def min(cls):
         return 0
 
@@ -485,7 +516,6 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
         return cls._exp + cls._width - 1
 
     def __init__(self, val=None, *, raw=None, _qualifier_=Value):
-
         raw_type = Unsigned[self._width]
 
         if raw is not None:
@@ -507,14 +537,17 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
 
                 self._val = _qualifier_[raw_type](val.resize(self._width, zeros=zeros))
             elif instance_check(val, UFixed):
-                assert self.left() >= val.left()
-                assert self.right() <= val.right()
+                if self.left() == val.left() and self.right() == val.right():
+                    self._val = _qualifier_[raw_type](val._val)
+                else:
+                    assert self.left() >= val.left()
+                    assert self.right() <= val.right()
 
-                zeros = self.right() - val.right()
+                    zeros = self.right() - val.right()
 
-                self._val = _qualifier_[raw_type](
-                    val._val.resize(self._width, zeros=zeros)
-                )
+                    self._val = _qualifier_[raw_type](
+                        val._val.resize(self._width, zeros=zeros)
+                    )
             else:
                 raise AssertionError("invalid arg")
 
@@ -524,10 +557,12 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
 
     def _assign_(self, source, mode: AssignMode) -> None:
         if isinstance(source, UFixed):
-            if source._width == self._width and source._exp == self._exp:
-                self._val._assign_(source._val, mode)
-            else:
-                raise AssertionError("invalid")
+            assert (
+                source._width == self._width and source._exp == self._exp
+            ), "source type ({}) does not match target type ({})".format(
+                type(source), type(self)
+            )
+            self._val._assign_(source._val, mode)
         else:
             self._assign_(type(self)(source), mode)
 
