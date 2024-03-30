@@ -7,16 +7,83 @@ from .reg import _primitive_as_int
 from cohdl.utility.code_writer import TextBlock
 
 
+class Content:
+
+    def __init__(self):
+        self.name = None
+        self.desc = None
+        self.sw = None
+        self.hw = None
+        self.encode = None
+
+        self.sub_content = []
+
+    def to_list(self):
+        result = []
+
+        if self.name is not None:
+            result.append(f'name = "{self.name}";')
+
+        if self.desc is not None:
+            result.append(f'desc = "{self.desc}";')
+
+        if self.sw is not None:
+            result.append(f"sw = {self.sw};")
+
+        if self.hw is not None:
+            result.append(f"hw = {self.hw};")
+
+        if self.encode is not None:
+            result.append(f"encode = {self.encode};")
+
+        result.extend(self.sub_content)
+
+        return result
+
+    def append(self, raw):
+        self.sub_content.append(raw)
+
+    def add_description(self, input: type, metadata: list | None = None):
+        if metadata is not None:
+            for entry in metadata:
+                if isinstance(entry, str):
+                    self.desc = entry.strip()
+                    return
+
+        for elem in input.mro():
+            if elem is object:
+                return
+            if elem.__doc__ is not None:
+                self.desc = elem.__doc__.strip()
+                return
+
+    def add_meta(self, metadata: type | None):
+        if metadata is None:
+            return
+
+        for info in metadata:
+            if isinstance(info, str):
+                self.desc = info
+            elif isinstance(info, Access):
+                self.sw = info.name
+            elif isinstance(info, HwAccess):
+                self.hw = info.name
+
+
 class ComponentBlock(TextBlock):
     def __init__(
-        self, typename: str, component_name: str | None = None, content=[], trailer="};"
+        self,
+        typename: str,
+        component_name: str | None = None,
+        content: Content = [],
+        trailer="};",
     ):
         if component_name is None:
             title = f"{typename} {{"
         else:
             title = f"{typename} {component_name} {{"
 
-        super().__init__(title=title, content=content, trailer=trailer)
+        super().__init__(title=title, content=content.to_list(), trailer=trailer)
 
 
 def _find_enums(root: RegFile, result_set: set):
@@ -45,26 +112,6 @@ def _add_description(input: type, content: list, metadata: list | None = None):
         if elem.__doc__ is not None:
             content.append(f'desc = "{elem.__doc__.strip()}";')
             return
-
-
-def _add_field_args(metadata: type, content: list):
-    if metadata is None:
-        return
-
-    desc = None
-    sw_access = None
-
-    for info in metadata:
-        if isinstance(info, str):
-            desc = info
-        elif isinstance(info, Access):
-            sw_access = info.name
-
-    if desc is not None:
-        content.append(f'desc = "{desc}";')
-
-    if sw_access is not None:
-        content.append(f"sw = {sw_access};")
 
 
 def _add_meta_args(metadata: type, content: list):
@@ -97,18 +144,16 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
     escape = _systemrdl_escape
 
     if issubclass(input, RegFile):
-        content = [""]
+        content = Content()
 
         member_metadata = input._metadata_
 
         if name is None:
-            base_name = input.__name__.split("[")[0]
-            content.append(f'name = "{escape(base_name)}";')
+            content.name = escape(input.__name__.split("[")[0])
         else:
-            base_name = name
-            content.append(f'name = "{escape(name)}";')
+            content.name = escape(name)
 
-        _add_description(input, content, metadata)
+        content.add_description(input, metadata)
 
         if issubclass(input, AddrMap):
             content.append(f"default regwidth = {input._register_tools_._word_width_};")
@@ -132,11 +177,10 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             )
             content.append("")
 
-        return ComponentBlock("addrmap", base_name, content=content, trailer=trailer)
+        return ComponentBlock("addrmap", content.name, content=content, trailer=trailer)
     elif issubclass(input, Register):
-        content = [""]
-
-        _add_description(input, content, metadata)
+        content = Content()
+        content.add_description(input, metadata)
 
         for field_name, field_type in input._field_types_.items():
             content.append("")
@@ -152,15 +196,15 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             trailer="}" + f" {escape(name)} @ 0x{input._parent_offset_:0x};",
         )
     elif issubclass(input, Field):
-        content = []
+        content = Content()
+        content.add_meta(metadata)
 
         arg = input._field_arg
 
         trailer_loc = f"[{arg.offset+arg.width-1}:{arg.offset}]"
 
         if arg.is_enum():
-            enum_name = arg.underlying.__name__
-            content.append(f"encode = {escape(enum_name)};")
+            content.encode = escape(arg.underlying.__name__)
 
         if arg.default is None:
             trailer_default = ""
@@ -175,20 +219,17 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
 
             trailer_default = f" = {escape(default)}"
 
-        _add_meta_args(metadata, content)
-
         return ComponentBlock(
             "field",
             content=content,
             trailer="}" + f" {escape(name)} {trailer_loc}{trailer_default};",
         )
     elif issubclass(input, FlagField):
-        content = []
+        content = Content()
+        content.add_meta(metadata)
 
         arg = input._field_arg
         trailer_loc = f"[{arg.offset}:{arg.offset}]"
-
-        _add_meta_args(metadata, content)
 
         return ComponentBlock(
             "field",
@@ -196,7 +237,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             trailer="}" + f" {escape(name)} {trailer_loc} = 0;",
         )
     elif issubclass(input, StdEnum):
-        content = []
+        content = Content()
         enum_name = input.__name__.split("[")[0]
 
         for enumerator_name, enumerator in input.__members__.items():
@@ -213,10 +254,10 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
 
         return ComponentBlock("enum", _systemrdl_escape(enum_name), content=content)
     elif issubclass(input, (Input, Output, GenericRegister)):
-        content = [""]
+        content = Content()
 
-        _add_description(input, content)
-        _add_meta_args(metadata, content)
+        content.add_description(input, metadata)
+        content.add_meta(metadata)
 
         if issubclass(input, Input):
             access = f"sw = r;"
@@ -227,6 +268,22 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
 
         return ComponentBlock(
             "reg",
+            content=content,
+            trailer="}" + f" {escape(name)} @ 0x{input._parent_offset_:0x};",
+        )
+    elif issubclass(input, Memory):
+        content = Content()
+        content.add_description(input, metadata)
+        content.add_meta(metadata)
+
+        if not input._writable_:
+            content.sw = "r"
+
+        content.append(f"mementries = {input._word_count_};")
+        content.append(f"memwidth = {input._word_width_()};")
+
+        return ComponentBlock(
+            "external mem",
             content=content,
             trailer="}" + f" {escape(name)} @ 0x{input._parent_offset_:0x};",
         )

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, TypeVar, Generic, NoReturn, Self
 import enum
 
-from cohdl import Null, Signal, BitVector, Unsigned, Signed
+from cohdl import Null, Full, Signal, BitVector, Unsigned, Signed
 from cohdl import std
 
 from cohdl.std._context import SequentialContext
@@ -42,6 +42,24 @@ class RegisterTools(Generic[W]):
     Number of addressable units per word.
     Calculated from `_word_width_` and `_addr_unit_width_`.
     """
+
+    @classmethod
+    def _as_word_addr_(cls, unit_addr: Unsigned):
+        """
+        converts a byte address to a word address
+
+        for a system with 4-Byte words this removes
+        the two lsbs.
+        """
+
+    @classmethod
+    def _as_unit_addr_(cls, word_addr: Unsigned):
+        """
+        converts a word address to a byte address
+
+        for a system with 4-Byte words this adds
+        two zero lsbs.
+        """
 
     class Access(enum.Enum):
         na = enum.auto()
@@ -125,7 +143,14 @@ class RegisterTools(Generic[W]):
             """
 
         def _print_(self, *args, **kwargs): ...
-        def _word_width_(self) -> int:
+        @classmethod
+        def _unit_cnt_(cls) -> int:
+            """
+            Returns the number of addressable units (bytes) in a register word.
+            """
+
+        @classmethod
+        def _word_width_(cls) -> int:
             """
             Returns the number of bits in a register word.
             """
@@ -675,6 +700,132 @@ class RegisterTools(Generic[W]):
             relative to the base address of this object.
 
             Only one of `_on_write_`and `_on_write_relative_` can be specified.
+            """
+
+    class Memory(AddrRange):
+        """
+                    Currently only word aligned memory access is supported.
+
+        >>> # Example
+        >>>
+        >>> class MyAddrMap(reg32.AddrMap, word_count=256):
+        >>>     prog_mem: RoMemory[0x000:0x100]
+        >>>     ram:      Memory[0x200:400]
+        >>>
+        >>>     # optional configuration for the memory objects
+        >>>     def _config_(self, prog_mem: list[BitVector[32]]):
+        >>>         # define the initial content of the program memory
+        >>>         prog_mem._config_(initial=prog_mem)
+        >>>
+        >>>         # For memory regions, that are allowed to keep their state
+        >>>         # after a reset the `noreset` argument can be set to True.
+        >>>         #
+        >>>         # (in this example it does not matter because no initial value is provided)
+        >>>         #
+        >>>         # For memory regions, that do not require sub-word write access
+        >>>         # `mask_mode` can be set to `IGNORE` to remove the otherwise
+        >>>         # generated read-modify-write logic.
+        >>>         ram._config_(
+        >>>             noreset=True,
+        >>>             mask_mode=reg32.Memory.MaskMode.IGNORE
+        >>>         )
+        """
+
+        class MaskMode(enum.Enum):
+            """
+            defines, how memory write operations are implemented
+            """
+
+            IMMEDIATE = enum.auto()
+            """
+            Default mask Mode, memory writes are implemented as read-modify-write
+            operations in a single clock cycle.
+
+            >>> # pseudo code for write operation
+            >>> # write is implemented as a read-modify-write operation
+            >>> # in a single clock cycle
+            >>> mem_array[index] <<= (mem_array[index] & ~mask) | (data & mask)
+            """
+            IGNORE = enum.auto()
+            """
+            In this mode, the mask parameter is ignored. This mode requires the least FPGA
+            resources and should be used whenever sub-word write access is not needed.
+            
+            >>> # pseudo code for write operation
+            >>> # data is directly assigned to memory word
+            >>> mem_array[index] <<= data
+            """
+            READBACK = enum.auto()
+            """
+            This mode splits the read-modify-write operation of each memory
+            write into two clock cycles.
+
+            >>> # pseudo code for write operation
+            >>> old_data = mem_array[index]
+            >>> await std.wait_for(1)
+            >>> mem_array[index] <<= (old_data & ~mask) | (data & mask)
+            """
+            SPLIT_WORDS = enum.auto()
+            """
+            Mode SPLIT_WORDS changes the generated memory layout.
+            Instead of a single memory array of word width, each addressable unit (byte)
+            within a word is stored in a separate array.
+            The advantage of this mode is, that the memory write process
+            can modify individual bytes without a separate read logic.
+
+            >>> # pseudo code for write operation
+            >>> # each byte is assigned individually
+            >>>
+            >>> if mask[0]:
+            >>>     mem_array_0[index] <<= data[7:0]
+            >>> if mask[1]:
+            >>>     mem_array_1[index] <<= data[15:8]
+            >>> if mask[2]:
+            >>>     mem_array_2[index] <<= data[23:16]
+            >>> if mask[3]:
+            >>>     mem_array_3[index] <<= data[31:16]
+            """
+
+        def _config_(
+            self,
+            initial: Null | Full | list[BitVector] | None = None,
+            noreset: bool = False,
+            mask_mode: MaskMode = MaskMode.IMMEDIATE,
+            allow_unaligned: bool = False,
+        ):
+            """
+            Configure how the memory object is initialized and implemented.
+
+            `initial` defines the initial memory content.
+
+            When `noreset` is set to True the memory content is not restored
+            when the register system is reset. This should be set whenever
+            possible, since the reset logic prevents block ram inference.
+
+            `mask_mode` defines how write operations are implemented.
+
+            Only aligned reads/writes are allowed unless `allow_unaligned` is set to True.
+            This is only possible with `MaskMode.SPLIT_WORDS`.
+            """
+
+    class RoMemory(Memory):
+        """
+        Specialization of `Memory` that does not implement write operations.
+        """
+
+        def _config_(
+            self,
+            initial,
+            mask_mode: RegisterTools.Memory.MaskMode = RegisterTools.Memory.MaskMode.IMMEDIATE,
+            allow_unaligned: bool = False,
+        ):
+            """
+            `initial` defines the initial memory content. This is a mandatory argument
+            because it is the only way to load data into the read-only memory.
+
+            `mask_mode` mainly affects the masking behavior during writes.
+            It can be usually be ignored for read-only memory. However when `allow_unaligned`
+            is set to True `MaskMode.SPLIT_WORDS` is required.
             """
 
 reg32 = RegisterTools[32, 8]

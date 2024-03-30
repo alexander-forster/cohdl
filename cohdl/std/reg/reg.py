@@ -3,15 +3,27 @@ from __future__ import annotations
 from typing import TypeVar, Generic, Literal, get_type_hints
 import enum
 
-from cohdl import Null, Signal, BitVector, Unsigned, Signed, Bit, Temporary, expr_fn
+from cohdl import (
+    Null,
+    Full,
+    Signal,
+    Variable,
+    BitVector,
+    Unsigned,
+    Signed,
+    Bit,
+    Temporary,
+    expr_fn,
+)
 from cohdl import std
-from cohdl._core import AssignMode
+from cohdl._core import AssignMode, Array, true
 from cohdl._core._intrinsic import _intrinsic
 from cohdl.utility import TextBlock
 
 from .._context import SequentialContext, concurrent
 from ..enum import Enum as StdEnum
-from .._core_utility import to_bits
+from .._core_utility import to_bits, NoresetSignal, zeros, ones, concat, base_type
+from ..utility import is_pow_two, int_log_2
 
 
 class Access(enum.Enum):
@@ -48,10 +60,34 @@ def _expand_lists(inp):
 class _None: ...
 
 
+class _Infinite:
+    # The word_count argument is optional for the root AddrMap.
+    # When it is not specified an instance of _Infinite is used
+    # to pass all bound checks.
+
+    def __add__(self, other):
+        return self
+
+    def __radd__(self, other):
+        return self
+
+    def __mul__(self, other):
+        return self
+
+    def __gt__(self, other):
+        return True
+
+    def __ge__(self, other):
+        return True
+
+    def __lt__(self, other):
+        return False
+
+
 class GenericArg:
     offset: int = None
-    end: int = None
-    array_step: int = None
+    end: int | None = None
+    array_step: int | None = None
 
     def __init__(self, arg):
         self.array_type = None
@@ -109,7 +145,9 @@ class _RegisterToolsArg:
 
         assert isinstance(word_width, int)
         assert isinstance(unit_width, int)
-        assert word_width % unit_width == 0
+        assert (
+            word_width % unit_width == 0
+        ), "word with must be a multiple of the unit width"
 
         self.word_width = word_width
         self.unit_width = unit_width
@@ -128,6 +166,18 @@ class RegisterTools(std.Template[_RegisterToolsArg]):
     _word_width_: _RegisterToolsArg.word_width
     _addr_unit_width_: _RegisterToolsArg.unit_width
     _word_stride_: _RegisterToolsArg.word_stride
+
+    @classmethod
+    def _as_word_addr_(cls, unit_addr: Unsigned):
+        assert is_pow_two(cls._word_stride_)
+        drop_bits = int_log_2(cls._word_stride_)
+        return unit_addr.msb(rest=drop_bits).copy().unsigned
+
+    @classmethod
+    def _as_unit_addr_(cls, word_addr: Unsigned):
+        assert is_pow_two(cls._word_stride_)
+        add_bits = int_log_2(cls._word_stride_)
+        return (word_addr @ zeros(add_bits)).unsigned
 
     @classmethod
     def _template_specialize_(cls):
@@ -238,11 +288,14 @@ class RegisterObject(std.Template[GenericArg]):
         return object_list
 
     @classmethod
+    @_intrinsic
     def _unit_count_(cls):
         return cls._word_count_ * cls._register_tools_._word_stride_
 
-    def _word_width_(self):
-        return type(self)._register_tools_._word_width_
+    @classmethod
+    @_intrinsic
+    def _word_width_(cls):
+        return cls._register_tools_._word_width_
 
     def _basic_read_(self, addr, meta):
         return Null
@@ -283,12 +336,17 @@ class RegFile(RegisterObject):
         kwargs=None,
         _cohdlstd_initguard=None,
     ):
-        print(f"    # {name} ")
         if isinstance(self, AddrMap):
-            assert parent is None
+            assert (
+                parent is None
+            ), "AddrMap may only be used as the root instance (use RegFile for nested register collections)"
         else:
-            assert parent is not None
-            assert args is None and kwargs is None
+            assert (
+                parent is not None
+            ), "RegFile cannot be used as the root instance (use AddrMap instead)"
+            assert (
+                args is None and kwargs is None
+            ), "RegFile takes no positional or keyword arguments"
 
         self._name_ = name
 
@@ -357,10 +415,16 @@ class RegFile(RegisterObject):
         if word_count is _None:
             return
 
-        assert cls.__new__ is RegFile.__new__
-        assert cls.__init__ is RegFile.__init__ or cls.__init__ is AddrMap.__init__
-        assert cls._basic_read_ is RegFile._basic_read_
-        assert cls._basic_write_ is RegFile._basic_write_
+        assert cls.__new__ is RegFile.__new__, "RegFile.__new__ cannot be overloaded"
+        assert (
+            cls.__init__ is RegFile.__init__ or cls.__init__ is AddrMap.__init__
+        ), "RegFile.__init__ cannot be overloaded"
+        assert (
+            cls._basic_read_ is RegFile._basic_read_
+        ), "RegFile._basic_read_ cannot be overloaded"
+        assert (
+            cls._basic_write_ is RegFile._basic_write_
+        ), "RegFile._basic_read_ cannot be overloaded"
 
         super().__init_subclass__(readonly=readonly, writeonly=writeonly)
         cls._word_count_ = word_count
@@ -404,6 +468,13 @@ class RegFile(RegisterObject):
 
 
 class AddrMap(RegFile):
+    def __init_subclass__(cls, *, word_count=_None, readonly=False, writeonly=False):
+        if word_count is _None:
+            word_count = _Infinite()
+        super().__init_subclass__(
+            word_count=word_count, readonly=readonly, writeonly=writeonly
+        )
+
     def _implement_synthesizable_contexts_(self, ctx: SequentialContext):
         content = self._flatten_(include_devices=True)
 
@@ -635,19 +706,27 @@ class _FieldArg:
                 self.width = 1
                 self.is_bit = True
         else:
-            assert isinstance(arg, slice)
-            assert isinstance(arg.start, int)
-            assert isinstance(arg.stop, int)
-            assert arg.start >= arg.stop
-            assert arg.step is None
+            assert isinstance(
+                arg, slice
+            ), "first generic argument must be integer or slice"
+            assert isinstance(arg.start, int), "slice start must be an integer"
+            assert isinstance(arg.stop, int), "slice stop must be an integer"
+            assert (
+                arg.start >= arg.stop
+            ), "slice start must be larger than or equal to slice stop"
+            assert arg.step is None, "slice step may not be used"
 
             self.offset = arg.stop
             self.width = arg.start - arg.stop + 1
             self.is_bit = False
 
             if self.underlying is not None:
-                assert not underlying_bit
-                assert self.width == underlying_width
+                assert (
+                    not underlying_bit
+                ), "slice argument cannot be used for a Bit type"
+                assert (
+                    self.width == underlying_width
+                ), f"width of slice argument does not match width of underlying type ({underlying_width})"
 
         if self.underlying is not None:
             if not issubclass(self.underlying, StdEnum):
@@ -694,7 +773,9 @@ class _FieldArg:
 class _FlagArg(_FieldArg):
     def __init__(self, arg):
         super().__init__(arg)
-        assert self.is_bit
+        assert (
+            self.is_bit
+        ), "FlagField argument must be defined as a single bit (not as a slice)"
 
 
 class _FieldInfoArg:
@@ -808,8 +889,12 @@ class Field(std.Template[_FieldArg], FieldBase):
 
         else:
             if isinstance(value, Field):
-                assert value._field_arg.width == self._field_arg.width
-                assert value._field_arg.is_bit == self._field_arg.is_bit
+                assert (
+                    value._field_arg.width == self._field_arg.width
+                ), "width of source field does not match target"
+                assert (
+                    value._field_arg.is_bit == self._field_arg.is_bit
+                ), "only one of source and target field is a Bit type"
                 other_value = value._value
             else:
                 if value is None:
@@ -862,7 +947,7 @@ class FlagField(std.Template[_FlagArg], FieldBase):
 
     @classmethod
     def _from_bits_(cls, val: BitVector, qualifier=std.Value):
-        assert val.width == 1
+        assert val.width == 1, "FlagField._from_bits_ expects a single bit BitVector"
         return cls(qualifier[Bit](val[0]))
 
     def _to_bits_(self):
@@ -877,7 +962,7 @@ class FlagField(std.Template[_FlagArg], FieldBase):
         super().__init__()
 
         if inp is None:
-            assert extract is False
+            assert extract is False, "inp must be set when extract is requested"
             self._flag = std.SyncFlag()
             self._has_flag = True
         else:
@@ -885,7 +970,9 @@ class FlagField(std.Template[_FlagArg], FieldBase):
             if extract:
                 self._val = _qualifier_[Bit](inp[self._field_arg.offset])
             else:
-                assert std.instance_check(inp, Bit)
+                assert std.instance_check(
+                    inp, Bit
+                ), "inp must be a Bit value unless extract is requested"
                 self._val = _qualifier_[Bit](inp)
 
     def flag(self):
@@ -972,7 +1059,9 @@ class Register(GenericRegister):
             self._fields_ = {}
 
             if std.instance_check(raw, BitVector):
-                assert raw.width == self._register_tools_._word_width_
+                assert (
+                    raw.width == self._register_tools_._word_width_
+                ), "raw BitVector width does not match register word width"
 
                 for name, field_type in self._field_types_.items():
                     setattr(
@@ -1052,7 +1141,7 @@ class Register(GenericRegister):
         result = await std.as_awaitable(self._on_write_, type(self)._from_bits_(data))
 
         if result is None:
-            # assert self contains no memory
+            # check that self contains no memory
             assert not any(
                 [
                     isinstance(field, (MemField, FlagField))
@@ -1128,7 +1217,7 @@ class Register(GenericRegister):
             field_offset = field_type._field_arg.offset
 
             if offset != field_offset:
-                assert offset < field_offset
+                assert offset < field_offset, "internal error: offset should be sorted"
                 cls._field_layout_.append(field_offset - offset)
             cls._field_layout_.append(name)
             offset = field_offset + field_type._field_arg.width
@@ -1164,15 +1253,15 @@ class Input(GenericRegister, readonly=True):
         width = self._register_tools_._word_width_
 
         if lsbs:
-            assert not msbs
-            assert offset is None
-            assert padding is None
+            assert not msbs, "lsb and msb cannot be set at the same time"
+            assert offset is None, "lsb and offset cannot be set at the same time"
+            assert padding is None, "lsb and padding cannot be set at the same time"
 
             offset = 0
             padding = width - signal.width
         elif msbs:
-            assert offset is None
-            assert padding is None
+            assert offset is None, "msb and offset cannot be set at the same time"
+            assert padding is None, "msb and padding cannot be set at the same time"
 
             offset = width - signal.width
             padding = 0
@@ -1180,7 +1269,9 @@ class Input(GenericRegister, readonly=True):
             offset = 0 if offset is None else offset
             padding = 0 if padding is None else padding
 
-        assert signal.width + offset + padding == width
+        assert (
+            signal.width + offset + padding == width
+        ), f"resulting input width {signal.width + offset + padding} does not match word width {width}"
 
         self._signal = signal
         self._width = signal.width
@@ -1211,15 +1302,15 @@ class Output(GenericRegister, writeonly=True):
         width = self._register_tools_._word_width_
 
         if lsbs:
-            assert not msbs
-            assert offset is None
-            assert padding is None
+            assert not msbs, "lsb and msb cannot be set at the same time"
+            assert offset is None, "lsb and offset cannot be set at the same time"
+            assert padding is None, "lsb and padding cannot be set at the same time"
 
             offset = 0
             padding = width - signal.width
         elif msbs:
-            assert offset is None
-            assert padding is None
+            assert offset is None, "msb and offset cannot be set at the same time"
+            assert padding is None, "msb and padding cannot be set at the same time"
 
             offset = width - signal.width
             padding = 0
@@ -1227,7 +1318,9 @@ class Output(GenericRegister, writeonly=True):
             offset = 0 if offset is None else offset
             padding = 0 if padding is None else padding
 
-        assert signal.width + offset + padding == width
+        assert (
+            signal.width + offset + padding == width
+        ), f"resulting input width {signal.width + offset + padding} does not match word width {width}"
 
         self._signal = signal
         self._width = signal.width
@@ -1257,7 +1350,9 @@ class Array(RegisterObject):
 
         if cls._generic_arg_ is not None:
             assert isinstance(cls._generic_arg_, GenericArg)
-            assert cls._generic_arg_.array_step is not None
+            assert (
+                cls._generic_arg_.array_step is not None
+            ), "array must be defined with a generic step argument"
             cls._word_count_ = (
                 cls._generic_arg_.end - cls._generic_arg_.offset
             ) // cls._register_tools_._word_stride_
@@ -1299,7 +1394,32 @@ class AddrRange(RegisterObject):
     def __init_subclass__(cls, word_count=_None, readonly=False, writeonly=False):
         super().__init_subclass__(readonly, writeonly)
 
+        if hasattr(cls, "_generic_arg_"):
+            generic_arg = cls._generic_arg_
+
+            assert isinstance(generic_arg.offset, int)
+            assert (
+                generic_arg.array_step is None
+            ), "AddrRange does not support a generic step parameter"
+            assert (
+                generic_arg.array_type is None
+            ), "AddrRange does not take a generic type parameter"
+
+            word_stride = cls._register_tools_._word_stride_
+
+            if generic_arg.end is not None:
+                assert (
+                    word_count is _None
+                ), "word_count already set using generic argument"
+                assert (
+                    generic_arg.end - generic_arg.offset
+                ) % word_stride == 0, "memory size must be a multiple of the word size"
+                word_count = (generic_arg.end - generic_arg.offset) // word_stride
+
         if word_count is not _None:
+            assert not hasattr(
+                cls, "_word_count_"
+            ), "word_count has already been specified"
             cls._word_count_ = word_count
 
     async def _basic_read_(self, addr, meta):
@@ -1325,6 +1445,181 @@ class AddrRange(RegisterObject):
             return await std.as_awaitable(
                 self._on_write_relative_, addr - self._global_offset_, data, mask
             )
+
+
+@_intrinsic
+def _list_rol(inp: list, roll: int):
+    return (inp[roll:] + inp[0:roll])[::-1]
+
+
+class Memory(AddrRange):
+    class MaskMode(enum.Enum):
+        IMMEDIATE = enum.auto()
+        IGNORE = enum.auto()
+        READBACK = enum.auto()
+        SPLIT_WORDS = enum.auto()
+
+    def _config_(
+        self,
+        initial=None,
+        noreset=False,
+        mask_mode: MaskMode = None,
+        allow_unaligned=False,
+    ):
+        if mask_mode is None:
+            mask_mode = Memory.MaskMode.IMMEDIATE
+
+        if allow_unaligned:
+            assert (
+                mask_mode is Memory.MaskMode.SPLIT_WORDS
+            ), f"unaligned access is currently only supported for MaskMode.SPLIT_WORDS"
+
+        self._register_tools_: RegisterTools
+
+        word_width = type(self)._word_width_()
+        word_cnt = type(self)._word_count_
+
+        self._word_stride = self._register_tools_._word_stride_
+        self._unit_width = self._register_tools_._addr_unit_width_
+
+        self._mask_mode = mask_mode
+        self._allow_unaligned = allow_unaligned
+
+        Qualifier = NoresetSignal if noreset else Signal
+
+        if mask_mode is Memory.MaskMode.SPLIT_WORDS:
+
+            def split_initial(nr):
+                if initial is None or initial is Null or initial is Full:
+                    return initial
+                else:
+                    right_bit = self._unit_width * nr
+                    left_bit = right_bit + self._unit_width - 1
+
+                    return [
+                        BitVector[word_width](elem)[left_bit:right_bit]
+                        for elem in initial
+                    ]
+
+            self._mem_list = [
+                Qualifier[std.Array[BitVector[self._unit_width], word_cnt]](
+                    split_initial(nr)
+                )
+                for nr in range(self._word_stride)
+            ]
+        else:
+            self._mem = Qualifier[std.Array[BitVector[word_width], word_cnt]](initial)
+
+    async def _on_read_relative_(self, addr):
+        waddr = self._register_tools_._as_word_addr_(addr)
+        if self._mask_mode is self.MaskMode.SPLIT_WORDS:
+            if not self._allow_unaligned:
+                return concat(
+                    *[
+                        self._mem_list[unit_nr][waddr]
+                        for unit_nr in range(self._word_stride)
+                    ][::-1]
+                )
+            else:
+                stride_cnt = int_log_2(self._word_stride)
+                stride_bits = addr.lsb(stride_cnt).unsigned
+
+                assert stride_bits == 0, "stride error"
+
+                rddata = [
+                    self._mem_list[off][
+                        waddr
+                        + (Unsigned[1](0) if stride_bits <= off else Unsigned[1](1))
+                    ]
+                    for off in range(self._word_stride)
+                ]
+
+                result = Variable[BitVector[self._word_width_()]]()
+
+                for off in range(self._word_stride):
+                    if stride_bits == off:
+                        result @= concat(*_list_rol(rddata, off))
+
+                return result
+        else:
+            return self._mem[waddr]
+
+    async def _on_write_relative_(self, addr, data, mask):
+        waddr = Variable(self._register_tools_._as_word_addr_(addr))
+
+        if self._mask_mode is self.MaskMode.IGNORE:
+            self._mem[waddr] <<= data
+        elif self._mask_mode is self.MaskMode.IMMEDIATE:
+            self._mem[waddr] <<= mask.apply(self._mem[waddr], data)
+        elif self._mask_mode is self.MaskMode.READBACK:
+            prev_val = Signal(self._mem[waddr])
+            await true
+            self._mem[waddr] <<= mask.apply(prev_val, data)
+        elif self._mask_mode is self.MaskMode.SPLIT_WORDS:
+            unit_mask = mask.apply(
+                zeros(self._word_width_()), ones(self._word_width_())
+            )
+
+            if not self._allow_unaligned:
+                for unit_nr in range(self._word_stride):
+                    right_bit = self._unit_width * unit_nr
+                    left_bit = right_bit + self._unit_width - 1
+
+                    if unit_mask[unit_nr * self._unit_width]:
+                        self._mem_list[unit_nr][waddr] <<= data[left_bit:right_bit]
+            else:
+                stride_cnt = int_log_2(self._word_stride)
+                stride_bits = addr.lsb(stride_cnt).unsigned
+
+                addr_list = [
+                    Variable[base_type(waddr)]() for _ in range(self._word_stride)
+                ]
+                data_list = [
+                    Variable[BitVector[self._unit_width]]()
+                    for _ in range(self._word_stride)
+                ]
+                mask_list = [Variable[Bit]() for _ in range(self._word_stride)]
+
+                for unit_nr in range(self._word_stride):
+                    val = addr_list[unit_nr]
+
+                    val @= waddr + (
+                        Unsigned[1](0) if stride_bits <= unit_nr else Unsigned[1](1)
+                    )
+
+                for off in range(self._word_stride):
+                    if off == stride_bits:
+                        for unit_nr in range(self._word_stride):
+                            lsb = self._find_lsb_of_unaligned_split(off, unit_nr)
+
+                            msb = lsb + self._unit_width - 1
+
+                            data_list[unit_nr] @= data[msb:lsb]
+                            mask_list[unit_nr] @= unit_mask[lsb]
+
+                for unit_nr in range(self._word_stride):
+                    if mask_list[unit_nr]:
+                        self._mem_list[unit_nr][addr_list[unit_nr]] <<= data_list[
+                            unit_nr
+                        ]
+
+    @_intrinsic
+    def _find_lsb_of_unaligned_split(self, addr_offset, unit_nr):
+        word_width = self._word_width_()
+        unit_width = self._unit_width
+
+        return (word_width + ((unit_nr - addr_offset) * unit_width)) % word_width
+
+
+class RoMemory(Memory):
+    def __init_subclass__(cls, word_count=_None):
+        return super().__init_subclass__(word_count, readonly=True, writeonly=False)
+
+    def _config_(self, initial, mask_mode=None):
+
+        return super()._cohdlstd_wrappedconfig(
+            initial, noreset=True, mask_mode=mask_mode
+        )
 
 
 RegisterTools.RegisterObject = RegisterObject
@@ -1361,5 +1656,7 @@ RegisterTools.Output = Output
 RegisterTools.Array = Array
 RegisterTools.AddrRange = AddrRange
 
+RegisterTools.Memory = Memory
+RegisterTools.RoMemory = RoMemory
 
 reg32 = RegisterTools[32, 8]

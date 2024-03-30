@@ -215,9 +215,6 @@ async def testbench_axilite_reg_07(dut: test_axilite_reg_07):
     assert (await axi_master.read_dword(12)) == 0x00025678
 
 
-std.VhdlCompiler.to_string(test_axilite_reg_07)
-
-
 class Unittest(unittest.TestCase):
     def test_axilite_reg_07(self):
         cohdl_testutil.run_cocotb_tests(test_axilite_reg_07, __file__, self.__module__)
