@@ -214,8 +214,8 @@ class CodeBlock(Statement):
 
         for stmt in stmts:
             # ensure, that there are no statements after a break or continue
-            assert not contains_break
-            assert not contains_continue
+            assert not contains_break, "unreachable statement after break"
+            assert not contains_continue, "unreachable statement after continue"
 
             if isinstance(stmt, CodeBlock):
                 self._stmts.extend(stmt.statements())
@@ -794,7 +794,9 @@ class Block:
 class EntityTemplate(Block):
     def __init__(self, info: EntityInfo, subblocks: list | None, contexts: list | None):
         if info.extern:
-            assert subblocks is None and contexts is None
+            assert (
+                subblocks is None and contexts is None
+            ), "extern blocks cannot contain subbocks or synthesizable contexts"
 
             super().__init__(info, [], [], {})
         else:

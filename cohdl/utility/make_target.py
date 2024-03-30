@@ -90,7 +90,9 @@ class MakeTarget:
                 cmds = [*target.commands]
 
                 if target.lock:
-                    assert lock_dir_target is not None
+                    assert (
+                        lock_dir_target is not None
+                    ), "target.lock is set but no lock_dir was specified"
                     target_str = f"{lock_dir}/{target.target_str}"
                     target.add_dependency(lock_dir_target, order_only=True)
                     cmds.append(f"touch {target_str}")

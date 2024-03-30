@@ -38,8 +38,8 @@ def background_range(clk, reset, addr_width):
 class Interconnect:
     class SlaveWrapper:
         def __init__(self, offset: int, size: int, axi: Axi4Light):
-            assert size.bit_count() == 1
-            assert offset % size == 0
+            assert size.bit_count() == 1, "size must be a power of 2"
+            assert offset % size == 0, "offset must be a multiple of the interface size"
 
             self.range_start = offset
             self.range_end = offset + size - 1
@@ -132,7 +132,7 @@ class Interconnect:
                 slv.wr_active <<= False
 
     def reserve(self, offset: int, size: int, prefix="") -> Axi4Light:
-        assert size.bit_count() == 1
+        assert size.bit_count() == 1, "size must be a power of 2"
         addr_width = size.bit_length() - 1
 
         axi = Axi4Light.signal(self._clk, self._reset, addr_width, prefix=prefix)

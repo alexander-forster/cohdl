@@ -504,7 +504,7 @@ class InlineCode(Expression):
                             found = True
                             break
 
-                    assert found
+                    assert found, "inline code does not contain vhdl option"
                 else:
                     raise AssertionError("invalid type")
 
@@ -851,7 +851,7 @@ class VhdlScope:
                 return f'"{obj}"'
         else:
             val = obj._value
-            assert val is not None
+            assert val is not None, "array has not default value"
             elemtype = obj._elemtype_
 
             # use ( 0 => ELEM0, 1 => ELEM1 ) notation because

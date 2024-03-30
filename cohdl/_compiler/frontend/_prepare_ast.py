@@ -731,7 +731,7 @@ class PrepareAst:
                     out.Value(result, []), primitive=True, expr_before=[value_expr]
                 )
 
-            assert inspect.iscoroutine(result)
+            assert inspect.iscoroutine(result), "argument is not a coroutine"
 
             fn_def = FunctionDefinition.from_coroutine(
                 result,
@@ -774,7 +774,9 @@ class PrepareAst:
             if isinstance(inp.ctx, ast.Store):
                 value = _return_stack.top()
 
-                assert value.aug_assign is None
+                assert (
+                    value.aug_assign is None
+                ), "only operator '=' is allowed in starred assignment"
                 assert isinstance(value.value, (list, tuple))
 
                 # convert name object

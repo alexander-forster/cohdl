@@ -221,12 +221,14 @@ class CodeBlock(Statement):
         self.visit_objects(apply_alias)
 
     def get_parent_block(self, level):
-        assert self._level >= level
+        assert (
+            self._level >= level
+        ), "internal error: wrong nesting order of code blocks"
 
         if self._level == level:
             return self
 
-        assert self._parent is not None
+        assert self._parent is not None, "internal error: code block has no parent"
         return self._parent.get_parent_block(level)
 
     @classmethod
@@ -1168,7 +1170,9 @@ class StatemachineContext:
 
     @staticmethod
     def enter(name: str):
-        assert StatemachineContext._singleton is None
+        assert (
+            StatemachineContext._singleton is None
+        ), "error nested StatemachineContext"
         ctx = StatemachineContext(name)
         StatemachineContext._singleton = ctx
         return ctx
@@ -1176,12 +1180,14 @@ class StatemachineContext:
     @staticmethod
     def get():
         ctx = StatemachineContext._singleton
-        assert ctx is not None
+        assert ctx is not None, "internal error: requested statemachine context"
         return ctx
 
     @staticmethod
     def finish(open_blocks):
-        assert StatemachineContext._singleton is not None
+        assert (
+            StatemachineContext._singleton is not None
+        ), "internal error: finished StatemachineContext with no active singleton"
         ctx = StatemachineContext._singleton
         StatemachineContext._singleton = None
 

@@ -33,11 +33,15 @@ class BitVectorArg:
 
         span: slice = arg[0]
 
-        assert isinstance(span, slice)
-        assert isinstance(span.start, int)
-        assert isinstance(span.stop, int)
-        assert span.step is None
-        assert arg[1] in (cohdl.BitVector, cohdl.Signed, cohdl.Unsigned)
+        assert isinstance(span, slice), "first generic argument must be a slice"
+        assert isinstance(span.start, int), "start parameter must be an integer"
+        assert isinstance(span.stop, int), "stop parameter must be an integer"
+        assert span.step is None, "step parameter not allowed"
+        assert arg[1] in (
+            cohdl.BitVector,
+            cohdl.Signed,
+            cohdl.Unsigned,
+        ), f"invalid argument type {arg[1]}"
 
         self.start = span.start
         self.stop = span.stop
@@ -116,17 +120,25 @@ class BitField(AssignableType):
         elif vec is cohdl.Null or vec is cohdl.Full:
             self._vec = _qualifier_[cohdl.BitVector[self._width_]](vec)
         elif isinstance(vec, BitField):
-            assert isinstance(vec, type(self))
+            assert isinstance(
+                vec, type(self)
+            ), "bitfield type of argument does not match target"
             self._vec = _qualifier_(vec._vec)
         else:
-            assert vec.width == self._width_
+            assert (
+                vec.width == self._width_
+            ), "vector width does not match bitfield width"
             self._vec = _qualifier_(vec)
 
         for name, Field in self._fields_.items():
             if issubclass(Field, (FieldBit, FieldBitVector)):
                 setattr(self, name, Field(self._vec))
             else:
-                assert issubclass(Field, BitField)
+                assert issubclass(
+                    Field, BitField
+                ), "internal error: member of BitField has unexpected type {}".format(
+                    Field
+                )
                 assert (
                     Field._offset_ is not None
                 ), "the offset of sub-BitFields must be specified"
@@ -189,13 +201,15 @@ class _BitFieldInst(BitField):
     @_intrinsic
     def __class_getitem__(cls, arg):
         if isinstance(arg, slice):
-            assert isinstance(arg.start, int)
-            assert isinstance(arg.stop, int)
-            assert arg.step is None
-            assert arg.start - arg.stop + 1 == cls._width_
+            assert isinstance(arg.start, int), "slice start must be an integer"
+            assert isinstance(arg.stop, int), "slice stop must be an integer"
+            assert arg.step is None, "slice step may not be used"
+            assert (
+                arg.start - arg.stop + 1 == cls._width_
+            ), f"slice width ({arg.start}:{arg.stop}=={arg.start - arg.stop + 1}) does not match BitField width {cls._width_}"
             arg = arg.stop
 
-        assert isinstance(arg, int)
+        assert isinstance(arg, int), "expected slice or integer"
         subclasses = cls._cohdlstd_subclasses
 
         if arg in subclasses:
@@ -223,7 +237,9 @@ class _BitFieldInst(BitField):
 
         fields = {}
         for name, value in typing.get_type_hints(cls).items():
-            assert issubclass(value, (FieldBit, FieldBitVector, _BitFieldInst))
+            assert issubclass(
+                value, (FieldBit, FieldBitVector, _BitFieldInst)
+            ), f"invalid BitField element type {value} of element '{name}'"
             fields[name] = value
 
         cls._fields_ = fields

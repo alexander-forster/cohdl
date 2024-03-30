@@ -9,7 +9,9 @@ class _BooleanLiteral:
     _init_cnt = 0
 
     def __init__(self, value: bool):
-        assert _BooleanLiteral._init_cnt < 2
+        assert (
+            _BooleanLiteral._init_cnt < 2
+        ), "only two boolean literals (true and false) can exist"
         _BooleanLiteral._init_cnt += 1
         self._value = value
 
@@ -94,7 +96,9 @@ class _NullFullType:
     _init_cnt = 0
 
     def __init__(self):
-        assert _NullFullType._init_cnt <= 1
+        assert (
+            _NullFullType._init_cnt <= 1
+        ), "only two instances of _NullFullType (Null and Full) can exist"
         _NullFullType._init_cnt += 1
 
     @_intrinsic

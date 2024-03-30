@@ -42,7 +42,9 @@ class _TemplateMeta:
 
     def add_instance(self, specialized_type: type, template_arg, instance):
         specialized_cache = self.instances.setdefault(specialized_type, {})
-        assert template_arg not in specialized_cache
+        assert (
+            template_arg not in specialized_cache
+        ), "internal error: template arg already in cache"
         specialized_cache[template_arg] = instance
 
 
@@ -137,9 +139,11 @@ class Template:
 
     @_intrinsic
     def __class_getitem__(cls, args):
-        assert cls._template_meta_.mode is _TemplateMode.ROOT
+        assert (
+            cls._template_meta_.mode is _TemplateMode.ROOT
+        ), "internal error: expected template mode ROOT"
         argtype = args
-        assert isinstance(args, type)
+        assert isinstance(args, type), "Template expects a type argument"
         assert (
             argtype.__hash__ is not object.__hash__
         ), f"TemplatArg({argtype}) must define a hash function"

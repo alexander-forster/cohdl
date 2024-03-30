@@ -175,8 +175,10 @@ class _MergedBranch:
         # _MergedBranch object (possible when branches contains a single _MergedBranch object)
         if not hasattr(self, "_cohdl_init_complete"):
             for branch in branches:
-                assert isinstance(branch, _ValueBranch)
-                assert not branch.obj is self
+                assert isinstance(
+                    branch, _ValueBranch
+                ), "internal error: argument of MergedBranch is not a _ValueBranch"
+                assert branch.obj is not self, "internal error: recursive merged branch"
 
             self.branches = branches
             self._cohdl_init_complete = True

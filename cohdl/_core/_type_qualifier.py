@@ -231,7 +231,7 @@ class _TypeQualifier(type):
                 {"_Wrapped": WrappedType, "_direction": direction},
             )
         else:
-            assert direction is None
+            assert direction is None, "direction can only be set on ports"
             new_type = type(cls.__name__, (parent_cls,), {"_Wrapped": WrappedType})
 
         cls._SubTypes[type_spec] = new_type
@@ -317,8 +317,10 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         _ref_spec: list[RefSpec] | None = None,
     ):
         if _root is not None:
-            assert _root.qualifier is self.qualifier
-            assert type(value) is self.type
+            assert (
+                _root.qualifier is self.qualifier
+            ), "internal error: _root.qualifier != self.qualifier"
+            assert type(value) is self.type, "internal error: type(value) != self.type"
             self._value = value
         else:
             value = TypeQualifier.decay(value)
@@ -411,7 +413,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         if isinstance(arg, tuple):
             raise NotImplementedError()
         elif isinstance(arg, slice):
-            assert arg.step is None
+            assert arg.step is None, "step parameter in slice is not allowed"
 
             if isinstance(arg.start, int):
                 assert isinstance(arg.stop, int)
@@ -448,7 +450,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         val_width = self._value.width
         if count is not None:
             if rest is not None:
-                assert count + rest == val_width
+                assert (
+                    count + rest == val_width
+                ), "the sum of count and reset does not match the value width"
             return self[count - 1 : 0]
         elif rest is not None:
             vec_count = val_width - rest
@@ -460,7 +464,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         val_width = self._value.width
         if count is not None:
             if rest is not None:
-                assert count + rest == val_width
+                assert (
+                    count + rest == val_width
+                ), "the sum of count and reset does not match the value width"
             return self[val_width - 1 : val_width - count]
         elif rest is not None:
             vec_count = val_width - rest
@@ -472,7 +478,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         val_width = self._value.width
         if count is not None:
             if rest is not None:
-                assert count + rest == val_width
+                assert (
+                    count + rest == val_width
+                ), "the sum of count and reset does not match the value width"
             return self[count - 1 : 0]
         elif rest is not None:
             vec_count = val_width - rest
@@ -484,7 +492,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         val_width = self._value.width
         if count is not None:
             if rest is not None:
-                assert count + rest == val_width
+                assert (
+                    count + rest == val_width
+                ), "the sum of count and reset does not match the value width"
             return self[val_width - 1 : val_width - count]
         elif rest is not None:
             vec_count = val_width - rest
@@ -501,7 +511,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         else:
             result_width = target_width
 
-        assert padded_width <= result_width
+        assert (
+            padded_width <= result_width
+        ), "width zero extended value exceeds target width"
 
         if zeros == 0:
             padded = self
@@ -726,8 +738,8 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
-        assert _root is None
-        assert _ref_spec is None
+        assert _root is None, "internal error: _root is None"
+        assert _ref_spec is None, "internal error: _ref_spec is None"
         # set default to None, because locally defined
         # Signals/Variables cannot be used before they are constructed
         # and thus initialized
@@ -796,7 +808,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         if isinstance(arg, tuple):
             raise NotImplementedError()
         elif isinstance(arg, slice):
-            assert arg.step is None
+            assert arg.step is None, "step argument not allowed in slice"
 
             if isinstance(arg.start, int):
                 assert isinstance(arg.stop, int)
@@ -1111,8 +1123,8 @@ class Signal(TypeQualifier):
         # copy of TypeQualifier._init_replacement
         # with added support for delayed_init
 
-        assert _root is None
-        assert _ref_spec is None
+        assert _root is None, "internal error: _root is None"
+        assert _ref_spec is None, "internal error: _ref_spec is None"
         # set default to None, because locally defined
         # Signals/Variables cannot be used before they are constructed
         # and thus initialized

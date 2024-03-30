@@ -48,7 +48,7 @@ class UartSender:
         stop_bits: int = 1,
         parity: Parity = Parity.NONE,
     ):
-        assert parity is Parity.NONE
+        assert parity is Parity.NONE, "support for parity not yet implemented"
 
         with prefix("uarttx"):
             self._flag = SyncFlag()
@@ -99,7 +99,7 @@ class UartReceiver:
         debounce: float | None = None,
         parity: Parity = Parity.NONE,
     ):
-        assert parity is Parity.NONE
+        assert parity is Parity.NONE, "support for parity not yet implemented"
 
         has_parity = parity not in (None, Parity.NONE)
         parity_bit_cnt = 1 if has_parity else 0
@@ -119,9 +119,9 @@ class UartReceiver:
             if debounce is None:
                 self._rx = rx
             else:
-                assert 0.0 < debounce < 1.0
+                assert 0.0 < debounce < 1.0, "debounce must be in the range 0-1"
                 debounce_ticks = int(ticks_per_bit * debounce)
-                assert debounce_ticks > 0
+                assert debounce_ticks > 0, "debounce parameter to small"
 
                 self._rx = _debounce_fn(
                     ctx, rx, debounce_ticks, initial=True, allowed_delta=0.01

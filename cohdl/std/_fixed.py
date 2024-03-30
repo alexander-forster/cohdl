@@ -87,7 +87,7 @@ class _Resize(typing.Generic[T]):
     @pyeval
     def __getitem__(self, arg: slice) -> _FixedResize[T]:
         assert isinstance(arg, slice)
-        assert arg.step is None
+        assert arg.step is None, "slice step may not be used"
         return _FixedResize(self._obj, arg.start, arg.stop)
 
 
@@ -100,10 +100,10 @@ class _FixedTemplateArg:
     exp: int
 
     def __init__(self, arg: slice):
-        assert arg.step is None
-        assert isinstance(arg.start, int)
-        assert isinstance(arg.stop, int)
-        assert arg.start >= arg.stop
+        assert arg.step is None, "slice step may not be used"
+        assert isinstance(arg.start, int), "slice start must be an integer"
+        assert isinstance(arg.stop, int), "slice stop must be an integer"
+        assert arg.start >= arg.stop, "slice start must be larger tan slice stop"
 
         self.arg = arg
         self.width: int = arg.start - arg.stop + 1
@@ -169,8 +169,8 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
         raw_type = Signed[self._width]
 
         if raw is not None:
-            assert val is None
-            assert instance_check(raw, raw_type)
+            assert val is None, "val and raw cannot be set at the same time"
+            assert instance_check(raw, raw_type), "raw type must match underlying type"
             self._val: Signed = _qualifier_(raw)
         else:
             if val is None or val is Full or val is Null:
@@ -321,7 +321,9 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
                             )
                         )
                     else:
-                        assert round_style is FixedRoundStyle.ROUND
+                        assert (
+                            round_style is FixedRoundStyle.ROUND
+                        ), "invalid round_style {}".format(round_style)
 
                         if cutoff == 1:
                             do_round = (
@@ -344,7 +346,9 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
                             )
                         )
             else:
-                assert overflow_style is FixedOverflowStyle.SATURATE
+                assert (
+                    overflow_style is FixedOverflowStyle.SATURATE
+                ), "invalid overflow_style {}".format(overflow_style)
                 sign_bit = self._val.msb()
 
                 overflow_bitcnt = min(selfleft - left, self._width - 1)
@@ -388,7 +392,9 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
                             )
                         )
                     else:
-                        assert round_style is FixedRoundStyle.ROUND
+                        assert (
+                            round_style is FixedRoundStyle.ROUND
+                        ), "invalid round_style {}".format(round_style)
 
                         if cutoff == 1:
                             do_round = (
@@ -437,7 +443,9 @@ class SFixed(Template[_FixedTemplateArg], AssignableType):
                         )
                     )
                 else:
-                    assert round_style is FixedRoundStyle.ROUND
+                    assert (
+                        round_style is FixedRoundStyle.ROUND
+                    ), "invalid round_style {}".format(round_style)
 
                     if cutoff == 1:
                         do_round = (
@@ -515,8 +523,8 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
         raw_type = Unsigned[self._width]
 
         if raw is not None:
-            assert val is None
-            assert instance_check(raw, raw_type)
+            assert val is None, "val and raw cannot be set at the same time"
+            assert instance_check(raw, raw_type), "raw type must match underlying type"
             self._val = _qualifier_(raw)
         else:
             if val is None or val is Full or val is Null:
@@ -662,7 +670,9 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
                             )
                         )
                     else:
-                        assert round_style is FixedRoundStyle.ROUND
+                        assert (
+                            round_style is FixedRoundStyle.ROUND
+                        ), "invalid round_style {}".format(round_style)
 
                         if cutoff == 1:
                             do_round = (
@@ -685,7 +695,9 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
                             )
                         )
             else:
-                assert overflow_style is FixedOverflowStyle.SATURATE
+                assert (
+                    overflow_style is FixedOverflowStyle.SATURATE
+                ), "invalid overflow_style {}".format(overflow_style)
                 overflow_bits = self._val.msb(selfleft - left)
 
                 does_overflow = bool(overflow_bits)
@@ -723,7 +735,9 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
                             )
                         )
                     else:
-                        assert round_style is FixedRoundStyle.ROUND
+                        assert (
+                            round_style is FixedRoundStyle.ROUND
+                        ), "invalid round_style {}".format(round_style)
 
                         if cutoff == 1:
                             do_round = (
@@ -766,7 +780,9 @@ class UFixed(Template[_FixedTemplateArg], AssignableType):
                         )
                     )
                 else:
-                    assert round_style is FixedRoundStyle.ROUND
+                    assert (
+                        round_style is FixedRoundStyle.ROUND
+                    ), "invalid round_style {}".format(round_style)
 
                     if cutoff == 1:
                         do_round = (

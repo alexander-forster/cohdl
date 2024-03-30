@@ -23,7 +23,9 @@ class _IntrinsicReplacement:
         self.fn = fn
 
         if evaluate:
-            assert is_special_case
+            assert (
+                is_special_case
+            ), "internal error: cannot evaluate _IntrinsicReplacement unless it is special cased"
 
         self.is_special_case = is_special_case
         self.assignment_spec = assignment_spec
@@ -46,13 +48,17 @@ def _intrinsic_replacement(
     assignment_spec: tuple[int, int] | None = None,
     evaluate=False,
 ):
-    assert default_implementation in _intrinsic_functions
+    assert (
+        default_implementation in _intrinsic_functions
+    ), "internal error: default implementation of intrinsic_replacement is not intrinsic"
 
     if assignment_spec is not None:
         assignment_spec = _IntrinsicReplacement._Assignment(*assignment_spec)
 
     def helper(fn):
-        assert default_implementation not in _intrinsic_replacements
+        assert (
+            default_implementation not in _intrinsic_replacements
+        ), "internal error: redefinition of intrinsic_replacement"
         _intrinsic_replacements[default_implementation] = _IntrinsicReplacement(
             fn, special_case, assignment_spec=assignment_spec, evaluate=evaluate
         )
@@ -152,8 +158,7 @@ def coroutine_step_replacement(coro):
     return _CoroutineStep(coro)
 
 
-class _SensitivitySpec:
-    ...
+class _SensitivitySpec: ...
 
 
 class _SensitivityList(_SensitivitySpec):
@@ -162,8 +167,7 @@ class _SensitivityList(_SensitivitySpec):
 
 
 class _SensitivityAll(_SensitivitySpec):
-    def __init__(self):
-        ...
+    def __init__(self): ...
 
 
 class _Sensitivity:
@@ -197,8 +201,7 @@ sensitivity = _Sensitivity
 #
 
 
-class _ResetContext:
-    ...
+class _ResetContext: ...
 
 
 @_intrinsic
@@ -211,8 +214,7 @@ def reset_context_replacement():
     return _ResetContext()
 
 
-class _ResetPushed:
-    ...
+class _ResetPushed: ...
 
 
 @_intrinsic

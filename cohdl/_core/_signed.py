@@ -32,7 +32,9 @@ class Signed(BitVector):
         if max is None:
             max = abs(default)
 
-        assert min <= default <= max
+        assert (
+            min <= default <= max
+        ), f"default value ({default}) outside representable range ({min}-{max})"
 
         width_neg = len(bin(abs(min) - 1)) - 2 - (min == 0)
         width_pos = len(bin(max)) - 2
@@ -50,7 +52,11 @@ class Signed(BitVector):
             val = int(val)
 
         if isinstance(val, int):
-            assert (-(2 ** (self.width - 1))) <= val < 2 ** (self.width - 1)
+            min = -(2 ** (self.width - 1))
+            max = 2 ** (self.width - 1)
+            assert (
+                min <= val < max
+            ), f"value {val} outside representable range ({min}-{max-1})"
             val = Signed._int_to_binary(self.width, val)
 
         super().__init__(val)
@@ -96,7 +102,9 @@ class Signed(BitVector):
             other = int(other)
 
         if isinstance(other, int):
-            assert self.min() <= other <= self.max()
+            assert (
+                self.min() <= other <= self.max()
+            ), f"assigned value ({other}) outside representable range ({self.min()}-{self.max()})"
 
             if other < 0:
                 binary = Span([*bin(abs(other + 1))[2:][::-1]]).generate(
@@ -111,10 +119,14 @@ class Signed(BitVector):
                     lambda bit, char: bit._assign(char), binary.iter_extend("0")
                 )
         elif isinstance(other, Signed):
-            assert self.width >= other.width
+            assert (
+                self.width >= other.width
+            ), "assigned value is wider than the target type"
             self._assign(other.to_int())
         elif isinstance(other, cohdl.Unsigned):
-            assert self.width > other.width
+            assert (
+                self.width > other.width
+            ), "assigned unsigned value has equal or larger width than the signed target type"
             self._assign(other.to_int())
         elif (
             isinstance(other, (BitVector, str))
@@ -123,7 +135,7 @@ class Signed(BitVector):
         ):
             super()._assign(other)
         else:
-            raise AssertionError()
+            raise AssertionError("invalid source type for assignment to signed value")
 
     @_intrinsic
     def to_int(self) -> int:
@@ -150,11 +162,13 @@ class Signed(BitVector):
                 # adding integer, that cannot be represented
                 # without explicit specification of target_width
                 # is probably an error
-                assert rhs.width() <= self.width()
+                assert (
+                    rhs.width() <= self.width()
+                ), "added integer is not in the representable target range"
                 target_width = self.width()
         else:
-            assert isinstance(rhs, Signed)
-            assert self.order == rhs.order
+            assert self.order == rhs.order, "bitorder missmatch"
+            assert isinstance(rhs, Signed), "expected signed argument"
 
             if target_width is None:
                 target_width = max(self.width, rhs.width)
@@ -317,7 +331,7 @@ class Signed(BitVector):
 
     @_intrinsic
     def __lt__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer))
+        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
@@ -329,7 +343,7 @@ class Signed(BitVector):
 
     @_intrinsic
     def __gt__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer))
+        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
@@ -341,7 +355,7 @@ class Signed(BitVector):
 
     @_intrinsic
     def __le__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer))
+        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
@@ -353,7 +367,7 @@ class Signed(BitVector):
 
     @_intrinsic
     def __ge__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer))
+        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
@@ -368,7 +382,9 @@ class Signed(BitVector):
         if target_width is None:
             target_width = self.width + zeros
 
-        assert self.width + zeros <= target_width
+        assert (
+            self.width + zeros <= target_width
+        ), f"width of zero extended value ({self.width}+{zeros}) exceeds target width ({target_width})"
         val = self.to_int() * 2**zeros
         return Signed[target_width](val)
 

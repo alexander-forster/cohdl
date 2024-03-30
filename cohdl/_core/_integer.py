@@ -61,11 +61,15 @@ class Integer(_PrimitiveType):
             other = other.to_int()
 
         if self._min is not None:
-            assert self._min <= other
+            assert (
+                self._min <= other
+            ), f"assigned value {other} is smaller than the set minimum {self._min}"
         if self._max is not None:
-            assert self._max >= other
+            assert (
+                self._max >= other
+            ), f"assigned value {other} is larger than the set maximum {self._max}"
 
-        assert isinstance(other, int)
+        assert isinstance(other, int), f"expected an integer argument not {other}"
         self._val = other
 
     def __hash__(self) -> int:
@@ -77,7 +81,9 @@ class Integer(_PrimitiveType):
 
     @_intrinsic
     def __index__(self) -> int:
-        assert isinstance(self._val, int)
+        assert isinstance(
+            self._val, int
+        ), f"index expects an integer value not {self._val}"
         return self._val
 
     @_intrinsic
@@ -147,28 +153,28 @@ class Integer(_PrimitiveType):
     @_intrinsic
     def __gt__(self, other) -> bool:
         other = Integer.decay(other)
-        assert self._val is not None
+        assert self._val is not None, "integer value is not set"
 
         return bool(self._val > other)
 
     @_intrinsic
     def __lt__(self, other) -> bool:
         other = Integer.decay(other)
-        assert self._val is not None
+        assert self._val is not None, "integer value is not set"
 
         return bool(self._val < other)
 
     @_intrinsic
     def __ge__(self, other) -> bool:
         other = Integer.decay(other)
-        assert self._val is not None
+        assert self._val is not None, "integer value is not set"
 
         return bool(self._val >= other)
 
     @_intrinsic
     def __le__(self, other) -> bool:
         other = Integer.decay(other)
-        assert self._val is not None
+        assert self._val is not None, "integer value is not set"
 
         return bool(self._val <= other)
 

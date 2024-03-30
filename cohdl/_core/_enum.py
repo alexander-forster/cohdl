@@ -52,7 +52,7 @@ class DynamicEnum(_PrimitiveType):
             else:
                 name = f"{cls.__name__}_{val}"
         for existing in cls.__members__:
-            assert name != existing.name
+            assert name != existing.name, f"name {name} already exists"
 
         new_obj = object.__new__(cls)
         new_obj._init_new(len(cls.__members__), name)
@@ -73,7 +73,7 @@ class DynamicEnum(_PrimitiveType):
         if name is not None:
             for existing in cls.__members__:
                 if existing is not obj:
-                    assert name != existing.name
+                    assert name != existing.name, f"name {name} already exists"
 
         obj.name = name
         return obj

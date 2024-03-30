@@ -72,7 +72,9 @@ class SpiMaster:
         clk_period: Unsigned | int | Duration | None = None,
         clk_frequency: Frequency | None = None,
     ):
-        assert clk_period is None or clk_frequency is None
+        assert (
+            clk_period is None or clk_frequency is None
+        ), "spi clock period or frequency must be set"
 
         if clk_period is None:
             clk_period = clk_frequency.period()

@@ -52,14 +52,14 @@ class _Prefix:
 
     @_intrinsic
     def __enter__(self):
-        assert not self._scope_active
+        assert not self._scope_active, "attempt to enter already active scope"
         _Prefix._prefix_scope.append(self)
         self._scope_active = True
         return self
 
     @_intrinsic
     def __exit__(self, type, value, traceback):
-        assert self._scope_active
+        assert self._scope_active, "attempt to exit inactive scope"
         assert _Prefix._prefix_scope.pop() is self
         self._scope_active = False
         return None

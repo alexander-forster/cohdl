@@ -30,23 +30,25 @@ class _BitVector(type):
     @_intrinsic
     def __getitem__(cls, size: int | slice):
         if isinstance(size, slice):
-            assert size.step is None
-            assert isinstance(size.start, int)
-            assert isinstance(size.stop, int)
+            assert size.step is None, "step parameter not allowed in slice argument"
+            assert isinstance(size.start, int), "start parameter must be integer"
+            assert isinstance(size.stop, int), "stop parameter must be integer"
 
             if size.start == 0:
-                assert size.stop >= 0
+                assert size.stop >= 0, "stop value cannot be negative"
                 order = BitOrder.UPTO
                 width = size.stop + 1
             elif size.stop == 0:
-                assert size.start >= 0
+                assert size.start >= 0, "start value cannot be negative"
                 order = BitOrder.DOWNTO
                 width = size.start + 1
             else:
-                raise AssertionError(f"invalid BitVector declaration")
+                raise AssertionError(
+                    "invalid BitVector declaration, start or stop must be 0"
+                )
         else:
             assert isinstance(size, int)
-            assert size >= 0
+            assert size >= 0, "vector width must be positive"
 
             order = BitOrder.DOWNTO
             width = size
@@ -165,7 +167,6 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
 
     @_intrinsic
     def _bit_str(self) -> str:
-        assert self._value is not None
         return "".join([str(bit) for bit in self._value][::-1])
 
     @_intrinsic
@@ -178,7 +179,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
             return self._value[0]
 
         if (width is not None) and (rest is not None):
-            assert width + rest == self._width
+            assert (
+                width + rest == self._width
+            ), f"width + rest does not equal the vectors width ({width}+{rest} != {self._width})"
 
         if rest is not None:
             width = self._width - rest
@@ -187,7 +190,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
 
         width = int(width)
 
-        assert 1 <= width <= self._width
+        assert (
+            1 <= width <= self._width
+        ), f"invalid subvector width {width} for vector of width {self._width}"
 
         return BitVector[width](self._value[0:width])
 
@@ -197,7 +202,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
             return self._value[-1]
 
         if (width is not None) and (rest is not None):
-            assert width + rest == self._width
+            assert (
+                width + rest == self._width
+            ), f"width + rest does not equal the vectors width ({width}+{rest} != {self._width})"
 
         if rest is not None:
             width = self._width - rest
@@ -206,7 +213,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
 
         width = int(width)
 
-        assert 1 <= width <= self._width
+        assert (
+            1 <= width <= self._width
+        ), f"invalid subvector width {width} for vector of width {self._width}"
 
         return BitVector[width](self._value[self._width - width :])
 
@@ -328,7 +337,7 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
         if isinstance(other, str):
             other = BitVector[len(other)](other)
 
-        assert self.width == other.width
+        assert self.width == other.width, "cannot compare bitvectors of different width"
 
         for a, b in zip(self._value, other._value):
             if bool(a) != bool(b):
@@ -397,10 +406,10 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
     def __getitem__(self, key: int | Integer | slice) -> BitVector | Bit:
         if isinstance(key, (int, Integer)):
             key = Integer.decay(key)
-            assert 0 <= key < self.width
+            assert 0 <= key < self.width, "index exceeds vector width"
             return self._value[key]
         elif isinstance(key, slice):
-            assert key.step is None
+            assert key.step is None, "step parameter cannot be used"
             start = Integer.decay(key.start)
             stop = Integer.decay(key.stop)
 
@@ -419,7 +428,7 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
             assert isinstance(value, (Bit, BitState))
             self._value[int(key)].assign(value)
         else:
-            assert key.step is None
+            assert key.step is None, "step parameter cannot be used"
             start = int(key.start)
             stop = int(key.stop)
 

@@ -91,10 +91,14 @@ class Serialized(Template[_SerializedTemplateArgs], AssignableType):
 
     def _assign_(self, source, mode: AssignMode) -> None:
         if isinstance(source, Serialized):
-            assert self._elemtype_ is source._elemtype_
+            assert (
+                self._elemtype_ is source._elemtype_
+            ), "elem type of source does not match elem type of target"
             self._raw._assign_(source._raw, mode)
         else:
-            assert self._elemtype_ is base_type(source)
+            assert self._elemtype_ is base_type(
+                source
+            ), "source type does not match elem type of target"
             self._raw._assign_(to_bits(source), mode)
 
     def __init__(self, raw=None, _qualifier_=Value, _use_as_raw=False):
@@ -110,12 +114,16 @@ class Serialized(Template[_SerializedTemplateArgs], AssignableType):
             self._raw = raw.bitvector
         else:
             if isinstance(raw, Serialized):
-                assert elem_type is raw._elemtype_
+                assert (
+                    elem_type is raw._elemtype_
+                ), "elem type of source does not match elem type of target"
                 self._raw = _qualifier_[elem_type](raw._raw)
             elif raw is Null or raw is Full:
                 self._raw = _qualifier_[BitVector[bit_count]](BitVector[bit_count](raw))
             else:
-                assert base_type(raw) is elem_type
+                assert (
+                    base_type(raw) is elem_type
+                ), "source type does not match elem type of target"
                 self._raw = to_bits(raw)
 
     def value(self, qualifier=Value):
@@ -219,7 +227,9 @@ class Array(Template[_ArrayArgs], AssignableType):
             for index, val in source.items():
                 self[index]._assign_(val, mode)
         else:
-            assert source is Null or source is Full
+            assert (
+                source is Null or source is Full
+            ), "invalid argument type for array assignment"
 
             for index in range(self._count_):
                 self[index]._assign_(source, mode)
@@ -374,9 +384,9 @@ def max_int(arg: int | Unsigned):
 
 @_intrinsic
 def int_log_2(inp: int) -> int:
-    assert isinstance(inp, int)
-    assert inp > 0
-    assert inp.bit_count() == 1
+    assert isinstance(inp, int), "argument must be an integer"
+    assert inp > 0, "argument must be larger than 1"
+    assert inp.bit_count() == 1, "argument must be a power of 2"
     return inp.bit_length() - 1
 
 
@@ -700,7 +710,7 @@ class ToggleSignal:
                 @concurrent_context
                 def logic():
                     sum = Value[CounterType](cnt_first) + Value[CounterType](cnt_second)
-                    assert sum != 0
+                    assert sum != 0, "counter end was set to 0"
 
                     # cast cnt_first and cnt_second to CounterType
                     # to avoid unsigned overflow

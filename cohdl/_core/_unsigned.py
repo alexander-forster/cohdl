@@ -37,7 +37,7 @@ class Unsigned(BitVector):
         if max is None:
             max = value
 
-        assert 0 <= value <= max
+        assert 0 <= value <= max, f"value {value} outside allowed range ({0}-{max})"
 
         width = len(bin(max)) - 2
 
@@ -56,7 +56,9 @@ class Unsigned(BitVector):
             val = int(val)
 
         if isinstance(val, int):
-            assert 0 <= val < 2**self.width
+            assert (
+                0 <= val < 2**self.width
+            ), f"value {val} outside allowed range ({0}-{2**self.width-1})"
             val = Unsigned._uint_to_binary(self.width, val)
 
         super().__init__(val)
@@ -102,7 +104,9 @@ class Unsigned(BitVector):
                 lambda bit, char: bit._assign(char), binary.iter_extend("0")
             )
         elif isinstance(other, Unsigned):
-            assert other.width <= self.width
+            assert (
+                other.width <= self.width
+            ), f"target width {self.width} is less than source width {other.width}"
 
             self._value.apply_zip(
                 lambda bit, other_bit: bit._assign(other_bit),
@@ -141,11 +145,13 @@ class Unsigned(BitVector):
                 # adding integer, that cannot be represented
                 # without explicit specification of target_width
                 # is probably an error
-                assert rhs.width <= self.width
+                assert (
+                    rhs.width <= self.width
+                ), "added integer is not in the representable target range"
                 target_width = self.width
         else:
-            assert self.order == rhs.order
-            assert isinstance(rhs, Unsigned)
+            assert self.order == rhs.order, "bitorder missmatch"
+            assert isinstance(rhs, Unsigned), "expected unsigned argument"
 
             if target_width is None:
                 target_width = max(self.width, rhs.width)
@@ -177,18 +183,6 @@ class Unsigned(BitVector):
         if isinstance(rhs, int):
             rhs = -(rhs % 2**self.width)
 
-            """assert 0 <= rhs < 2**self.width
-
-            if rhs <= 0:
-                rhs = Unsigned.from_int(abs(rhs), order=self._order)
-            else:
-                rhs = ~Unsigned[self.width](rhs - 1)
-
-            if target_width is None:
-                # subtracting integer, that cannot be represented
-                # without explicit specification of target_width
-                # is probably an error
-                assert rhs.width <= self.width"""
         else:
             rhs = -rhs
 
@@ -290,7 +284,7 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __lt__(self, rhs: Unsigned | int | Integer) -> bool:
-        assert isinstance(rhs, (Unsigned, int, Integer))
+        assert isinstance(rhs, (Unsigned, int, Integer)), f"invalid argument '{rhs}'"
         if isinstance(rhs, Unsigned):
             rhs = rhs.to_int()
 
@@ -301,7 +295,7 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __gt__(self, rhs: Unsigned | int | Integer) -> bool:
-        assert isinstance(rhs, (Unsigned, int, Integer))
+        assert isinstance(rhs, (Unsigned, int, Integer)), f"invalid argument '{rhs}'"
         if isinstance(rhs, Unsigned):
             rhs = rhs.to_int()
 
@@ -312,7 +306,7 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __le__(self, rhs: Unsigned | int | Integer) -> bool:
-        assert isinstance(rhs, (Unsigned, int, Integer))
+        assert isinstance(rhs, (Unsigned, int, Integer)), f"invalid argument '{rhs}'"
         if isinstance(rhs, Unsigned):
             rhs = rhs.to_int()
 
@@ -323,7 +317,7 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __ge__(self, rhs: Unsigned | int | Integer) -> bool:
-        assert isinstance(rhs, (Unsigned, int, Integer))
+        assert isinstance(rhs, (Unsigned, int, Integer)), f"invalid argument '{rhs}'"
         if isinstance(rhs, Unsigned):
             rhs = rhs.to_int()
 
@@ -337,7 +331,9 @@ class Unsigned(BitVector):
         if target_width is None:
             target_width = self.width + zeros
 
-        assert self.width + zeros <= target_width
+        assert (
+            self.width + zeros <= target_width
+        ), f"width of zero extended value ({self.width}+{zeros}) exceeds target width ({target_width})"
         val = self.to_int() * 2**zeros
         return Unsigned[target_width](val)
 

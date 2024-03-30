@@ -212,7 +212,9 @@ class Entity(Block):
             if not info.extern and info.instantiated is None:
                 # call architecture to collect contained
                 # subinstances and synthesizable contexts
-                assert info.architecture is not None
+                assert (
+                    info.architecture is not None
+                ), f"entity type {type(self)} has no architecture method"
 
                 # enter block is required, to collect contained
                 # subblocks or contexts

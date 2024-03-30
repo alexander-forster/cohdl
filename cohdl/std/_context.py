@@ -330,7 +330,7 @@ def block(fn: Callable | None = None, /, comment=None, attributes: dict | None =
         attributes = {}
 
     if comment is None:
-        assert "comment" not in attributes
+        assert "comment" not in attributes, "comment attribute already set"
         attributes["comment"] = comment
 
     if fn is None:
@@ -378,7 +378,7 @@ def concurrent(
         attributes = {}
 
     if comment is not None:
-        assert "comment" not in attributes
+        assert "comment" not in attributes, "comment attribute already set"
         attributes["comment"] = comment
 
     if fn is None:
@@ -450,7 +450,7 @@ def _sequential_impl(
         attributes = {}
 
     if comment is not None:
-        assert "comment" not in attributes
+        assert "comment" not in attributes, "comment attribute already set"
         attributes["comment"] = comment
 
     if step_cond is None:
@@ -825,7 +825,7 @@ class SequentialContext:
 
         def convert_executors(executors: list[Executor], mode: ExecutorMode):
             for executor in executors:
-                assert executor._mode is mode
+                assert executor._mode is mode, "internal error: executor mode mismatch"
 
                 cohdl.coroutine_step(executor.executor_statemachine())
                 executor._start @= False
@@ -913,7 +913,9 @@ class Executor:
                     self in current_data.executors_before
                 ), "all used executors with mode {ExecutorMode.immediate_before} must be specified in the std.SequentialContext decorator of the enclosing function"
             else:
-                assert self._mode is ExecutorMode.immediate_after
+                assert (
+                    self._mode is ExecutorMode.immediate_after
+                ), f"invalid executor mode {self._mode}"
                 if self not in current_data.executors_after:
                     current_data.executors_after.append(self)
 
@@ -954,7 +956,9 @@ class Executor:
             self._start = Variable[Bit](False, name="executor_start")
             self._process_ready = Variable[Bit](False, name="executor_process_ready")
         else:
-            assert mode is ExecutorMode.parallel_process
+            assert (
+                mode is ExecutorMode.parallel_process
+            ), "mode must be `parallel_process` because `ctx` was specified"
 
             self._start = Signal[Bit](False, name="executor_start")
             self._process_ready = Signal[Bit](False, name="executor_process_ready")

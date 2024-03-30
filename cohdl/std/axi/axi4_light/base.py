@@ -137,7 +137,9 @@ class Axi4Light:
 
     async def read_word(self, addr, prot=cohdl.Null):
         if self.rdaddr.arprot is None:
-            assert prot is cohdl.Null
+            assert (
+                prot is cohdl.Null
+            ), "arprot not provided, interface does not support `prot` argument"
         else:
             self.rdaddr.arprot <<= prot
 
@@ -156,7 +158,9 @@ class Axi4Light:
 
     async def write_word(self, addr, data, strb=cohdl.Full, prot=cohdl.Null):
         if self.wraddr.awprot is None:
-            assert prot is cohdl.Null
+            assert (
+                prot is cohdl.Null
+            ), "awprot not provided, interface does not support `prot` argument"
         else:
             self.wraddr.awprot <<= prot
 
@@ -325,14 +329,19 @@ class Axi4Light:
         from cohdl.std.reg import RegisterTools
         from cohdl.std._core_utility import as_awaitable
 
-        assert isinstance(root, RegisterTools.AddrMap)
-        assert root._word_width_() == 32
-        assert root._register_tools_._addr_unit_width_ == 8
+        assert isinstance(root, RegisterTools.AddrMap), "root is not a AddrMap"
+        assert root._word_width_() == 32, "word width of root object must be 32"
+        assert (
+            root._register_tools_._addr_unit_width_ == 8
+        ), "unit width of root object must be 8"
 
         ctx = SequentialContext(self.clk, self.reset)
         root._implement_synthesizable_contexts_(ctx)
 
         regs = root._flatten_()
+
+        readable_regs = [reg for reg in regs if reg._readable_]
+        writable_regs = [reg for reg in regs if reg._writable_]
 
         @ctx
         async def proc_read():
@@ -341,7 +350,7 @@ class Axi4Light:
 
                 result = cohdl.Variable[cohdl.BitVector[32]](cohdl.Null)
 
-                for reg in regs:
+                for reg in readable_regs:
                     if (
                         reg._global_offset_
                         <= request.addr.unsigned
@@ -361,7 +370,7 @@ class Axi4Light:
                 request = await self.await_write_request()
                 mask = cohdl.Variable(stretch(request.strb, 8))
 
-                for reg in regs:
+                for reg in writable_regs:
                     if (
                         reg._global_offset_
                         <= request.addr.unsigned

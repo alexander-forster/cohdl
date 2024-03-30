@@ -59,6 +59,7 @@ class BitState(enum.Enum):
             return "-"
 
     @staticmethod
+    @_intrinsic
     def from_str(char: str) -> BitState:
         if char == "0":
             return BitState.LOW
@@ -71,9 +72,10 @@ class BitState(enum.Enum):
         elif char == "-":
             return BitState.DONT_CARE
 
-        assert False
+        raise AssertionError(f"cannot construct BitState from string '{char}'")
 
     @staticmethod
+    @_intrinsic
     def construct(
         arg: BitState | Bit | str | int | bool | _NullFullType | None,
     ) -> BitState:
@@ -98,7 +100,7 @@ class BitState(enum.Enum):
         elif isinstance(arg, (bool, _Boolean)):
             return BitState.HIGH if arg else BitState.LOW
         elif isinstance(arg, int):
-            assert arg == 0 or arg == 1
+            assert arg == 0 or arg == 1, f"cannot construct BitState from {arg}"
             return BitState.HIGH if arg else BitState.LOW
         elif isinstance(arg, str):
             return BitState.from_str(arg)
@@ -124,13 +126,9 @@ class Bit(_PrimitiveType, metaclass=_MetaBit):
     @_intrinsic
     def __init__(
         self,
-        value: Bit
-        | None
-        | BitState
-        | str
-        | int
-        | bool
-        | _NullFullType = BitState.UNINITIALZED,
+        value: (
+            Bit | None | BitState | str | int | bool | _NullFullType
+        ) = BitState.UNINITIALZED,
     ):
         self._val = BitState.construct(value)
 
@@ -144,7 +142,7 @@ class Bit(_PrimitiveType, metaclass=_MetaBit):
 
     @_intrinsic
     def _assign(self, other: BitState | Bit | str | int | bool | _NullFullType):
-        assert other is not None
+        assert other is not None, "cannot assign None to Bit"
         self._val = BitState.construct(other)
 
     @property

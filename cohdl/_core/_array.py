@@ -92,7 +92,9 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
     @_intrinsic
     def _assign(self, value):
         assert isinstance(value, Array)
-        assert value._count_ == self._count_
+        assert (
+            value._count_ == self._count_
+        ), f"width of source array does not match width of target ({value._count_} != {self._count_})"
 
         self_val = self._elemtype_()
 

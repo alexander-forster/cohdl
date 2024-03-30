@@ -194,12 +194,14 @@ class _Nonlocal:
 
     @_intrinsic
     def __call__(self, *args, **kwargs):
-        assert self._qualified_type is not None
+        assert (
+            self._qualified_type is not None
+        ), "type of Nonlocal must be set using Nonlocal[TARGET_TYPE]"
         return self._qualified_type(*args, **kwargs)
 
     @_intrinsic
     def __getitem__(self, arg):
-        assert self._qualified_type is None
+        assert self._qualified_type is None, "type of Nonlocal already set"
         assert issubclass(
             arg, (Signal, Variable)
         ), "std.Nonlocal should only be used to create Signals or Variables"
@@ -402,36 +404,17 @@ cond = _Cond()
 #
 
 
-class _CountBits:
-    @_intrinsic
-    def __init__(self, arg_type):
-        self._arg_type = arg_type
+@_intrinsic
+def count_bits(inp):
+    if not isinstance(inp, type):
+        inp = type(inp)
 
-    @_intrinsic
-    def __getitem__(self, arg_type):
-        return _CountBits(arg_type)
-
-    @_intrinsic
-    def __call__(self, check_val=None):
-        if self._arg_type is not None:
-            assert check_val is None
-            inp = self._arg_type
-        else:
-            assert check_val is not None
-            inp = check_val
-
-        if not isinstance(inp, type):
-            inp = type(inp)
-
-        if subclass_check(inp, Bit):
-            return 1
-        elif subclass_check(inp, BitVector):
-            return inp.width
-        else:
-            return inp._count_bits_()
-
-
-count_bits = _CountBits(None)
+    if subclass_check(inp, Bit):
+        return 1
+    elif subclass_check(inp, BitVector):
+        return inp.width
+    else:
+        return inp._count_bits_()
 
 
 def to_bits(inp, /):
@@ -466,10 +449,12 @@ class _FromBits:
         bv = bits.bitvector
 
         if issubclass(self._target_type, Bit):
-            assert bv.width == 1
+            assert bv.width == 1, "cannot deserialize BitVector to Bit, width is not 1"
             return qualifier[Bit](bv[0])
         elif issubclass(self._target_type, BitVector):
-            assert bv.width == self._target_type.width
+            assert (
+                bv.width == self._target_type.width
+            ), "cannot deserialize BitVector to BitVector, width does not match"
             return qualifier[self._target_type](bv)
         else:
             assert (
@@ -647,7 +632,7 @@ def rightpad(inp: BitVector, result_width: int, fill=None):
 
 
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
-    assert old.width == new.width
+    assert old.width == new.width, "old.width does not match new.width"
     return (old.bitvector & ~mask) | (new.bitvector & mask)
 
 
