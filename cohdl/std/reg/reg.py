@@ -1039,7 +1039,7 @@ class Register(GenericRegister):
 
         for name, default_val in kwargs:
             member = getattr(self, name)
-            assert isinstance(member, MemField)
+            assert isinstance(member, (MemField, MemUField, MemSField))
             member._set_default_(default_val)
 
     # from members
@@ -1144,13 +1144,13 @@ class Register(GenericRegister):
             # check that self contains no memory
             assert not any(
                 [
-                    isinstance(field, (MemField, FlagField))
+                    isinstance(field, (MemField, MemUField, MemSField, FlagField))
                     for field in self._fields_.values()
                 ]
             )
         else:
             for name, field in self._fields_.items():
-                if isinstance(field, MemField):
+                if isinstance(field, (MemField, MemUField, MemSField)):
                     field <<= getattr(result, name)
                 elif isinstance(field, FlagField):
                     if getattr(result, name).is_set():

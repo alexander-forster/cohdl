@@ -1,2 +1,2 @@
 from .base import Axi4Light, Channel
-from . import memory, interconnect
+from . import interconnect

@@ -325,20 +325,20 @@ class Axi4Light:
 
         return byte_3 @ byte_2 @ byte_1 @ byte_0
 
-    def connect_root_device(self, root):
+    def connect_addr_map(self, addr_map):
         from cohdl.std.reg import RegisterTools
         from cohdl.std._core_utility import as_awaitable
 
-        assert isinstance(root, RegisterTools.AddrMap), "root is not a AddrMap"
-        assert root._word_width_() == 32, "word width of root object must be 32"
+        assert isinstance(addr_map, RegisterTools.AddrMap), "addr_map is not a AddrMap"
+        assert addr_map._word_width_() == 32, "word width of addr_map object must be 32"
         assert (
-            root._register_tools_._addr_unit_width_ == 8
-        ), "unit width of root object must be 8"
+            addr_map._register_tools_._addr_unit_width_ == 8
+        ), "unit width of addr_map object must be 8"
 
         ctx = SequentialContext(self.clk, self.reset)
-        root._implement_synthesizable_contexts_(ctx)
+        addr_map._implement_synthesizable_contexts_(ctx)
 
-        regs = root._flatten_()
+        regs = addr_map._flatten_()
 
         readable_regs = [reg for reg in regs if reg._readable_]
         writable_regs = [reg for reg in regs if reg._writable_]

@@ -31,7 +31,9 @@ class ExamplePush(reg32.Register):
 
 
 class ExampleFlag(reg32.Register):
-    data: reg32.MemField[15:0, Null]
+    data_a: reg32.MemField[7:0, Null]
+    data_b: reg32.MemUField[11:8, Null]
+    data_c: reg32.MemSField[15:12, Null]
     rd_cnt: reg32.UField[23:16, Null]
 
     rd_notification: reg32.FlagOnNotify.Read
@@ -164,7 +166,7 @@ class test_axilite_reg_07(cohdl.Entity):
             ),
         )
 
-        axi_con.connect_root_device(MyRoot())
+        axi_con.connect_addr_map(MyRoot())
 
 
 import unittest

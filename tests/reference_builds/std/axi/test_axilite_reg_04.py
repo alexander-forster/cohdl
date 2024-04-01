@@ -118,7 +118,7 @@ class test_axilite_reg_04(cohdl.Entity):
             ),
         )
 
-        axi_con.connect_root_device(
+        axi_con.connect_addr_map(
             MyRoot(
                 wr_addr_low=self.wr_addr_low,
                 wr_data_low=self.wr_data_low,

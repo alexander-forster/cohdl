@@ -212,7 +212,7 @@ class test_axilite_reg_10(cohdl.Entity):
             ),
         )
 
-        axi_con.connect_root_device(MyRoot())
+        axi_con.connect_addr_map(MyRoot())
 
 
 import unittest
