@@ -14,6 +14,7 @@ from cohdl import (
     Bit,
     Temporary,
     expr_fn,
+    always,
 )
 from cohdl import std
 from cohdl._core import AssignMode, Array, true
@@ -1432,6 +1433,7 @@ class AddrRange(RegisterObject):
             return await std.as_awaitable(
                 self._on_read_relative_, addr - self._global_offset_
             )
+
         else:
             return Null
 
@@ -1443,7 +1445,10 @@ class AddrRange(RegisterObject):
             return await std.as_awaitable(self._on_write_, addr, data, mask)
         elif hasattr(self, "_on_write_relative_"):
             return await std.as_awaitable(
-                self._on_write_relative_, addr - self._global_offset_, data, mask
+                self._on_write_relative_,
+                addr - self._global_offset_,
+                data,
+                mask,
             )
 
 
@@ -1465,6 +1470,7 @@ class Memory(AddrRange):
         noreset=False,
         mask_mode: MaskMode = None,
         allow_unaligned=False,
+        inline=False,
     ):
         if mask_mode is None:
             mask_mode = Memory.MaskMode.IMMEDIATE
@@ -1475,6 +1481,7 @@ class Memory(AddrRange):
             ), f"unaligned access is currently only supported for MaskMode.SPLIT_WORDS"
 
         self._register_tools_: RegisterTools
+        self._inline = inline
 
         word_width = type(self)._word_width_()
         word_cnt = type(self)._word_count_
@@ -1510,10 +1517,15 @@ class Memory(AddrRange):
         else:
             self._mem = Qualifier[std.Array[BitVector[word_width], word_cnt]](initial)
 
-    async def _on_read_relative_(self, addr):
+    async def _cohdlstd_impl_read(self, addr):
         waddr = self._register_tools_._as_word_addr_(addr)
         if self._mask_mode is self.MaskMode.SPLIT_WORDS:
+            stride_cnt = int_log_2(self._word_stride)
+            stride_bits = addr.lsb(stride_cnt).unsigned
+
             if not self._allow_unaligned:
+                assert stride_bits == 0, "stride error"
+
                 return concat(
                     *[
                         self._mem_list[unit_nr][waddr]
@@ -1521,10 +1533,6 @@ class Memory(AddrRange):
                     ][::-1]
                 )
             else:
-                stride_cnt = int_log_2(self._word_stride)
-                stride_bits = addr.lsb(stride_cnt).unsigned
-
-                assert stride_bits == 0, "stride error"
 
                 rddata = [
                     self._mem_list[off][
@@ -1544,21 +1552,21 @@ class Memory(AddrRange):
         else:
             return self._mem[waddr]
 
-    async def _on_write_relative_(self, addr, data, mask):
-        waddr = Variable(self._register_tools_._as_word_addr_(addr))
+    async def _cohdlstd_impl_write(self, addr, data, mask):
+        waddr = Variable(self._register_tools_._as_word_addr_(self._wr_addr))
 
         if self._mask_mode is self.MaskMode.IGNORE:
-            self._mem[waddr] <<= data
+            self._mem[waddr] <<= self._wr_data
         elif self._mask_mode is self.MaskMode.IMMEDIATE:
-            self._mem[waddr] <<= mask.apply(self._mem[waddr], data)
+            self._mem[waddr] <<= std.apply_mask(
+                self._mem[waddr], self._wr_data, self._wr_mask
+            )
         elif self._mask_mode is self.MaskMode.READBACK:
             prev_val = Signal(self._mem[waddr])
             await true
-            self._mem[waddr] <<= mask.apply(prev_val, data)
+            self._mem[waddr] <<= std.apply_mask(prev_val, self._wr_data, self._wr_mask)
         elif self._mask_mode is self.MaskMode.SPLIT_WORDS:
-            unit_mask = mask.apply(
-                zeros(self._word_width_()), ones(self._word_width_())
-            )
+            unit_mask = self._wr_mask
 
             if not self._allow_unaligned:
                 for unit_nr in range(self._word_stride):
@@ -1566,10 +1574,12 @@ class Memory(AddrRange):
                     left_bit = right_bit + self._unit_width - 1
 
                     if unit_mask[unit_nr * self._unit_width]:
-                        self._mem_list[unit_nr][waddr] <<= data[left_bit:right_bit]
+                        self._mem_list[unit_nr][waddr] <<= self._wr_data[
+                            left_bit:right_bit
+                        ]
             else:
                 stride_cnt = int_log_2(self._word_stride)
-                stride_bits = addr.lsb(stride_cnt).unsigned
+                stride_bits = self._wr_addr.lsb(stride_cnt).unsigned
 
                 addr_list = [
                     Variable[base_type(waddr)]() for _ in range(self._word_stride)
@@ -1594,7 +1604,7 @@ class Memory(AddrRange):
 
                             msb = lsb + self._unit_width - 1
 
-                            data_list[unit_nr] @= data[msb:lsb]
+                            data_list[unit_nr] @= self._wr_data[msb:lsb]
                             mask_list[unit_nr] @= unit_mask[lsb]
 
                 for unit_nr in range(self._word_stride):
@@ -1602,6 +1612,62 @@ class Memory(AddrRange):
                         self._mem_list[unit_nr][addr_list[unit_nr]] <<= data_list[
                             unit_nr
                         ]
+
+    def _impl_(self, ctx: SequentialContext):
+        if not self._inline:
+            self._rd_enable = Signal[Bit](False)
+            self._rd_addr = Signal[Unsigned.upto(self._unit_count_())]()
+            self._rd_data = Signal[Unsigned[self._word_width_()]]()
+
+            self._wr_enable = Signal[Bit](False)
+            self._wr_addr = Signal[Unsigned.upto(self._unit_count_())]()
+            self._wr_data = Signal[Unsigned[self._word_width_()]]()
+
+            if self._mask_mode is not self.MaskMode.IGNORE:
+                self._wr_mask = Signal[BitVector[self._word_width_()]]()
+            else:
+                self._wr_mask = None
+
+            @ctx
+            async def impl_read_memory():
+                if self._rd_enable:
+                    self._rd_data <<= await self._cohdlstd_impl_read(self._rd_addr)
+
+            @ctx
+            async def impl_write_memory():
+                if self._mask_mode is self.MaskMode.READBACK:
+                    while True:
+                        if self._wr_enable:
+                            await self._cohdlstd_impl_write(
+                                self._wr_addr, self._wr_data, std.Mask(self._wr_mask)
+                            )
+                            continue
+                else:
+                    if self._wr_enable:
+                        await self._cohdlstd_impl_write(
+                            self._wr_addr, self._wr_data, std.Mask(self._wr_mask)
+                        )
+
+    async def _on_read_relative_(self, addr):
+        if self._inline:
+            return await self._cohdlstd_impl_read(addr)
+        else:
+            self._rd_addr <<= addr.lsb(self._rd_addr.width)
+            self._rd_enable ^= True
+            await true
+            await true
+            return self._rd_data
+
+    async def _on_write_relative_(self, addr, data, mask):
+        if self._inline:
+            await self._cohdlstd_impl_write(addr, data, mask)
+        else:
+            if self._mask_mode is not self.MaskMode.IGNORE:
+                self._wr_mask <<= mask.as_vector(self._word_width_())
+
+            self._wr_addr <<= addr.lsb(self._wr_addr.width)
+            self._wr_data <<= data
+            self._wr_enable ^= True
 
     @_intrinsic
     def _find_lsb_of_unaligned_split(self, addr_offset, unit_nr):
@@ -1615,10 +1681,9 @@ class RoMemory(Memory):
     def __init_subclass__(cls, word_count=_None):
         return super().__init_subclass__(word_count, readonly=True, writeonly=False)
 
-    def _config_(self, initial, mask_mode=None):
-
+    def _config_(self, initial, mask_mode=None, inline=False):
         return super()._cohdlstd_wrappedconfig(
-            initial, noreset=True, mask_mode=mask_mode
+            initial, noreset=True, mask_mode=mask_mode, inline=inline
         )
 
 

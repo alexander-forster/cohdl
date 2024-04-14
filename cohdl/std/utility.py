@@ -17,6 +17,8 @@ from cohdl._core import (
     concurrent_context,
     expr_fn,
     AssignMode,
+    always,
+    is_primitive_type,
 )
 
 from cohdl._core import Array as CohdlArray
@@ -35,15 +37,16 @@ from ._core_utility import (
     base_type,
     is_qualified,
     instance_check,
+    as_pyeval,
 )
-from ._template import Template
+from ._template import Template, template_arg
 from ._assignable_type import AssignableType
 
 from cohdl._core._intrinsic import _intrinsic
 
 
-from ._context import Duration, SequentialContext, concurrent
-from ._prefix import prefix, name
+from ._context import Duration, SequentialContext, concurrent, at_end_of_context
+from ._prefix import prefix, name, NamedQualifier
 
 
 # a singleton only used internally in the std module
@@ -234,13 +237,13 @@ class Array(Template[_ArrayArgs], AssignableType):
             for index in range(self._count_):
                 self[index]._assign_(source, mode)
 
-    def __init__(self, val=None, _qualifier_=Signal):
+    def __init__(self, val=None, *, name=None, _qualifier_=Signal):
         elem_width = count_bits(self._elemtype_)
 
         if val is None or val is Null or val is Full:
             self._content = _qualifier_[
                 CohdlArray[BitVector[elem_width], self._count_]
-            ](val)
+            ](val, name=name)
         else:
             assert isinstance(
                 val, (list, tuple)
@@ -268,7 +271,7 @@ class Array(Template[_ArrayArgs], AssignableType):
 
             self._content = _qualifier_[
                 CohdlArray[BitVector[elem_width], self._count_]
-            ](default_as_bitvector)
+            ](default_as_bitvector, name=name)
 
     @_intrinsic
     def __len__(self):
@@ -296,30 +299,31 @@ def stringify(*args):
 
 class DelayLine:
     def __init__(self, inp, delay: int, initial=_None, ctx: None = None):
-        with prefix("delayline"):
-            if initial is _None:
-                self._steps = [
-                    inp,
-                    *[Nonlocal[Signal[base_type(inp)]]() for _ in range(delay)],
-                ]
-            else:
-                self._steps = [
-                    inp,
-                    *[Nonlocal[Signal[base_type(inp)]](initial) for _ in range(delay)],
-                ]
+        qualifier = NamedQualifier[Nonlocal[Signal], "delayline"][base_type(inp)]
 
-            def delay_impl():
-                for src, target in zip(self._steps, self._steps[1:]):
-                    target <<= src
+        if initial is _None:
+            self._steps = [
+                inp,
+                *[qualifier() for _ in range(delay)],
+            ]
+        else:
+            self._steps = [
+                inp,
+                *[qualifier(initial) for _ in range(delay)],
+            ]
 
-            if ctx is not None:
+        def delay_impl():
+            for src, target in zip(self._steps, self._steps[1:]):
+                target <<= src
 
-                @ctx
-                def process_delay():
-                    delay_impl()
+        if ctx is not None:
 
-            else:
+            @ctx
+            def process_delay():
                 delay_impl()
+
+        else:
+            delay_impl()
 
     def __getitem__(self, delay: int):
         return self._steps[delay]
@@ -385,9 +389,19 @@ def max_int(arg: int | Unsigned):
 @_intrinsic
 def int_log_2(inp: int) -> int:
     assert isinstance(inp, int), "argument must be an integer"
-    assert inp > 0, "argument must be larger than 1"
+    assert inp > 0, "argument must be larger than 0"
     assert inp.bit_count() == 1, "argument must be a power of 2"
     return inp.bit_length() - 1
+
+
+@_intrinsic
+def ceil_log_2(inp: int) -> int:
+    assert isinstance(inp, int), "argument must be an integer"
+    assert inp > 0, "argument must be larger than 0"
+
+    if inp.bit_count() == 1:
+        return inp.bit_length() - 1
+    return inp.bit_length()
 
 
 @_intrinsic
@@ -860,29 +874,163 @@ _prefix_name = name
 
 
 class SyncFlag:
-    def __init__(self, *, name="sync_flag"):
-        with prefix(name):
-            self._tx = Signal[Bit](False, name=_prefix_name("tx"))
-            self._rx = Signal[Bit](False, name=_prefix_name("rx"))
+    @_intrinsic
+    def _cmp_rx(self):
+        if self._rx_delay == 0:
+            return self._rx
+
+        ctx = SequentialContext.current()
+
+        if ctx is None or ctx is self._tx_ctx:
+            return self._rx
+
+        if ctx is self._rx_ctx:
+            return self._set_rx
+
+        if ctx is self._rx_indirect_owner:
+            return self._rx_indirect
+
+        at_end_of_context(self._impl_rx_indirect)
+        self._rx_indirect = Signal[Bit](name=self._rx_indirect_name)
+        self._rx_indirect_owner = ctx
+        return self._rx_indirect
+
+    @_intrinsic
+    def _cmp_tx(self):
+        if self._tx_delay == 0:
+            return self._tx
+
+        ctx = SequentialContext.current()
+
+        if ctx is None or ctx is self._rx_ctx:
+            return self._tx
+
+        if ctx is self._tx_ctx:
+            return self._set_tx
+
+        if ctx is self._tx_indirect_owner:
+            return self._tx_indirect
+
+        at_end_of_context(self._impl_tx_indirect)
+        self._tx_indirect = Signal[Bit](name=self._tx_indirect_name)
+        self._tx_indirect_owner = ctx
+        return self._tx_indirect
+
+    async def _impl_rx_indirect(self):
+        ctx = SequentialContext.current()
+
+        with always:
+            if ctx is self._rx_ctx:
+                self._rx_indirect <<= self._set_rx
+            else:
+                self._rx_indirect <<= self._rx
+
+    async def _impl_tx_indirect(self):
+        ctx = SequentialContext.current()
+
+        with always:
+            if ctx is self._tx_ctx:
+                self._tx_indirect <<= self._set_tx
+            else:
+                self._tx_indirect <<= self._tx
+
+    async def _impl_tx_delayline(self):
+        # delay-1 because assignment to _tx adds one
+        self._tx <<= delayed(self._set_tx, self._tx_delay - 1, initial=Null)
+
+    async def _impl_rx_delayline(self):
+        # delay-1 because assignment to _rx adds one
+        self._rx <<= delayed(self._set_rx, self._rx_delay - 1, initial=Null)
+
+    def _impl_rx_delay(self):
+        # rx delay is implemented in tx_ctx
+
+        tx_ctx = SequentialContext.current()
+
+        if self._tx_ctx is None:
+            as_pyeval(setattr, self, "_tx_ctx", tx_ctx)
+
+            if self._rx_delay != 0:
+                assert (
+                    self._rx_ctx is not tx_ctx
+                ), "std.SyncFlag with delay cannot be set and cleared in the same context"
+                at_end_of_context(self._impl_rx_delayline)
+
+        else:
+            assert tx_ctx is self._tx_ctx, "std.SyncFlag set in more than one context"
+
+    def _impl_tx_delay(self):
+        # tx delay is implemented in rx_ctx
+
+        rx_ctx = SequentialContext.current()
+
+        if self._rx_ctx is None:
+            as_pyeval(setattr, self, "_rx_ctx", rx_ctx)
+
+            if self._tx_delay != 0:
+                assert (
+                    self._tx_ctx is not rx_ctx
+                ), "std.SyncFlag with delay cannot be set and cleared in the same context"
+                at_end_of_context(self._impl_tx_delayline)
+
+        else:
+            assert rx_ctx is self._rx_ctx, "std.SyncFlag set in more than one context"
+
+    def __init__(self, *, name="sync_flag", delay=None, tx_delay=None, rx_delay=None):
+        if delay is not None:
+            assert tx_delay is rx_delay is None
+            self._tx_delay = delay
+            self._rx_delay = delay
+        else:
+            self._tx_delay = tx_delay if tx_delay is not None else 0
+            self._rx_delay = rx_delay if rx_delay is not None else 0
+
+        with prefix(name) as p:
+            self._tx = Signal[Bit](False, name=p.name("tx"))
+
+            if self._tx_delay == 0:
+                self._set_tx = self._tx
+            else:
+                self._set_tx = Signal[Bit](False, name=p.name("set_tx"))
+
+            self._rx = Signal[Bit](False, name=p.name("rx"))
+
+            if self._rx_delay == 0:
+                self._set_rx = self._rx
+            else:
+                self._set_rx = Signal[Bit](False, name=p.name("set_rx"))
+
+            self._tx_ctx = None
+            self._rx_ctx = None
+
+            if self._rx_delay != 0 or self._tx_delay != 0:
+                self._tx_indirect_name = p.name("tx_indirect")
+                self._rx_indirect_name = p.name("rx_indirect")
+
+                self._rx_indirect_owner = None
+                self._tx_indirect_owner = None
+                self._rx_indirect = None
+                self._tx_indirect = None
 
     def set(self):
-        self._tx <<= ~self._rx
+        self._impl_rx_delay()
+        self._set_tx <<= ~self._rx
 
     def clear(self):
-        self._rx <<= self._tx
+        self._impl_tx_delay()
+        self._set_rx <<= self._tx
 
     @expr_fn
     def is_set(self):
-        return self._tx != self._rx
+        return self._cmp_tx() != self._cmp_rx()
 
     @expr_fn
     def is_clear(self):
-        return self._tx == self._rx
+        return self._cmp_tx() == self._cmp_rx()
 
     async def receive(self):
         await self.is_set()
-        self._rx <<= self._tx
-        return self._tx != self._rx
+        self.clear()
 
     async def __aenter__(self):
         await self.is_set()
@@ -891,10 +1039,16 @@ class SyncFlag:
         self.clear()
 
 
-class Mailbox:
-    def __init__(self, type, *args, **kwargs):
-        self._data = Signal[type](*args, **kwargs)
-        self._flag = SyncFlag()
+_MailboxType = template_arg.Type
+
+
+class Mailbox(Template[_MailboxType]):
+    _datatype: _MailboxType
+
+    def __init__(self, *, delay=None, tx_delay=None, rx_delay=None):
+        with prefix("mailbox"):
+            self._data = NamedQualifier[Signal, "data"][self._datatype]()
+            self._flag = SyncFlag(delay=delay, tx_delay=tx_delay, rx_delay=rx_delay)
 
     def send(self, data):
         self._data <<= data
@@ -954,20 +1108,19 @@ class Fifo(Template[_FifoArgs]):
     def __init__(self, name="fifo"):
         count = self._count_
 
-        with prefix(name):
-            with prefix("mem"):
-                self._mem = Signal[Array[self._elemtype_, count]]()
+        with prefix(name) as p:
+            self._mem = Signal[Array[self._elemtype_, count]](name=p.name("mem"))
             self._max_index = count - 1
 
             self._write_index = Signal[Unsigned.upto(self._max_index)](
-                0, name=_prefix_name("wr_index")
+                0, name=p.name("wr_index")
             )
             self._read_index = Signal[Unsigned.upto(self._max_index)](
-                0, name=_prefix_name("rd_index")
+                0, name=p.name("rd_index")
             )
 
-            self._empty = Signal[Bit](name=_prefix_name("empty"))
-            self._full = Signal[Bit](name=_prefix_name("full"))
+            self._empty = Signal[Bit](name=p.name("empty"))
+            self._full = Signal[Bit](name=p.name("full"))
 
         @concurrent
         def logic():
@@ -992,54 +1145,3 @@ class Fifo(Template[_FifoArgs]):
 
     def full(self):
         return self._full
-
-
-if False:
-
-    class Fifo:
-        def _next_index(self, index):
-            if is_pow_two(self._max_index + 1):
-                return index + 1
-            else:
-                return index + 1 if index != self._max_index else 0
-
-        def __init__(self, elem_width: int, depth: int, name="fifo"):
-            with prefix(name):
-                self._mem = Signal[CohdlArray[BitVector[elem_width], depth]](
-                    name=_prefix_name("mem")
-                )
-                self._max_index = depth - 1
-
-                self._write_index = Signal[Unsigned.upto(self._max_index)](
-                    0, name=_prefix_name("wr_index")
-                )
-                self._read_index = Signal[Unsigned.upto(self._max_index)](
-                    0, name=_prefix_name("rd_index")
-                )
-
-                self._empty = Signal[Bit](name=_prefix_name("empty"))
-                self._full = Signal[Bit](name=_prefix_name("full"))
-
-            @concurrent
-            def logic():
-                self._empty <<= self._write_index == self._read_index
-                self._full <<= self._next_index(self._write_index) == self._read_index
-
-        def push(self, data: BitVector):
-            assert not self._full, "writing to full fifo"
-            self._mem[self._write_index] <<= data
-            self._write_index <<= self._next_index(self._write_index)
-
-        def pop(self) -> BitVector:
-            assert not self._empty, "reading from empty fifo"
-            self._read_index <<= self._next_index(self._read_index)
-            return self._mem[self._read_index]
-
-        def front(self):
-            return self._mem[self._read_index]
-
-        def empty(self):
-            return self._empty
-
-        def full(self):
-            return self._full

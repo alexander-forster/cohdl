@@ -106,7 +106,7 @@ async def testbench_axilite_reg_08(dut: test_axilite_reg_08):
     rnd_index = cohdl_testutil.cocotb_util.ConstrainedGenerator(2)
 
     seq = cohdl_testutil.cocotb_util.SequentialTest(dut.clk)
-    dut.reset.value = 0
+    dut.reset.value = 1
 
     dut.axi_araddr.value = 0
     dut.axi_arprot.value = 0
@@ -119,6 +119,12 @@ async def testbench_axilite_reg_08(dut: test_axilite_reg_08):
     dut.axi_awprot.value = 0
     dut.axi_awaddr.value = 0
     dut.axi_wvalid.value = 0
+
+    await seq.tick()
+    dut.reset.value = 1
+    await seq.tick()
+    dut.reset.value = 0
+    await seq.tick()
 
     bus = AxiLiteBus.from_prefix(dut, "axi")
     axi_master = AxiLiteMaster(bus, dut.clk, dut.reset)
@@ -157,10 +163,10 @@ async def testbench_axilite_reg_08(dut: test_axilite_reg_08):
         result = await axi_master.read_dword(mem_offset + off)
         assert result == rnd
 
-    # test mem_c (incrementing initialized not writable)
+    # test mem_d (incrementing initialized not writable)
 
     mem_offset = 0x140
-    for off in range(0, 0x40, 4):
+    for off in range(0, 0x40 - 4, 4):
         result = await axi_master.read_dword(mem_offset + off)
         assert result == (off / 4) * 500
         rnd = rnd_data.random().as_int()

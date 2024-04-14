@@ -453,9 +453,8 @@ class If(Statement):
         except Exception as err:
             raise VisitException(self, err)
 
-    # TODO: check if copy is used
     def copy(self) -> If:
-        return If(self._test.copy(), self._body.copy(None), self._orelse.copy(None))
+        return If(self._test, self._body.copy(None), self._orelse.copy(None))
 
     def update_transitions(self, state_map: IdMap):
         self._body.update_transitions(state_map)
@@ -711,7 +710,7 @@ class SignalPush(Statement):
 
 class _SignalAlias(Statement):
     """
-    _SignalAllias is used during parsing to indicate, that reads from
+    _SignalAlias is used during parsing to indicate, that reads from
     a signal should instead refer to the given replacement.
     This allows signals to be used in the same state they are initialized.
     """
@@ -723,7 +722,8 @@ class _SignalAlias(Statement):
     def visit_objects(self, operation: Callable): ...
 
     def copy(self) -> _SignalAlias:
-        raise AssertionError("_SignalAlias should not be present after parsing")
+        print(f"ALIAS {id(self.signal):x} : {id(self.replacement):x}")
+        return _SignalAlias(self.signal, self.replacement)
 
     def update_transitions(self, state_map: IdMap):
         raise AssertionError("_SignalAlias should not be present after parsing")
@@ -1237,7 +1237,7 @@ class StatemachineContext:
                         # state it is valid in
                         assert (
                             access is AccessFlags.WRITE
-                        ), "Temporary objects my not be shared between states"
+                        ), "Temporary objects may not be shared between states"
                         used_temporaries[obj._root] = True
                 return obj
 

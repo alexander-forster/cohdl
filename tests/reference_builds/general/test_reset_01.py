@@ -9,7 +9,6 @@ from cohdl import std
 from cohdl_testutil import cocotb_util
 from cohdl_testutil.cocotb_mock import MockBase
 import os
-import time
 
 reset_active_low = eval(os.getenv("cohdl_test_reset_active_low", "None"))
 reset_async = eval(os.getenv("cohdl_test_reset_async", "None"))

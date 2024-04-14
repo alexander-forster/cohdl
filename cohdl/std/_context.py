@@ -19,6 +19,7 @@ from cohdl import (
 from cohdl.utility.source_location import SourceLocation
 
 from ._prefix import _Prefix
+from ._core_utility import as_awaitable
 
 
 class Reset:
@@ -694,6 +695,17 @@ class SequentialContext:
         self._attributes = attributes
         self._capture_lazy = capture_lazy
 
+    def copy(self):
+        return type(self)(
+            clk=self._clk,
+            reset=self._reset,
+            step_cond=self._step_cond,
+            comment=self._comment,
+            on_reset=self._on_reset,
+            attributes=self._attributes,
+            capture_lazy=self._capture_lazy,
+        )
+
     def clk(self):
         return self._clk
 
@@ -716,6 +728,7 @@ class SequentialContext:
             reset=self._reset if reset is None else reset,
             step_cond=self._step_cond if step_cond is None else step_cond,
             on_reset=self._on_reset if on_reset is None else on_reset,
+            attributes=self._attributes,
         )
 
     def or_reset(
@@ -762,6 +775,7 @@ class SequentialContext:
         return SequentialContext(
             self._clk,
             Reset(combined_reset, active_low=active_low, is_async=is_async),
+            attributes=self._attributes,
         )
 
     def and_reset(
@@ -806,15 +820,32 @@ class SequentialContext:
         return SequentialContext(
             self._clk,
             Reset(combined_reset, active_low=active_low, is_async=is_async),
+            attributes=self._attributes,
         )
 
     def __call__(
-        self, fn=None, *, on_reset=None, executors: list[Executor] | None = None
+        self,
+        fn=None,
+        *,
+        on_reset=None,
+        executors: list[Executor] | None = None,
+        attributes: dict | None = None,
     ):
+        # copy the sequential context so each invocation has a distinct,
+        # associated std.SequentialContext
+        cpy = self.copy()
+
+        if attributes is None:
+            attributes = cpy._attributes
+        elif cpy._attributes is not None:
+            attributes = {**cpy._attributes, **attributes}
+        else:
+            pass
+
         executors = [] if executors is None else executors
 
         data = _ContextData(
-            self,
+            cpy,
             executors_before=[
                 e for e in executors if e._mode is ExecutorMode.immediate_before
             ],
@@ -828,13 +859,15 @@ class SequentialContext:
                 assert executor._mode is mode, "internal error: executor mode mismatch"
 
                 cohdl.coroutine_step(executor.executor_statemachine())
-                executor._start @= False
+
+                if not executor._independent:
+                    executor._start @= False
 
         def helper(fn):
             if inspect.iscoroutinefunction(fn):
 
                 def context_fn():
-                    self._enter_context(self, data)
+                    cpy._enter_context(cpy, data)
                     convert_executors(
                         data.executors_before, mode=ExecutorMode.immediate_before
                     )
@@ -842,12 +875,12 @@ class SequentialContext:
                     convert_executors(
                         data.executors_after, mode=ExecutorMode.immediate_after
                     )
-                    self._exit_context()
+                    cpy._exit_context()
 
             else:
 
                 def context_fn():
-                    self._enter_context(self, data)
+                    cpy._enter_context(cpy, data)
                     convert_executors(
                         data.executors_before, mode=ExecutorMode.immediate_before
                     )
@@ -855,17 +888,17 @@ class SequentialContext:
                     convert_executors(
                         data.executors_after, mode=ExecutorMode.immediate_after
                     )
-                    self._exit_context()
+                    cpy._exit_context()
 
             context_fn.__name__ = fn.__name__
             return _sequential_impl(
-                self._clk,
-                self._reset,
-                step_cond=self._step_cond,
+                cpy._clk,
+                cpy._reset,
+                step_cond=cpy._step_cond,
                 on_reset=on_reset,
-                comment=self._comment,
-                attributes=self._attributes,
-                capture_lazy=self._capture_lazy,
+                comment=cpy._comment,
+                attributes=attributes,
+                capture_lazy=cpy._capture_lazy,
                 wrapped_fn=fn,
             )(context_fn)
 
@@ -906,7 +939,7 @@ class Executor:
             current_data = SequentialContext.current_data()
             assert (
                 current_ctx is not None
-            ), "Executor with mode {self._mode} can only be used in functions marked with std.SequentialContext"
+            ), f"Executor with mode {self._mode} can only be used in functions marked with std.SequentialContext"
 
             if self._mode is ExecutorMode.immediate_before:
                 assert (
@@ -920,18 +953,22 @@ class Executor:
                     current_data.executors_after.append(self)
 
     async def executor_statemachine(self):
-        while not self._start:
+        if not self._independent:
+            while not self._start:
+                self._process_ready._assign_(True, AssignMode.AUTO)
+            self._process_ready._assign_(False, AssignMode.AUTO)
+
+            if self._result is None:
+                await self._action(*self._args, **self._kwargs)
+            else:
+                self._result._assign_(
+                    await self._action(*self._args, **self._kwargs), AssignMode.AUTO
+                )
             self._process_ready._assign_(True, AssignMode.AUTO)
-        self._process_ready._assign_(False, AssignMode.AUTO)
-
-        if self._result is None:
-            await self._action(*self._args, **self._kwargs)
         else:
-            self._result._assign_(
-                await self._action(*self._args, **self._kwargs), AssignMode.AUTO
-            )
-        self._process_ready._assign_(True, AssignMode.AUTO)
+            await self._action(*self._args, **self._kwargs)
 
+    @pyeval
     def __init__(
         self,
         ctx: SequentialContext | None,
@@ -940,6 +977,7 @@ class Executor:
         result=None,
         args: list | None = None,
         kwargs: dict | None = None,
+        independent: bool = False,
     ):
         self._mode = mode
         self._ctx = ctx
@@ -951,23 +989,29 @@ class Executor:
         self._args = args
         self._kwargs = kwargs
         self._result = result
+        self._independent = independent
 
         if ctx is None:
-            self._start = Variable[Bit](False, name="executor_start")
-            self._process_ready = Variable[Bit](False, name="executor_process_ready")
+            if not independent:
+                self._start = Variable[Bit](False, name="executor_start")
+                self._process_ready = Variable[Bit](
+                    False, name="executor_process_ready"
+                )
         else:
             assert (
                 mode is ExecutorMode.parallel_process
             ), "mode must be `parallel_process` because `ctx` was specified"
 
-            self._start = Signal[Bit](False, name="executor_start")
-            self._process_ready = Signal[Bit](False, name="executor_process_ready")
+            if not independent:
+                self._start = Signal[Bit](False, name="executor_start")
+                self._process_ready = Signal[Bit](False, name="executor_process_ready")
 
             @ctx
             async def proc():
                 await self.executor_statemachine()
 
     @classmethod
+    @pyeval
     def make_parallel(cls, ctx: SequentialContext, action, result, *args, **kwargs):
         return cls(
             ctx=ctx,
@@ -990,6 +1034,7 @@ class Executor:
         )
 
     @classmethod
+    @pyeval
     def make_after(cls, action, result, *args, **kwargs):
         return cls(
             ctx=None,
@@ -998,6 +1043,32 @@ class Executor:
             result=result,
             args=args,
             kwargs=kwargs,
+        )
+
+    @classmethod
+    @pyeval
+    def make_independent_before(cls, action, result, *args, **kwargs):
+        return cls(
+            ctx=None,
+            mode=ExecutorMode.immediate_before,
+            action=action,
+            result=result,
+            args=args,
+            kwargs=kwargs,
+            independent=True,
+        )
+
+    @classmethod
+    @pyeval
+    def make_independent_after(cls, action, result, *args, **kwargs):
+        return cls(
+            ctx=None,
+            mode=ExecutorMode.immediate_after,
+            action=action,
+            result=result,
+            args=args,
+            kwargs=kwargs,
+            independent=True,
         )
 
     def start(self, *args, **kwargs):
@@ -1037,3 +1108,7 @@ class Executor:
 
     def __hash__(self):
         return id(self)
+
+
+def at_end_of_context(fn):
+    Executor.make_independent_after(fn, None)._check_context()

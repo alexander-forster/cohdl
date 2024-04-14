@@ -313,13 +313,14 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         name: str | None = None,
         attributes: dict | None = None,
         noreset: bool = False,
+        maybe_uninitialized: bool = False,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
         if _root is not None:
             assert (
                 _root.qualifier is self.qualifier
-            ), "internal error: _root.qualifier != self.qualifier"
+            ), f"internal error: _root.qualifier != self.qualifier {_root.qualifier} {self.qualifier}"
             assert type(value) is self.type, "internal error: type(value) != self.type"
             self._value = value
         else:
@@ -334,6 +335,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         )
         self._attributes = [] if attributes is None else attributes
         self._noreset = noreset
+        self._maybe_uninitialized = maybe_uninitialized
 
         self._root = self if _root is None else _root
 
@@ -400,6 +402,17 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic
     def __getitem__(self, arg):
+        if isinstance(arg, (tuple, list)):
+            first, *rest = arg
+
+            if len(rest) == 0:
+                if isinstance(first, slice):
+                    return self.__getitem__(first)
+                else:
+                    return self.__getitem__(slice(first, first))
+            else:
+                return self.__getitem__(first) @ self.__getitem__(rest)
+
         ref_spec = self._ref_spec
 
         if len(ref_spec) != 0 and isinstance(ref_spec[-1], Slice):
@@ -735,6 +748,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         *,
         name: str | None = None,
         attributes: dict | None = None,
+        maybe_uninitialized: bool = False,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
@@ -743,7 +757,12 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         # set default to None, because locally defined
         # Signals/Variables cannot be used before they are constructed
         # and thus initialized
-        self.__init__(None, name=name, attributes=attributes)
+        self.__init__(
+            None,
+            name=name,
+            attributes=attributes,
+            maybe_uninitialized=maybe_uninitialized,
+        )
 
         if value is None or is_primitive(value) and value._is_uninitialized():
             return intr_op._IntrinsicDeclaration(self, None)
@@ -805,8 +824,22 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic_replacement(__getitem__)
     def __getitem_replacement(self, arg):
-        if isinstance(arg, tuple):
-            raise NotImplementedError()
+        if isinstance(arg, (tuple, list)):
+
+            def synthesizable_impl(s, arg):
+                first, *rest = arg
+
+                if len(rest) == 0:
+                    if isinstance(first, slice):
+                        return self.__getitem__(first)
+                    else:
+                        return self.__getitem__(slice(first, first))
+                else:
+                    return self.__getitem__(first) @ synthesizable_impl(s, rest)
+
+            return intr_op._IntrinsicSynthesizableFunctionCall(
+                synthesizable_impl, [self, arg], {}
+            )
         elif isinstance(arg, slice):
             assert arg.step is None, "step argument not allowed in slice"
 
@@ -1090,6 +1123,7 @@ class Signal(TypeQualifier):
         attributes: dict | None = None,
         delayed_init: bool = None,
         noreset: bool = False,
+        maybe_uninitialized: bool = False,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
@@ -1102,6 +1136,7 @@ class Signal(TypeQualifier):
             name=name,
             attributes=attributes,
             noreset=noreset,
+            maybe_uninitialized=maybe_uninitialized,
             _root=_root,
             _ref_spec=_ref_spec,
         )
@@ -1115,6 +1150,7 @@ class Signal(TypeQualifier):
         attributes: dict | None = None,
         delayed_init: bool = False,
         noreset=None,
+        maybe_uninitialized: bool = False,
         _root: TypeQualifier | None = None,
         _ref_spec: list[RefSpec] | None = None,
     ):
@@ -1128,7 +1164,12 @@ class Signal(TypeQualifier):
         # set default to None, because locally defined
         # Signals/Variables cannot be used before they are constructed
         # and thus initialized
-        self.__init__(None, name=name, attributes=attributes)
+        self.__init__(
+            None,
+            name=name,
+            attributes=attributes,
+            maybe_uninitialized=maybe_uninitialized,
+        )
 
         if value is None or is_primitive(value) and value._is_uninitialized():
             return intr_op._IntrinsicDeclaration(self, None, delayed_init)

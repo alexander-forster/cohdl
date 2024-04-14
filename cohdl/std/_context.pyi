@@ -367,6 +367,7 @@ class SequentialContext:
         reset: Reset | None = None,
         *,
         step_cond: Callable[[], bool] | None = None,
+        attributes: dict | None = None,
     ):
         """
         creates an instance of SequentialContext
@@ -481,7 +482,13 @@ class SequentialContext:
         context, otherwise this value is inherited from the parent.
         """
 
-    def __call__(self, fn=None, *, executors: list[Executor] | None = None):
+    def __call__(
+        self,
+        fn=None,
+        *,
+        executors: list[Executor] | None = None,
+        attributes: dict | None = None,
+    ):
         """
         __call__ is defined to be used as a decorator
         that turns the function it is applied to into a sequential context.

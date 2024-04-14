@@ -404,7 +404,17 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
 
     @_intrinsic
     def __getitem__(self, key: int | Integer | slice) -> BitVector | Bit:
-        if isinstance(key, (int, Integer)):
+        if isinstance(key, (tuple, list)):
+            first, *rest = key
+
+            if len(rest) == 0:
+                if isinstance(first, slice):
+                    return self.__getitem__(first)
+                else:
+                    return self.__getitem__(slice(first, first))
+            else:
+                return self.__getitem__(first) @ self.__getitem__(rest)
+        elif isinstance(key, (int, Integer)):
             key = Integer.decay(key)
             assert 0 <= key < self.width, "index exceeds vector width"
             return self._value[key]

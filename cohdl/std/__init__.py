@@ -73,6 +73,7 @@ from ._core_utility import (
     stretch,
     leftpad,
     rightpad,
+    pad,
     apply_mask,
     Mask,
     as_bitvector,
@@ -101,6 +102,7 @@ from .utility import (
     debounce,
     max_int,
     int_log_2,
+    ceil_log_2,
     is_pow_two,
     InShiftRegister,
     OutShiftRegister,
@@ -113,7 +115,7 @@ from .utility import (
 )
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle
-from ._prefix import prefix, name
+from ._prefix import prefix, name, NamedQualifier
 from . import spi
 from . import bitfield
 from . import _crc as crc

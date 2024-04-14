@@ -294,6 +294,11 @@ def int_log_2(inp: int) -> int:
     Asserts, that `inp` is of type int and a power of 2.
     """
 
+def ceil_log_2(inp: int) -> int:
+    """
+    Return the logarithm to the base 2 of `inp` rounded to the next larger integer.
+    """
+
 def is_pow_two(inp: int):
     """
     check if `inp` is an integer power of two
@@ -328,7 +333,7 @@ async def wait_for(duration: Duration) -> None:
 
     wait_for uses `std.SequentialContext.current()` to determine the clock period
     of the enclosing synthesizable context and calculates the needed number
-    of wait cycles from it. Because of that this function can only be
+    of wait cycles from it. Because of that, this function can only be
     used in sequential contexts defined with a fixed frequency Clock.
     """
 
@@ -349,7 +354,6 @@ class Waiter:
     def __init__(self, max_duration: int | Duration):
         """
         Initialize a Waiter that can wait up to a given duration.
-        When `max_duration` is an integer it is interpreted a
         """
 
     async def wait_for(self, duration: int | Duration):
@@ -647,6 +651,27 @@ class SyncFlag:
     >>> flag.clear()
     """
 
+    def __init__(
+        self,
+        *,
+        delay: int | None = None,
+        rx_delay: int | None = None,
+        tx_delay: int | None = None,
+    ):
+        """
+        The optional delay parameters define delay lines for the two internal bit signals.
+
+        When `delay` is set its value is applied to both `rx_delay` and `tx_delay`.
+
+        When `rx_delay` is set to a value greater than zero, the signal set by
+        the setter context, is delayed by the specified amount of clock cycles,
+        before it is detected in the receiver context. The `rx_delay` is implemented
+        in the receiver context.
+
+        `tx_delay` is the opposite of `rx_delay` and specifies a synchronization
+        delays for the `clear` operation. This delay is implemented in the sender context.
+        """
+
     def set(self) -> None:
         """
         Set the flag. This has no effect when it is already set.
@@ -699,7 +724,7 @@ class Mailbox(Generic[T]):
     Example:
 
     >>> # in common scope
-    >>> mailbox = Mailbox(BitVector[8])
+    >>> mailbox = Mailbox[BitVector[8]]()
     >>>
     >>> # in sender context
     >>> mailbox.send(data_to_send)
@@ -711,12 +736,21 @@ class Mailbox(Generic[T]):
     >>> received_data = await flag.receive()
     """
 
-    def __init__(self, type: type[T], *args, **kwargs):
+    def __init__(
+        self, *, delay: int = None, tx_delay: int = None, rx_delay: int = None
+    ):
         """
         Create a Mailbox that can transmit data of the given `type`.
+        Internally a `std.SyncFlag` is used to synchronize data access between
+        a sending and a receiving context.
+        The delay parameters are forwarded to that `std.SyncFlag` and allow for
+        basic clock domain crossing.
 
-        The optional `args`/`kwargs` will be forwarded to the constructor,
-        of the internal Signal (of type `type`).
+        `tx_delay` specifies, after how many clock ticks the receiver context
+        sees requests set by the sender. (relative to receiver context clock).
+
+        `rx_delay` specifies after how many clock ticks the sender context
+        sees acknowledge states set by the receiver. (relative to the sender context clock).
         """
 
     def send(self, data: T):

@@ -129,18 +129,20 @@ class _Value:
             if len(args) == 0 and len(kwargs) == 0:
                 return T()
 
-            assert len(args) == 1 and len(kwargs) == 0
+            assert len(args) == 1 and (
+                len(kwargs) == 0 or (len(kwargs) == 1 and kwargs.__contains__("name"))
+            )
             arg = args[0]
 
             if isinstance(arg, TypeQualifier):
                 if isinstance(arg, Temporary[T]):
                     return arg
                 else:
-                    return Temporary[T](arg)
+                    return Temporary[T](arg, **kwargs)
             elif isinstance(arg, TypeQualifierBase):
                 return TypeQualifierBase.decay(arg)
             else:
-                return T(arg)
+                return T(arg, **kwargs)
         else:
             return T(*args, **kwargs, _qualifier_=Value)
 
@@ -163,7 +165,9 @@ class _Ref:
             T = self._T
 
         if is_primitive_type(T):
-            assert len(args) == 1 and len(kwargs) == 0
+            assert len(args) == 1 and (
+                len(kwargs) == 0 or (len(kwargs) == 1 and kwargs.__contains__("name"))
+            )
             arg = args[0]
 
             if subclass_check(T, BitVector):
@@ -201,11 +205,13 @@ class _Nonlocal:
 
     @_intrinsic
     def __getitem__(self, arg):
-        assert self._qualified_type is None, "type of Nonlocal already set"
-        assert issubclass(
-            arg, (Signal, Variable)
-        ), "std.Nonlocal should only be used to create Signals or Variables"
-        return _Nonlocal(arg)
+        if self._qualified_type is None:
+            assert issubclass(
+                arg, (Signal, Variable)
+            ), "std.Nonlocal should only be used to create Signals or Variables"
+            return _Nonlocal(arg)
+        else:
+            return _Nonlocal(self._qualified_type[arg])
 
 
 class _Noreset:
@@ -538,8 +544,13 @@ def batched_fold(fn, args, batch_size=2):
         )
 
 
-def _concat_impl(args):
-    return binary_fold(lambda a, b: a @ b, args, right_fold=True)
+def _concat_pairwise(args: list):
+    result = []
+
+    for a, b in zip(args[0::2], args[1::2]):
+        as_pyeval(result.append, a @ b)
+
+    return result
 
 
 def concat(first, *args):
@@ -552,15 +563,32 @@ def concat(first, *args):
             ), "first is {} and not a BitVector".format(first)
             return Value[BitVector[len(first)]](first)
     else:
-        return _concat_impl([first, *args])
+        if len(args) % 2 == 0:
+            return first @ concat(*_concat_pairwise(args))
+        else:
+            return concat(*_concat_pairwise([first, *args]))
+
+
+def _repeat_filter_by_factor(stretch_list, factor: int):
+    return [s for nr, s in enumerate(stretch_list) if (factor & (1 << nr))]
+
+
+def repeat(val, times: int):
+    pow2_list = [val]
+
+    for _ in range(1, times.bit_length()):
+        as_pyeval(pow2_list.append, pow2_list[-1] @ pow2_list[-1])
+
+    return concat(
+        *[elem for elem in as_pyeval(_repeat_filter_by_factor, pow2_list, times)]
+    )
 
 
 def stretch(val: Bit | BitVector, factor: int):
+    assert factor > 0
+
     if instance_check(val, Bit):
-        if const_cond(factor == 1):
-            return as_bitvector(val)
-        else:
-            return concat(*[val for _ in range(factor)])
+        return repeat(val, factor)
     elif instance_check(val, BitVector):
         if const_cond(factor == 1):
             return val.bitvector.copy()
@@ -631,6 +659,36 @@ def rightpad(inp: BitVector, result_width: int, fill=None):
         return inp @ stretch(fill_bit, result_width - inp_width)
 
 
+def pad(
+    inp: BitVector, left: int = 0, right: int = 0, fill: Bit | Null | Full = Null
+) -> BitVector:
+    if fill is None:
+        fill_bit = Bit(False)
+    elif fill is Null or fill is Full:
+        fill_bit = Bit(fill)
+    else:
+        assert instance_check(
+            fill, Bit
+        ), f"parameter 'fill' should be Null, Full or a Bit type"
+        fill_bit = fill
+
+    assert isinstance(left, int) and left >= 0
+    assert isinstance(right, int) and right >= 0
+
+    if left == 0 and right == 0:
+        return as_bitvector(inp)
+
+    if left != 0:
+        left_padded = stretch(fill_bit, left) @ inp
+    else:
+        left_padded = inp
+
+    if right != 0:
+        return left_padded @ stretch(fill_bit, right)
+    else:
+        return left_padded
+
+
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector):
     assert old.width == new.width, "old.width does not match new.width"
     return (old.bitvector & ~mask) | (new.bitvector & mask)
@@ -647,6 +705,9 @@ class Mask:
             return Temporary(new.copy())
         else:
             return apply_mask(old, new, self._val)
+
+    def as_vector(self, width: int):
+        return self.apply(zeros(width), ones(width))
 
 
 def as_bitvector(inp: BitVector | Bit | str):

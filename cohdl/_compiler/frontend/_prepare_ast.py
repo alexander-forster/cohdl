@@ -139,6 +139,32 @@ class PrepareAst:
             ctx.name(), call.code(), ctx.attributes(), ctx.source_location()
         )
 
+    def convert_always_block(self, body: list[ast.AST], line_offset):
+        location = self.context_location().relative(line_offset)
+        call = PrepareAst(
+            InstantiatedFunction(
+                FunctionDefinition.from_ast_body(
+                    body,
+                    "always",
+                    self._fn_def.scope(),
+                    is_async=False,
+                    # use self.context_location without offset because
+                    # line offsets of statements contained in with block
+                    # are relative to the enclosing function
+                    location=self.context_location(),
+                ),
+                self._scope,
+                super_arg=self._super_arg,
+            ),
+            ContextType.CONCURRENT,
+            parent=self,
+            mutable_scope=True,
+        ).convert_call()
+
+        assert isinstance(call, out.Call)
+
+        return out.Concurrent("always", call.code(), {}, location)
+
     def convert_boolean(self, arg, bound=None):
         # use for bool(arg) and boolean contexts like
         # 'if arg:', 'a if arg else b' and 'arg1 and arg2 or arg3'
@@ -180,7 +206,12 @@ class PrepareAst:
 
         try:
             if not _has_intrinsic_replacement(fn):
-                return out.Value(fn(*args, **kwargs), [])
+                ret = fn(*args, **kwargs)
+
+                if isinstance(ret, intr_op._IntrinsicSynthesizableFunctionCall):
+                    return self.subcall(ret.callable, ret.args, ret.kwargs)
+
+                return out.Value(ret, [])
 
             replacement = _intrinsic_replacements[fn]
 
@@ -341,6 +372,9 @@ class PrepareAst:
                 [out.Assign(result.index_temp, result.index, AssignMode.AUTO, [])],
             )
 
+        if isinstance(result, intr_op._IntrinsicSynthesizableFunctionCall):
+            return self.subcall(result.callable, result.args, result.kwargs)
+
         if isinstance(result, intr_op._IntrinsicDeclaration):
             if result.assigned_value is None:
                 return out.Value(result.new_obj, [])
@@ -361,7 +395,12 @@ class PrepareAst:
                     and isinstance(result.new_obj, Signal)
                     and self._context is ContextType.SEQUENTIAL
                 ):
-                    signal_alias = Temporary[result.new_obj.type]()
+                    sig_name = result.new_obj._name
+
+                    signal_alias = Temporary[result.new_obj.type](
+                        maybe_uninitialized=result.new_obj._maybe_uninitialized,
+                        name=(f"alias_{sig_name}" if sig_name is not None else "alias"),
+                    )
 
                     if isinstance(result.assigned_value, _MergedBranch):
                         result.assigned_value._redirect_values(signal_alias)
@@ -405,6 +444,7 @@ class PrepareAst:
         context: ContextType,
         parent: PrepareAst | None = None,
         first_arg=None,
+        mutable_scope=False,
     ):
         self._last_apply_inp = None
 
@@ -421,7 +461,7 @@ class PrepareAst:
 
         # copy scope dict so it can be modified during the compilation
         # without affection possible future compilations to the same function
-        self._scope = {**fn_def.scope()}
+        self._scope = {**fn_def.scope()} if not mutable_scope else fn_def.scope()
         self._super_arg = fn_def.super_arg()
 
         self._frame = VirtualFrame(
@@ -526,6 +566,7 @@ class PrepareAst:
 
         # TODO: cleanup
         is_builtin_method = type(fn) is type("".__eq__)
+        original_fn = fn
 
         if type(fn) is type({}.items):
             if fn.__name__ != "__new__" and fn.__self__ is not builtins:
@@ -533,12 +574,15 @@ class PrepareAst:
 
         if inspect.isbuiltin(fn) or is_builtin_method:
             if is_builtin_method:
+                original_fn = fn.__self__
                 args.insert(0, fn.__self__)
                 fn = getattr(type(fn.__self__), fn.__name__)
 
             # fn is a builtin function or method
             # must be intrinsic to be usable in synthesizable context
-            assert _is_intrinsic(fn)
+            assert _is_intrinsic(
+                fn
+            ), f"function {original_fn} not supported in synthesizable contexts"
             return self.convert_intrinsic(fn, args, kwargs)
 
         if inspect.ismethod(fn):
@@ -1160,8 +1204,6 @@ class PrepareAst:
 
                 result = []
 
-                split = self._split_target(inp.elts, rhs.value)
-
                 for target, source in zip(
                     inp.elts, self._split_target(inp.elts, rhs.value)
                 ):
@@ -1715,6 +1757,9 @@ class PrepareAst:
             # special case for always expressions in sequential blocks
             if func_ref is always:
                 assert (
+                    self._context is ContextType.SEQUENTIAL
+                ), "cohdl.always can only be used in cohdl.sequential contexts"
+                assert (
                     len(inp.args) == 1 and len(inp.keywords) == 0
                 ), "cohdl.always expects a single positional argument and no keyword arguments"
 
@@ -1920,18 +1965,41 @@ class PrepareAst:
                 result_statements.append(context_expr)
                 context = context_expr.result()
 
-                enter = type(context).__enter__
-                exit_list.append((context, type(context).__exit__))
+                if context is always:
+                    assert (
+                        self._context is ContextType.SEQUENTIAL
+                    ), "cohdl.always can only be used in cohdl.sequential contexts"
+                    assert (
+                        len(items) == 1
+                    ), "with statement containing cohdl.always context can only have a single item"
+                    assert (
+                        item.optional_vars is None
+                    ), "with statement containing cohdl.always can not define a target"
 
-                call_expr = self.subcall(enter, [context], {})
-                result_statements.append(call_expr)
+                    always_block = self.convert_always_block(inp.body, inp.lineno)
 
-                if item.optional_vars is not None:
-                    target = PrepareAst.Target(item.optional_vars, self)
-                    target.unpack(call_expr.result())
+                    result_statements.append(always_block.code())
 
-                    if first_target is None:
-                        first_target = target
+                    for stmt in result_statements:
+                        assert (
+                            not stmt.returns()
+                        ), "cannot return from cohdl.always context"
+
+                    self.add_always_expr(out.CodeBlock(result_statements))
+                    return out.CodeBlock([])
+                else:
+                    enter = type(context).__enter__
+                    exit_list.append((context, type(context).__exit__))
+
+                    call_expr = self.subcall(enter, [context], {})
+                    result_statements.append(call_expr)
+
+                    if item.optional_vars is not None:
+                        target = PrepareAst.Target(item.optional_vars, self)
+                        target.unpack(call_expr.result())
+
+                        if first_target is None:
+                            first_target = target
 
             result_statements.append(self.apply(inp.body))
 

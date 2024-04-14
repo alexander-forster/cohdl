@@ -17,6 +17,7 @@ from ._core_utility import (
 
 from ._assignable_type import AssignableType
 from ._template import Template, _TemplateMode
+from ._prefix import NamedQualifier
 
 
 @_intrinsic
@@ -118,13 +119,15 @@ class Record(AssignableType, Template):
         if len(args) == len(kwargs) == 0:
             # default constructor
             for name, elem_type in elem_types.items():
-                setattr(self, name, _qualifier_[elem_type]())
+                setattr(self, name, NamedQualifier[_qualifier_, name][elem_type]())
         elif len(args) == 1 and len(kwargs) == 0:
             arg = args[0]
 
             if arg is Null or arg is Full:
                 for name, elem_type in elem_types.items():
-                    setattr(self, name, _qualifier_[elem_type](arg))
+                    setattr(
+                        self, name, NamedQualifier[_qualifier_, name][elem_type](arg)
+                    )
             else:
                 # copy constructor
                 assert type(arg) is type(self), "type mismatch {} != {}".format(

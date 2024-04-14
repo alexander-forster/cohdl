@@ -20,7 +20,7 @@ class test_mailbox_01(cohdl.Entity):
     def architecture(self):
         ctx = std.SequentialContext(std.Clock(self.clk))
 
-        mailbox = std.Mailbox(BitVector[8])
+        mailbox = std.Mailbox[BitVector[8]]()
 
         @std.concurrent
         def logic():

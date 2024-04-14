@@ -48,6 +48,7 @@ class TypeQualifier(typing.Generic[T], TypeQualifierBase[T]):
         name: str | None = None,
         attributes: dict | None = None,
         noreset: bool = False,
+        maybe_uninitialized: bool = False,
     ) -> None:
         """
         Create a new type qualified object with an optional default `value`.
@@ -57,6 +58,10 @@ class TypeQualifier(typing.Generic[T], TypeQualifierBase[T]):
 
         Objects declared with `noreset` will not be automatically reset in
         synthesizable contexts (the default value is still used during initialization).
+
+        CoHDL perform some basic checks to ensure, that all locally declared objects
+        are initialized before they are used. Set `maybe_uninitialized` to True to
+        opt out of these checks.
         """
 
     def name(self) -> str: ...
@@ -69,6 +74,8 @@ class TypeQualifier(typing.Generic[T], TypeQualifierBase[T]):
     def __getitem__(self, arg: int) -> TypeQualifier[Bit]: ...
     @overload
     def __getitem__(self, arg: slice) -> TypeQualifier[BitVector]: ...
+    @overload
+    def __getitem__(self, arg: tuple | list) -> Temporary[BitVector]: ...
     @overload
     def lsb(self, count: None = None, rest: None = None) -> TypeQualifier[Bit]: ...
     @overload
@@ -179,6 +186,7 @@ class Signal(typing.Generic[T], TypeQualifier[T]):
         name: str | None = None,
         attributes: dict | None = None,
         delayed_init: bool = False,
+        maybe_uninitialized: bool = False,
     ) -> None:
         """
         Create a new Signal with an optional default `value`.
@@ -191,6 +199,10 @@ class Signal(typing.Generic[T], TypeQualifier[T]):
         Instead initialization takes place immediately like variable assignment.
         When `delayed_init` is set to true initialization behaves like a signal assignment
         and takes one clock cycle.
+
+        CoHDL perform some basic checks to ensure, that all locally declared objects
+        are initialized before they are used. Set `maybe_uninitialized` to True to
+        opt out of these checks.
 
         >>> @std.sequential(clk)
         >>> def example():
@@ -214,6 +226,8 @@ class Signal(typing.Generic[T], TypeQualifier[T]):
     def __getitem__(self, arg: int) -> Signal[Bit]: ...
     @overload
     def __getitem__(self, arg: slice) -> Signal[BitVector]: ...
+    @overload
+    def __getitem__(self, arg: tuple | list) -> Temporary[BitVector]: ...
     @overload
     def lsb(self, count: None = None, rest: None = None) -> Signal[Bit]: ...
     @overload
@@ -285,6 +299,8 @@ class Port(typing.Generic[T, DIR], Signal[T]):
     def __getitem__(self, arg: int) -> Port[Bit, DIR]: ...
     @overload
     def __getitem__(self, arg: slice) -> Port[BitVector, DIR]: ...
+    @overload
+    def __getitem__(self, arg: tuple | list) -> Temporary[BitVector]: ...
     @overload
     def lsb(self, count: None = None, rest: None = None) -> Port[Bit, DIR]: ...
     @overload
@@ -372,6 +388,8 @@ class Variable(typing.Generic[T], TypeQualifier[T]):
     @overload
     def __getitem__(self, arg: slice) -> Variable[BitVector]: ...
     @overload
+    def __getitem__(self, arg: tuple | list) -> Temporary[BitVector]: ...
+    @overload
     def lsb(self, count: None = None, rest: None = None) -> Variable[Bit]: ...
     @overload
     def lsb(
@@ -432,6 +450,8 @@ class Temporary(typing.Generic[T], TypeQualifier[T]):
     def __getitem__(self, arg: int) -> Temporary[Bit]: ...
     @overload
     def __getitem__(self, arg: slice) -> Temporary[BitVector]: ...
+    @overload
+    def __getitem__(self, arg: tuple | list) -> Temporary[BitVector]: ...
     @overload
     def lsb(self, count: None = None, rest: None = None) -> Temporary[Bit]: ...
     @overload

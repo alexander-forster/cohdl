@@ -404,7 +404,7 @@ class VhdlAssembler:
                     scope.declare(obj._root)
                 return obj
 
-            inp.code().visit_referenced_objects(collect_objects)
+            inp.visit_referenced_objects(collect_objects)
 
             kwargs = {**kwargs, "context": Context.SEQUENTIAL}
 

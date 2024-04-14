@@ -111,3 +111,19 @@ class _IntrinsicDeclaration:
         self.new_obj = new_obj
         self.assigned_value = assigned_value
         self.delayed_init = delayed_init
+
+
+class _IntrinsicSynthesizableFunctionCall:
+    """
+    when returned from an intrinsic function the callable
+    is evaluated using the given args/kwargs at the location
+    the intrinsic function was called.
+    """
+
+    def __init__(self, callable, args, kwargs):
+        assert isinstance(args, list)
+        assert isinstance(kwargs, dict)
+
+        self.callable = callable
+        self.args = args
+        self.kwargs = kwargs

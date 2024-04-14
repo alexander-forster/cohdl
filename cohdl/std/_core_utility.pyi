@@ -345,9 +345,39 @@ class _Cond(Generic[T]):
         """
 
 check_type = _CheckType()
+"""
+`std.check_type[T](arg)`
+checks, that the type of the given argument matches the given `T`
+"""
+
 select = _Select()
+"""
+`std.select[T](...)` is a type checked wrapper around `cohdl.select_with`
+equivalent to:
+
+>>> std.check_type[T](
+>>>     cohdl.select_with(
+>>>         ...
+>>>     )
+>>> )
+"""
+
 choose_first = _ChooseFirst()
+"""
+`std.coose_first[T](...)` takes an arbitrary number of arguments each of which is a
+tuple with two elements (CONDITION, VALUE). The function returns the first
+VALUE with a truthy CONDITION or default if no such CONDITION exists.
+"""
+
 cond = _Cond()
+"""
+`std.cond[T](cond, on_true, on_false)` is a type checked wrapper around
+an if expression equivalent to:
+
+>>> std.check_type[T](
+>>>     on_true if cond else on_false
+>>> )
+"""
 
 #
 #
@@ -471,19 +501,42 @@ def stretch(val: Bit | BitVector, factor: int) -> BitVector:
 
 @overload
 def leftpad(inp: BitVector, result_width: int) -> BitVector:
-    """ """
+    """
+    Add null-bits to the left of `inp` until `result_width` is reached.
+    """
 
 @overload
 def leftpad(inp: BitVector, result_width: int, fill: Bit | Null | Full) -> BitVector:
-    """ """
+    """
+    Add `fill` bits to the left of `inp` until `result_width` is reached.
+    """
 
 @overload
 def rightpad(inp: BitVector, result_width: int) -> BitVector:
-    """ """
+    """
+    Add null-bits to the right of `inp` until `result_width` is reached.
+    """
 
 @overload
 def rightpad(inp: BitVector, result_width: int, fill: Bit | Null | Full) -> BitVector:
-    """ """
+    """
+    Add `fill` bits to the right of `inp` until `result_width` is reached.
+    """
+
+def pad(
+    inp: BitVector, left: int = 0, right: int = 0, fill: Bit | Null | Full = Null
+) -> BitVector:
+    """
+    pad `inp` using the bit specified by `fill`
+
+    `left` and `right` define how often `fill` is added at the respective side
+    of `inp`. `fill` defaults to Bit("0").
+
+    >>> def example():
+    >>>     vec = BitVector[4]("XXXX")
+    >>>     assert std.pad(vec, left=1, right=2) == BitVector[7]("0XXXX00")
+    >>>     assert std.pad(vec, left=2, fill=Bit(True)) == BitVector[6]("11XXXX")
+    """
 
 def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
     """
@@ -497,10 +550,15 @@ def apply_mask(old: BitVector, new: BitVector, mask: BitVector) -> BitVector:
 
 class Mask:
     def __init__(self, val: BitVector | Null | Full): ...
-    def __and__(self, other) -> BitVector: ...
-    def __or__(self, other) -> BitVector: ...
-    def __xor__(self, other) -> BitVector: ...
-    def apply(self, old: BitVector, new: BitVector) -> BitVector: ...
+    def apply(self, old: BitVector, new: BitVector) -> BitVector:
+        """
+        Produce a new BitVector by choosing bits from `old` or `new` according to the mask.
+        """
+
+    def as_vector(self, width: int) -> BitVector:
+        """
+        Shorthand for `self.apply(std.zeros(width), std.ones(width))`.
+        """
 
 def as_bitvector(inp: BitVector | Bit | str) -> BitVector:
     """

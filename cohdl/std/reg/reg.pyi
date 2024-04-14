@@ -704,7 +704,6 @@ class RegisterTools(Generic[W]):
 
     class Memory(AddrRange):
         """
-                    Currently only word aligned memory access is supported.
 
         >>> # Example
         >>>
@@ -792,6 +791,7 @@ class RegisterTools(Generic[W]):
             noreset: bool = False,
             mask_mode: MaskMode = MaskMode.IMMEDIATE,
             allow_unaligned: bool = False,
+            inline: bool = False,
         ):
             """
             Configure how the memory object is initialized and implemented.
@@ -806,6 +806,11 @@ class RegisterTools(Generic[W]):
 
             Only aligned reads/writes are allowed unless `allow_unaligned` is set to True.
             This is only possible with `MaskMode.SPLIT_WORDS`.
+
+            When `inline` is set to True the read/write memory accesses are performed
+            in the context of the bus transaction.
+            This reduces the read latency by one clock cycle but prevents
+            block RAM inference.
             """
 
     class RoMemory(Memory):
@@ -818,6 +823,7 @@ class RegisterTools(Generic[W]):
             initial,
             mask_mode: RegisterTools.Memory.MaskMode = RegisterTools.Memory.MaskMode.IMMEDIATE,
             allow_unaligned: bool = False,
+            inline=False,
         ):
             """
             `initial` defines the initial memory content. This is a mandatory argument

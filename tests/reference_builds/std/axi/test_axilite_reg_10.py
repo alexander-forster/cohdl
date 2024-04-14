@@ -222,11 +222,8 @@ import cocotb
 
 @cocotb.test()
 async def testbench_axilite_reg_10(dut: test_axilite_reg_10):
-    rnd_data = cohdl_testutil.cocotb_util.ConstrainedGenerator(32)
-    rnd_index = cohdl_testutil.cocotb_util.ConstrainedGenerator(2)
 
     seq = cohdl_testutil.cocotb_util.SequentialTest(dut.clk)
-    dut.reset.value = 0
 
     dut.addr_offset.value = 0
     dut.axi_araddr.value = 0
@@ -240,11 +237,14 @@ async def testbench_axilite_reg_10(dut: test_axilite_reg_10):
     dut.axi_awprot.value = 0
     dut.axi_awaddr.value = 0
     dut.axi_wvalid.value = 0
+    dut.addr_offset.value = 0
 
     bus = AxiLiteBus.from_prefix(dut, "axi")
     axi_master = AxiLiteMaster(bus, dut.clk)
 
     mock = MemMock()
+
+    await seq.delta()
 
     def crosses_boundary(addr):
         return (addr < 0x100 and addr + 4 > 0x100) or (addr + 4 > 0x200)
@@ -324,8 +324,6 @@ from cohdl.std.reg.system_rdl import to_system_rdl
 
 with open("file.rdl", "w") as file:
     print(to_system_rdl(MyRoot), file=file)
-
-print(std.VhdlCompiler.to_string(test_axilite_reg_10))
 
 
 class Unittest(unittest.TestCase):

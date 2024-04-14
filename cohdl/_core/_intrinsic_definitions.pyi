@@ -1,5 +1,46 @@
-def always(expr, /):
-    return expr
+class _Always:
+    def __call__(self, expr, /):
+        return expr
+
+    def __enter__(self) -> None: ...
+    def __exit__(self, type, value, traceback): ...
+
+always = _Always()
+"""
+`cohdl.always` creates concurrent logic within an sequential context.
+
+When called the argument expression is hoisted out of the generated VHDL process
+into the concurrent scope. The return value can be used from within the sequential
+context.
+
+>>> @std.sequential(clk)
+>>> async def example():
+>>>     sig <<= cohdl.Signal[Unsigned[4]](0)
+>>>     incremented_sig = cohdl.always(sig + 1)
+>>>     await std.tick()
+>>>     # incremented_sig always follows changes in sig
+>>>     assert incremented_sig == 1
+>>>     sig <<= 2
+>>>     await std.tick()
+>>>     # incremented_sig always follows changes in sig
+>>>     assert incremented_sig == 2
+
+To implement more than one concurrent statement, `cohdl.always` is passed
+to a Python context manager (with statement).
+
+>>> inp_a = Signal[BitVector[8]]()
+>>> inp_b = Signal[BitVector[8]]()
+>>>
+>>> @std.sequential(clk)
+>>> async def example()
+>>>     with cohdl.always:
+>>>         result_and = inp_a & inp_b
+>>>         result_or = inp_a | inp_b
+>>>
+>>>     assert result_and == inp_a & inp_b, "this assertion always holds"
+>>>     await some_operation()
+>>>     assert result_or == inp_a | inp_b, "so does this one"
+"""
 
 def expr(expr, /):
     """

@@ -281,21 +281,16 @@ class Axi4Light:
         addr_latched = cohdl.Variable[cohdl.Bit](False)
         data_latched = cohdl.Variable[cohdl.Bit](False)
 
-        addr_buffer = cohdl.Variable[self.wraddr.awaddr.type]()
-        prot_buffer = cohdl.Variable[self.wraddr.awprot.type]()
-        data_buffer = cohdl.Variable[self.wrdata.wdata.type]()
-        strb_buffer = cohdl.Variable[self.wrdata.wstrb.type]()
-
         awready <<= True
         wready <<= True
 
         while True:
             if ~addr_latched:
-                addr_buffer @= self.wraddr.awaddr
-                prot_buffer @= self.wraddr.awprot
+                addr_buffer = cohdl.Signal(self.wraddr.awaddr, maybe_uninitialized=True)
+                prot_buffer = cohdl.Signal(self.wraddr.awprot, maybe_uninitialized=True)
             if ~data_latched:
-                data_buffer @= self.wrdata.wdata
-                strb_buffer @= self.wrdata.wstrb
+                data_buffer = cohdl.Signal(self.wrdata.wdata, maybe_uninitialized=True)
+                strb_buffer = cohdl.Signal(self.wrdata.wstrb, maybe_uninitialized=True)
 
             addr_latched @= addr_latched | awvalid
             data_latched @= data_latched | wvalid
@@ -356,6 +351,7 @@ class Axi4Light:
                         <= request.addr.unsigned
                         < reg._global_offset_ + reg._unit_count_()
                     ):
+                        assert isinstance(request.addr, cohdl.Signal)
                         result @= await as_awaitable(
                             reg._basic_read_, request.addr.unsigned, None
                         )
@@ -376,6 +372,7 @@ class Axi4Light:
                         <= request.addr.unsigned
                         < reg._global_offset_ + reg._unit_count_()
                     ):
+                        assert isinstance(request.addr, cohdl.Signal)
                         await as_awaitable(
                             reg._basic_write_,
                             request.addr.unsigned,

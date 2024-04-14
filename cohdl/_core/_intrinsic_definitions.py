@@ -73,6 +73,8 @@ _intrinsic(int.__or__)
 _intrinsic(int.__xor__)
 _intrinsic(int.__pow__)
 _intrinsic(int.__abs__)
+_intrinsic(int.bit_count)
+_intrinsic(int.bit_length)
 
 #
 # float methods
@@ -118,6 +120,7 @@ _intrinsic(dict.keys)
 _intrinsic(dict.values)
 _intrinsic(dict.get)
 _intrinsic(dict.__getitem__)
+_intrinsic(dict.__contains__)
 
 #
 # tuple methods
@@ -132,6 +135,9 @@ _intrinsic(tuple.__getitem__)
 
 _intrinsic(list)
 _intrinsic(list.__getitem__)
+_intrinsic(list.__add__)
+_intrinsic(list.__mul__)
+_intrinsic(list.__rmul__)
 
 #
 # str methods
@@ -140,6 +146,12 @@ _intrinsic(list.__getitem__)
 _intrinsic(str.__eq__)
 _intrinsic(str.__len__)
 _intrinsic(str.format)
+
+#
+# slice methods
+#
+
+_intrinsic(slice)
 
 #
 # object methods
@@ -240,13 +252,18 @@ class _Bool:
 #
 
 
-def always(expr, /):
-    # should never be called, always is handled by the parser
+class _Always:
+    def __call__(self, expr, /):
+        raise AssertionError("always called outside synthesizable context")
 
-    if TYPE_CHECKING:
-        return expr
+    def __enter__(self):
+        return self
 
-    raise AssertionError("always called outside synthesizable context")
+    def __exit__(self, a, b, c):
+        pass
+
+
+always = _Always()
 
 
 #

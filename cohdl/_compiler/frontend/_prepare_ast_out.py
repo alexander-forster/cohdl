@@ -319,15 +319,11 @@ class If(Statement):
         if body.contains_break():
             assert (
                 orelse.empty() or orelse.contains_continue()
-            ), "else branch of if statement containing a break expression must be empty or end with an continue statement"
+            ), "else branch of if statement containing a break expression must be empty or end with a continue statement"
         elif orelse.contains_break():
             assert (
                 body.empty() or body.contains_continue()
-            ), "body branch of if statement containing a break expression in its else branch must be empty or end with an continue statement"
-        else:
-            assert (
-                not body.contains_continue() and not orelse.contains_continue()
-            ), "continue statement must be last statement of a loop and cannot be used in an if statement with runtime variable test condition unless the other branch contains a break statement"
+            ), "body branch of if statement containing a break expression in its else branch must be empty or end with a continue statement"
 
         returns_always = self._body.returns_always() and self._orelse.returns_always()
         return_paths = self._body.return_paths() + self._orelse.return_paths()

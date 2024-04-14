@@ -5,14 +5,17 @@ class _Prefix:
         """
         Create a new prefix by concatenating self with `subname`.
         """
-    def name(self, name: str) -> str:
+
+    def name(self, name: str | None) -> str:
         """
         Returns a new name by concatenating the prefix and the given name.
         """
+
     def prefix_str(self) -> str:
         """
         Returns the current prefix as a string.
         """
+
     def __enter__(self) -> _Prefix:
         """
         Starts a prefixed context.
@@ -20,6 +23,7 @@ class _Prefix:
         All calls to `std.prefix` and `std.name` will be prefixed
         with `self.prefix_str`.
         """
+
     def __exit__(self, type, value, traceback) -> None: ...
 
 def prefix(base_name: str) -> _Prefix:
@@ -59,3 +63,26 @@ def name(name: str) -> str:
     a new name built by concatenating the prefix with `name`.
     Outside of prefixed contexts the argument is returned unchanged.
     """
+
+class _NamedQualifier:
+    def __getitem__(self, qualifier, name: str):
+        return qualifier
+
+NamedQualifier = _NamedQualifier()
+"""
+`NamedQualifier` has no runtime effect. It only affects the names
+of Signals/Variables/Temporaries and is used to make the generated HDL more readable.
+
+In the following example `plain_obj` and `named_obj` are functionally identical.
+The names of new Signals constructed during the initialization of `plain_obj` are
+random (unless explicitly defined).
+The names of new Signals constructed during the initialization of `named_obj` are
+derived from the given base name `my_name`.
+
+>>> # plain_obj and named_obj are functionally identical
+>>> # the Signals created during the initialization of named_obj
+>>> # are named using the prefix 'my_name'.
+>>> plain_obj = cohdl.Signal(old_obj)
+>>> named_obj = NamedQualifier[cohdl.Signal, "my_name"](old_obj)
+>>>
+"""

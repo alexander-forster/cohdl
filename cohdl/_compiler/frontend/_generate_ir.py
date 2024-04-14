@@ -25,21 +25,6 @@ from cohdl._core._intrinsic_operations import AssignMode
 from cohdl.utility import IdMap, IdSet
 
 
-class _IdMapIdentityDefault(IdMap):
-    """
-    child class of IdMap, that returns the argument of __getitem__ unchanged,
-    if no corresponding entry is found
-    """
-
-    def __getitem__(self, key_obj):
-        if super().__contains__(key_obj):
-            return super().__getitem__(key_obj)
-        return key_obj
-
-    def __contains__(self, key_obj) -> bool:
-        return True
-
-
 class IrGenerator:
     class Mode(enum.Enum):
         CONCURRENT = enum.auto()
@@ -66,19 +51,30 @@ class IrGenerator:
             # concurrent block for always assignments
             concurrent = ir.Concurrent("always", always_converter.code(), {}, None)
 
-            temp_replacement = _IdMapIdentityDefault()
+            temp_replacement = IdMap()
 
             def find_temporaries(obj, access: AccessFlags):
-                if isinstance(obj, Temporary) and access.is_written():
+                if isinstance(obj, Temporary):
                     parent = obj._root
-                    temp_replacement[parent] = Signal[parent.type]()
+
+                    if access.is_written():
+                        temp_replacement[parent] = Signal[parent.type]()
+                    elif parent not in temp_replacement:
+                        raise AssertionError(
+                            f"always expression cannot inherit temporaries (found {obj._root})"
+                        )
                 return obj
 
             def replace_temporaries(obj, access: AccessFlags):
                 if isinstance(obj, Temporary):
                     parent = obj._root
                     if parent in temp_replacement:
-                        return temp_replacement[parent]
+                        return Signal[obj.type](
+                            obj.type(),
+                            _root=temp_replacement[parent],
+                            _ref_spec=obj._ref_spec,
+                        )
+
                 return obj
 
             # replace temporaries in always expression
@@ -323,9 +319,39 @@ class IrGenerator:
 
                 return transition_blocks
 
-            assert (
-                not body.contains_continue() and not orelse.contains_continue()
-            ), "continue can only be used in an if statement, when the other branch ends with a break statement"
+            if body.contains_continue() or orelse.contains_continue():
+                if body.contains_continue():
+                    assert orelse.empty()
+                if orelse.contains_continue():
+                    assert body.empty()
+
+                transition_blocks = []
+
+                for block in open_blocks:
+                    code_body = ir.CodeBlock([], parent=block)
+                    code_orelse = ir.CodeBlock([], parent=block)
+
+                    block.append(ir.If(test.result(), code_body, code_orelse))
+
+                    open_body = self.apply(body, open_blocks=[code_body])
+                    open_orelse = self.apply(orelse, open_blocks=[code_orelse])
+
+                    # while loop containing the if statement will add transitions to the begin of the
+                    # loop to all blocks in this list
+                    # blocks containing break/continue statements are treated separately because they don't
+                    # continue at the start of the loop
+                    if not body.contains_continue() and not body.contains_break():
+                        for x in open_body:
+                            transition_blocks.append(x)
+                    if not orelse.contains_continue() and not orelse.contains_break():
+                        for x in open_orelse:
+                            transition_blocks.append(x)
+
+                return transition_blocks
+
+            # assert (
+            #    not body.contains_continue() and not orelse.contains_continue()
+            # ), "continue can only be used in an if statement, when the other branch ends with a break statement"
 
             ret_blocks: IdMap[Any, ir.CodeBlock] = IdMap()
 
@@ -464,12 +490,12 @@ class IrGenerator:
                         # contained await expressions to overwrite them
                         block.addfront(ir._Transition(new_state))
 
-                first, *rest = self.apply(
+                result_list = self.apply(
                     inp.bound_statements(), open_blocks=[new_state.code()]
                 )
 
                 # assert first is new_state
-                assert len(rest) == 0
+                assert len(result_list) == 1
 
                 if isinstance(inp.result(), _boolean._BooleanLiteral):
                     if inp.result() is _boolean.true:
@@ -561,7 +587,9 @@ class IrGenerator:
                     if continue_block.common_block([continue_block, body]) is None:
                         # body is the first block in the loop, add statements until
                         # first state change in place of continue
-                        continue_block.append(body.copy(continue_block))
+                        copied_body = body.copy(continue_block)
+                        copied_body._fix_alias()
+                        continue_block.append(copied_body)
 
                 ret_blocks = []
                 # codeblocks, that end with a break statement
@@ -590,11 +618,13 @@ class IrGenerator:
                 # get the codeblock that contained the continue statement
                 for continue_block in IrGenerator._continue_result.pop():
                     assert (
-                        continue_block is not open_block
-                    ), f"cannot generate statemachine for coroutine '{ctx._name}', empty while loop??"
+                        ir.CodeBlock.common_block([continue_block, open_block]) is None
+                    ), f"cannot generate statemachine for coroutine '{ctx._name}', continue statement in first state of while-loop leeds to infinite recursion"
                     # open_block contains code until first await/while statement
                     # replace continue with a copy
-                    continue_block.append(open_block.copy(continue_block))
+                    copied_body = open_block.copy(continue_block)
+                    copied_body._fix_alias()
+                    continue_block.append(copied_body)
 
                 class _InvalidStatement(ir.Statement):
                     def dump(self):
@@ -1076,17 +1106,23 @@ class ConvertInstance:
                     if isinstance(stmt, ir.Expression) and isinstance(
                         stmt._result, Temporary
                     ):
-                        root_id = id(stmt._result._root)
+                        root = stmt._result._root
 
-                        local_temporaries.add(root_id)
-                        invalid_temporaries.discard(root_id)
+                        if not root._maybe_uninitialized:
+                            root_id = id(root)
+
+                            local_temporaries.add(root_id)
+                            invalid_temporaries.discard(root_id)
 
                     elif isinstance(stmt, ir.VariableAssignment) and isinstance(
                         stmt._target, Temporary
                     ):
-                        root_id = id(stmt._target._root)
-                        local_temporaries.add(root_id)
-                        invalid_temporaries.discard(root_id)
+                        root = stmt._target._root
+
+                        if not root._maybe_uninitialized:
+                            root_id = id(root)
+                            local_temporaries.add(root_id)
+                            invalid_temporaries.discard(root_id)
 
             return local_temporaries
 
@@ -1248,6 +1284,17 @@ class ConvertInstance:
                     result = ConvertInstance.cleanup_unused(result)
                 if result.attributes.get("cleanup_bool_cast", True):
                     result = ConvertInstance.cleanup_bool_cast(result)
+                if result.attributes.get("zero_init_temporaries", False):
+                    # only used for unit tests
+                    # (required because ghdl terminates with an overflow error
+                    # when uninitialized integer values are used)
+
+                    def visit_obj(obj, access):
+                        if isinstance(obj, Temporary):
+                            obj._default = obj.type(Null)
+                        return obj
+
+                    result.visit_referenced_objects(visit_obj)
                 return result
 
             raise AssertionError(f"cannot convert {inp}")

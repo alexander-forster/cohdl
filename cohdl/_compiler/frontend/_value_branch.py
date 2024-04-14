@@ -19,6 +19,16 @@ class _Redirect:
         self.target = target
 
         if isinstance(source, TypeQualifier):
+            try:
+                # try to construct target type from source to check,
+                # that they are compatible
+                target.type(TypeQualifier.decay(source))
+            except Exception as err:
+                err.add_note(
+                    f"at least one possible source of this expression is not compatible with the target (source={source})"
+                )
+                raise
+
             self.source = source
         else:
             self.source = target.type(source)
