@@ -956,10 +956,16 @@ class SyncFlag:
                 ), "std.SyncFlag with delay cannot be set and cleared in the same context"
                 at_end_of_context(self._impl_rx_delayline)
 
+            # return True first time context is detected so
+            # higher level abstractions can define additional logic
+            return True
         else:
             assert tx_ctx is self._tx_ctx, "std.SyncFlag set in more than one context"
+            return False
 
-    def _impl_tx_delay(self):
+    def _impl_tx_delay(
+        self,
+    ):
         # tx delay is implemented in rx_ctx
 
         rx_ctx = SequentialContext.current()
@@ -973,12 +979,18 @@ class SyncFlag:
                 ), "std.SyncFlag with delay cannot be set and cleared in the same context"
                 at_end_of_context(self._impl_tx_delayline)
 
+            # return True first time context is detected so
+            # higher level abstractions can define additional logic
+            return True
         else:
             assert rx_ctx is self._rx_ctx, "std.SyncFlag set in more than one context"
+            return False
 
     def __init__(self, *, name="sync_flag", delay=None, tx_delay=None, rx_delay=None):
         if delay is not None:
-            assert tx_delay is rx_delay is None
+            assert (
+                tx_delay is rx_delay is None
+            ), "tx_delay/rx_delay cannot be set when delay is specified"
             self._tx_delay = delay
             self._rx_delay = delay
         else:
@@ -1095,6 +1107,90 @@ class Fifo(Template[_FifoArgs]):
     _elemtype_: _FifoArgs.elemtype
     _count_: _FifoArgs.count
 
+    async def _impl_sync_read_index(self):
+        if self._sync_flag.is_clear():
+            self._buf_write_index <<= self._set_write_index
+            self._read_index <<= self._buf_read_index
+            self._sync_flag.set()
+
+    async def _impl_sync_write_index(self):
+        if self._sync_flag.is_set():
+            self._buf_read_index <<= self._set_read_index
+            self._write_index <<= self._buf_write_index
+            self._sync_flag.clear()
+
+    @_intrinsic
+    def _cmp_full(self):
+        if not self._sync_contexts:
+            return self._full
+
+        ctx = SequentialContext.current()
+
+        if ctx is None:
+            return self._full
+
+        if ctx is self._sync_flag._tx_ctx:
+            return self._full_in_sender
+
+        if ctx is self._sync_flag._rx_ctx:
+            return self._full_in_receiver
+
+        if ctx is self._full_indirect_owner:
+            return self._full_indirect
+
+        at_end_of_context(self._impl_full_indirect)
+        self._full_indirect = Signal[Bit](name=self._full_indirect_name)
+        return self._full_indirect
+
+    @_intrinsic
+    def _cmp_empty(self):
+        if not self._sync_contexts:
+            return self._empty
+
+        ctx = SequentialContext.current()
+
+        if ctx is None:
+            return self._empty
+
+        if ctx is self._sync_flag._tx_ctx:
+            return self._empty_in_sender
+
+        if ctx is self._sync_flag._rx_ctx:
+            return self._empty_in_receiver
+
+        if ctx is self._empty_indirect_owner:
+            return self._empty_indirect
+
+        at_end_of_context(self._impl_empty_indirect)
+        self._empty_indirect = Signal[Bit](name=self._empty_indirect_name)
+        return self._empty_indirect
+
+    async def _impl_full_indirect(self):
+        with always:
+            ctx = SequentialContext.current()
+
+            if ctx is self._sync_flag._tx_ctx:
+                self._full_indirect <<= self._full_in_sender
+            elif ctx is self._sync_flag._rx_ctx:
+                self._full_indirect <<= self._full_in_receiver
+            else:
+                self._full_indirect <<= self._full
+
+    async def _impl_empty_indirect(self):
+        with always:
+            ctx = SequentialContext.current()
+
+            if ctx is self._sync_flag._tx_ctx:
+                self._empty_indirect <<= self._empty_in_sender
+            elif ctx is self._sync_flag._rx_ctx:
+                self._empty_indirect <<= self._empty_in_receiver
+            else:
+                self._empty_indirect <<= self._empty
+
+    #
+    #
+    #
+
     def _next_index(self, index):
         if is_pow_two(self._max_index + 1):
             return index + 1
@@ -1105,22 +1201,84 @@ class Fifo(Template[_FifoArgs]):
     def __len__(self):
         return self._count_
 
-    def __init__(self, name="fifo"):
+    def __init__(self, name="fifo", delay=None, rx_delay=None, tx_delay=None):
         count = self._count_
+        self._max_index = count - 1
+        CounterType = Unsigned.upto(self._max_index)
+
+        if delay is not None:
+            assert (
+                tx_delay is rx_delay is None
+            ), "tx_delay/rx_delay cannot be set when delay is specified"
+            self._tx_delay = delay
+            self._rx_delay = delay
+        else:
+            self._tx_delay = tx_delay if tx_delay is not None else 0
+            self._rx_delay = rx_delay if rx_delay is not None else 0
+
+        self._sync_contexts = self._rx_delay != 0 or self._tx_delay != 0
 
         with prefix(name) as p:
             self._mem = Signal[Array[self._elemtype_, count]](name=p.name("mem"))
-            self._max_index = count - 1
 
-            self._write_index = Signal[Unsigned.upto(self._max_index)](
-                0, name=p.name("wr_index")
-            )
-            self._read_index = Signal[Unsigned.upto(self._max_index)](
-                0, name=p.name("rd_index")
-            )
+            self._write_index = Signal[CounterType](0, name=p.name("wr_index"))
+            self._read_index = Signal[CounterType](0, name=p.name("rd_index"))
 
             self._empty = Signal[Bit](name=p.name("empty"))
             self._full = Signal[Bit](name=p.name("full"))
+
+            if self._sync_contexts:
+                self._sync_flag = SyncFlag(
+                    name="sync", rx_delay=self._rx_delay, tx_delay=self._tx_delay
+                )
+
+                self._set_write_index = Signal[CounterType](
+                    0, name=p.name("set_wr_index")
+                )
+
+                self._set_read_index = Signal[CounterType](
+                    0, name=p.name("set_rd_index")
+                )
+
+                self._buf_write_index = Signal[CounterType](
+                    0, name=p.name("buf_wr_index")
+                )
+
+                self._buf_read_index = Signal[CounterType](
+                    0, name=p.name("buf_rd_index")
+                )
+
+                self._full_in_sender = Signal[Bit](name=p.name("full_in_sender"))
+                self._empty_in_sender = Signal[Bit](name=p.name("empty_in_sender"))
+                self._full_in_receiver = Signal[Bit](name=p.name("full_in_receiver"))
+                self._empty_in_receiver = Signal[Bit](name=p.name("empty_in_receiver"))
+
+                self._full_indirect_name = p.name("full_indirect")
+                self._empty_indirect_name = p.name("empty_indirect")
+
+                self._full_indirect_owner = None
+                self._empty_indirect_owner = None
+
+                @concurrent
+                def logic():
+                    self._full_in_sender <<= (
+                        self._next_index(self._set_write_index) == self._read_index
+                    )
+
+                    self._empty_in_sender <<= self._set_write_index == self._read_index
+
+                    self._full_in_receiver <<= (
+                        self._next_index(self._write_index) == self._set_read_index
+                    )
+
+                    self._empty_in_receiver <<= (
+                        self._write_index == self._set_read_index
+                    )
+
+            else:
+                a = a = 0
+                self._set_write_index = self._write_index
+                self._set_read_index = self._read_index
 
         @concurrent
         def logic():
@@ -1128,20 +1286,28 @@ class Fifo(Template[_FifoArgs]):
             self._full <<= self._next_index(self._write_index) == self._read_index
 
     def push(self, data):
+        if self._sync_contexts:
+            if self._sync_flag._impl_rx_delay():
+                at_end_of_context(self._impl_sync_read_index)
+
         assert not self._full, "writing to full fifo"
-        self._mem[self._write_index] <<= data
-        self._write_index <<= self._next_index(self._write_index)
+        self._mem[self._set_write_index] <<= data
+        self._set_write_index <<= self._next_index(self._set_write_index)
 
     def pop(self):
+        if self._sync_contexts:
+            if self._sync_flag._impl_tx_delay():
+                at_end_of_context(self._impl_sync_write_index)
+
         assert not self._empty, "reading from empty fifo"
-        self._read_index <<= self._next_index(self._read_index)
-        return self._mem[self._read_index]
+        self._set_read_index <<= self._next_index(self._set_read_index)
+        return self._mem[self._set_read_index]
 
     def front(self):
-        return self._mem[self._read_index]
+        return self._mem[self._set_read_index]
 
     def empty(self):
-        return self._empty
+        return self._cmp_empty()
 
     def full(self):
-        return self._full
+        return self._cmp_full()

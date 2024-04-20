@@ -722,7 +722,6 @@ class _SignalAlias(Statement):
     def visit_objects(self, operation: Callable): ...
 
     def copy(self) -> _SignalAlias:
-        print(f"ALIAS {id(self.signal):x} : {id(self.replacement):x}")
         return _SignalAlias(self.signal, self.replacement)
 
     def update_transitions(self, state_map: IdMap):

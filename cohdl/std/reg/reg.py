@@ -1553,20 +1553,18 @@ class Memory(AddrRange):
             return self._mem[waddr]
 
     async def _cohdlstd_impl_write(self, addr, data, mask):
-        waddr = Variable(self._register_tools_._as_word_addr_(self._wr_addr))
+        waddr = Variable(self._register_tools_._as_word_addr_(addr))
 
         if self._mask_mode is self.MaskMode.IGNORE:
-            self._mem[waddr] <<= self._wr_data
+            self._mem[waddr] <<= data
         elif self._mask_mode is self.MaskMode.IMMEDIATE:
-            self._mem[waddr] <<= std.apply_mask(
-                self._mem[waddr], self._wr_data, self._wr_mask
-            )
+            self._mem[waddr] <<= mask.apply(self._mem[waddr], data)
         elif self._mask_mode is self.MaskMode.READBACK:
             prev_val = Signal(self._mem[waddr])
             await true
-            self._mem[waddr] <<= std.apply_mask(prev_val, self._wr_data, self._wr_mask)
+            self._mem[waddr] <<= mask.apply(prev_val, data)
         elif self._mask_mode is self.MaskMode.SPLIT_WORDS:
-            unit_mask = self._wr_mask
+            unit_mask = mask.as_vector(self._word_width_())
 
             if not self._allow_unaligned:
                 for unit_nr in range(self._word_stride):
@@ -1574,12 +1572,10 @@ class Memory(AddrRange):
                     left_bit = right_bit + self._unit_width - 1
 
                     if unit_mask[unit_nr * self._unit_width]:
-                        self._mem_list[unit_nr][waddr] <<= self._wr_data[
-                            left_bit:right_bit
-                        ]
+                        self._mem_list[unit_nr][waddr] <<= data[left_bit:right_bit]
             else:
                 stride_cnt = int_log_2(self._word_stride)
-                stride_bits = self._wr_addr.lsb(stride_cnt).unsigned
+                stride_bits = addr.lsb(stride_cnt).unsigned
 
                 addr_list = [
                     Variable[base_type(waddr)]() for _ in range(self._word_stride)
@@ -1604,7 +1600,7 @@ class Memory(AddrRange):
 
                             msb = lsb + self._unit_width - 1
 
-                            data_list[unit_nr] @= self._wr_data[msb:lsb]
+                            data_list[unit_nr] @= data[msb:lsb]
                             mask_list[unit_nr] @= unit_mask[lsb]
 
                 for unit_nr in range(self._word_stride):
