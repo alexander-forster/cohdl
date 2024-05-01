@@ -298,6 +298,15 @@ class RegisterObject(std.Template[GenericArg]):
     def _word_width_(cls):
         return cls._register_tools_._word_width_
 
+    def _contains_addr_(self, addr: Unsigned):
+        global_offset = self._global_offset_
+        unit_count = self._unit_count_()
+
+        if std.is_pow_two(unit_count) and global_offset % unit_count == 0:
+            return addr.msb(rest=std.int_log_2(unit_count)).unsigned == global_offset
+        else:
+            return global_offset <= addr < (global_offset + self._unit_count_())
+
     def _basic_read_(self, addr, meta):
         return Null
 

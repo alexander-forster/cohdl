@@ -976,6 +976,13 @@ class VhdlScope:
             assert obj.get_value() is not None
             return "integer"
 
+        if issubclass(obj, str):
+            return "string"
+        if issubclass(obj, bool):
+            return "boolean"
+        if issubclass(obj, int):
+            return "integer"
+
         raise AssertionError(f"cannot format {obj}")
 
     def format_value(self, obj, target_hint=None, constrain=False):

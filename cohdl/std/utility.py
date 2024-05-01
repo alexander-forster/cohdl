@@ -237,13 +237,13 @@ class Array(Template[_ArrayArgs], AssignableType):
             for index in range(self._count_):
                 self[index]._assign_(source, mode)
 
-    def __init__(self, val=None, *, name=None, _qualifier_=Signal):
+    def __init__(self, val=None, *, name=None, _qualifier_=Signal, attributes=None):
         elem_width = count_bits(self._elemtype_)
 
         if val is None or val is Null or val is Full:
             self._content = _qualifier_[
                 CohdlArray[BitVector[elem_width], self._count_]
-            ](val, name=name)
+            ](val, name=name, attributes=attributes)
         else:
             assert isinstance(
                 val, (list, tuple)
@@ -271,7 +271,7 @@ class Array(Template[_ArrayArgs], AssignableType):
 
             self._content = _qualifier_[
                 CohdlArray[BitVector[elem_width], self._count_]
-            ](default_as_bitvector, name=name)
+            ](default_as_bitvector, name=name, attributes=attributes)
 
     @_intrinsic
     def __len__(self):

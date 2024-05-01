@@ -155,6 +155,11 @@ class RegisterTools(Generic[W]):
             Returns the number of bits in a register word.
             """
 
+        def _contains_addr_(self, addr: Unsigned) -> bool:
+            """
+            Returns True when the given addr is covered by this register object.
+            """
+
         def _basic_read_(self, addr: Unsigned, meta) -> BitVector:
             """
             This method is called by the bus master for every read access
