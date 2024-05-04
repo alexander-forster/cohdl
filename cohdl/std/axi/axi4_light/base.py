@@ -342,12 +342,12 @@ class Axi4Light:
         async def proc_read():
             while True:
                 request = await self.await_read_request()
+                assert isinstance(request.addr, cohdl.Signal)
 
                 result = cohdl.Variable[cohdl.BitVector[32]](cohdl.Null)
 
                 for reg in readable_regs:
                     if reg._contains_addr_(request.addr.unsigned):
-                        assert isinstance(request.addr, cohdl.Signal)
                         result @= await as_awaitable(
                             reg._basic_read_, request.addr.unsigned, None
                         )
@@ -360,11 +360,11 @@ class Axi4Light:
         async def proc_write():
             while True:
                 request = await self.await_write_request()
+                assert isinstance(request.addr, cohdl.Signal)
                 mask = cohdl.Variable(stretch(request.strb, 8))
 
                 for reg in writable_regs:
                     if reg._contains_addr_(request.addr.unsigned):
-                        assert isinstance(request.addr, cohdl.Signal)
                         await as_awaitable(
                             reg._basic_write_,
                             request.addr.unsigned,

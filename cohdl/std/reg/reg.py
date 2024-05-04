@@ -303,9 +303,11 @@ class RegisterObject(std.Template[GenericArg]):
         unit_count = self._unit_count_()
 
         if std.is_pow_two(unit_count) and global_offset % unit_count == 0:
-            return addr.msb(rest=std.int_log_2(unit_count)).unsigned == global_offset
+            return addr.msb(rest=std.int_log_2(unit_count)).unsigned == (
+                global_offset // unit_count
+            )
         else:
-            return global_offset <= addr < (global_offset + self._unit_count_())
+            return global_offset <= addr < (global_offset + unit_count)
 
     def _basic_read_(self, addr, meta):
         return Null

@@ -129,7 +129,6 @@ class IrGenerator:
 
         return open_blocks
 
-    # TODO: refactor this
     _break_result: list[ir.CodeBlock] = []
     _continue_result: list[ir.CodeBlock] = []
 
@@ -263,96 +262,6 @@ class IrGenerator:
             orelse = inp._orelse
 
             open_blocks = self.apply(test, open_blocks=open_blocks)
-
-            if body.returns() or orelse.returns():
-                # TODO: check if return from while possible
-                assert (
-                    not body.contains_break() and not orelse.contains_break()
-                ), "mixing break and return in same if statement not supported"
-                assert (
-                    not body.contains_continue() and not orelse.contains_continue()
-                ), "mixing contains_continue and return in same if statement not supported"
-
-                result_blocks = []
-
-                for block in open_blocks:
-                    code_body = ir.CodeBlock([], parent=None)
-                    code_orelse = ir.CodeBlock([], parent=None)
-
-                    block.append(ir.If(test.result(), code_body, code_orelse))
-
-                    # add all open codeblocks (code blocks that are not completely translated) from
-                    # both if-branches to the result list
-                    # code blocks that end in a return statement are filtered out since they are not returned by apply
-                    result_blocks.extend(self.apply(body, open_blocks=[code_body]))
-                    result_blocks.extend(self.apply(orelse, open_blocks=[code_orelse]))
-
-                return result_blocks
-
-            if body.contains_break() or orelse.contains_break():
-                if body.contains_break():
-                    assert orelse.empty() or orelse.contains_continue()
-                if orelse.contains_break():
-                    assert body.empty() or body.contains_continue()
-
-                transition_blocks = []
-
-                for block in open_blocks:
-                    code_body = ir.CodeBlock([], parent=block)
-                    code_orelse = ir.CodeBlock([], parent=block)
-
-                    block.append(ir.If(test.result(), code_body, code_orelse))
-
-                    open_body = self.apply(body, open_blocks=[code_body])
-                    open_orelse = self.apply(orelse, open_blocks=[code_orelse])
-
-                    # while loop containing the if statement will add transitions to the begin of the
-                    # loop to all blocks in this list
-                    # blocks containing break/continue statements are treated separately because they don't
-                    # continue at the start of the loop
-                    if not body.contains_continue() and not body.contains_break():
-                        for x in open_body:
-                            transition_blocks.append(x)
-                    if not orelse.contains_continue() and not orelse.contains_break():
-                        for x in open_orelse:
-                            transition_blocks.append(x)
-
-                return transition_blocks
-
-            if body.contains_continue() or orelse.contains_continue():
-                if body.contains_continue():
-                    assert orelse.empty()
-                if orelse.contains_continue():
-                    assert body.empty()
-
-                transition_blocks = []
-
-                for block in open_blocks:
-                    code_body = ir.CodeBlock([], parent=block)
-                    code_orelse = ir.CodeBlock([], parent=block)
-
-                    block.append(ir.If(test.result(), code_body, code_orelse))
-
-                    open_body = self.apply(body, open_blocks=[code_body])
-                    open_orelse = self.apply(orelse, open_blocks=[code_orelse])
-
-                    # while loop containing the if statement will add transitions to the begin of the
-                    # loop to all blocks in this list
-                    # blocks containing break/continue statements are treated separately because they don't
-                    # continue at the start of the loop
-                    if not body.contains_continue() and not body.contains_break():
-                        for x in open_body:
-                            transition_blocks.append(x)
-                    if not orelse.contains_continue() and not orelse.contains_break():
-                        for x in open_orelse:
-                            transition_blocks.append(x)
-
-                return transition_blocks
-
-            # assert (
-            #    not body.contains_continue() and not orelse.contains_continue()
-            # ), "continue can only be used in an if statement, when the other branch ends with a break statement"
-
             ret_blocks: IdMap[Any, ir.CodeBlock] = IdMap()
 
             for block in open_blocks:
@@ -370,9 +279,7 @@ class IrGenerator:
                 open_orelse = self.apply(orelse, open_blocks=[code_orelse])
 
                 #
-                #
                 ##
-                #
                 #
 
                 def any_transition(root, blocks):
@@ -498,23 +405,17 @@ class IrGenerator:
                 assert len(result_list) == 1
 
                 if isinstance(inp.result(), _boolean._BooleanLiteral):
-                    if inp.result() is _boolean.true:
-                        # cohdl true does not require If Statement because
-                        # it is always true
-                        new_state.append(
-                            ir.CodeBlock([], parent=new_state.open_block())
-                        )
-                    else:
+                    # boolean literals do not require If Statements
+
+                    if inp.result() is _boolean.false:
                         # waiting for cohdl.false stops the statemachine,
                         # the following code is never executed
-                        new_state.append(
-                            ir.CodeBlock([], parent=new_state.open_block())
-                        )
-
                         # return empty list, there are no open blocks after await false
                         # because execution stops at that point
                         return []
-                else:
+                    
+                    assert inp.result() is _boolean.true, f"internal error: expected boolean literal, got {inp.result()}"
+                else: 
                     if_body = ir.CodeBlock([], parent=new_state.open_block())
                     new_state.append(
                         ir.If(
@@ -531,6 +432,10 @@ class IrGenerator:
                 return self.apply(inp.bound_statements(), open_blocks=open_blocks)
 
         if isinstance(inp, out.While):
+            assert (
+                inp._test.result() is not False
+            ), "internal error: while loops with always false argument should be filtered in the previous compiler stage"
+
             ctx = ir.StatemachineContext.get()
 
             if ctx.at_start():
@@ -557,110 +462,75 @@ class IrGenerator:
             # actual code of while loop
             open_blocks = self._convert_bound(inp, [new_state._open_block])
 
-            assert len(open_blocks) == 1
+            assert (
+                len(open_blocks) == 1
+            ), "internal error: maybe caused by await expression in argument of while loop"
             open_block = open_blocks[0]
 
-            if inp.uses_break():
-                body = ir.CodeBlock([], parent=open_block)
+            body = ir.CodeBlock([], parent=open_block)
+            ret_blocks = []
 
-                len_before = len(IrGenerator._break_result)
+            prev_continue_result = IrGenerator._continue_result
+            prev_break_result = IrGenerator._break_result
 
+            continue_result = []
+            break_result = []
+
+            IrGenerator._continue_result = continue_result
+            IrGenerator._break_result = break_result
+
+            try:
                 # write converted code into body of if statement
                 for open_body in self.apply(inp._body, open_blocks=[body]):
                     # add transition to start of while loop
-                    # required, if loop is made up of multiple states
                     # add to front so the transition can be overwritten
                     # by contained await expressions
                     open_body.addfront(ir._Transition(new_state))
+            finally:
+                IrGenerator._continue_result = prev_continue_result
+                IrGenerator._break_result = prev_break_result
 
-                assert len(IrGenerator._break_result) == len_before + 1
+            for continue_block in continue_result:
+                assert (
+                    continue_block.common_block([continue_block, body]) is None
+                ), "continue-statement cannot be defined in first state of while-loop (would lead to infinite recursion)"
 
-                if inp.uses_continue():
-                    continue_block_list = IrGenerator._continue_result.pop()
-                    assert len(continue_block_list) == 1
-                    continue_block = continue_block_list[0]
+                if inp._test.result() is True:
+                    # for while loops with constant condition
+                    # body is the first block in the loop, add statements until
+                    # first state change in place of continue
+                    continue_block.append(body)
+                else:
+                    # while loops with runtime variable conditions, continue-statements behave like
+                    # break statements if the condition is false. Otherwise the behavior is the same
+                    # as a while loop with constant True condition.
 
-                    common = continue_block.common_block([continue_block, body])
+                    continue_blocks = self.apply(inp._test, [continue_block])
 
-                    # check, if continue_block is contained in body
-                    # if not add statements until first state change to continue_block
-                    if continue_block.common_block([continue_block, body]) is None:
-                        # body is the first block in the loop, add statements until
-                        # first state change in place of continue
-                        copied_body = body.copy(continue_block)
-                        copied_body._fix_alias()
-                        continue_block.append(copied_body)
+                    for block in continue_blocks:
+                        break_block = ir.CodeBlock([], parent=continue_block)
+                        block.append(ir.If(inp._test.result(), body, break_block))
+                        ret_blocks.append(break_block)
 
-                ret_blocks = []
-                # codeblocks, that end with a break statement
-                # are the new open blocks to be populated after the while loop
-                for break_block in IrGenerator._break_result.pop():
-                    open_block.append(body)
-                    open_block.get_parent_state().set_open_block(break_block)
-                    ret_blocks.append(break_block)
+            # codeblocks, that end with a break statement
+            # are the new open blocks to be populated after the while loop
+            ret_blocks.extend(break_result)
 
+            if inp._test.result() is True:
+                # while loop with constant, true condition
+                # exits via break/return are handled earlier
+                open_block.append(body)
                 return ret_blocks
-
-            if inp.uses_continue():
-                len_before = len(IrGenerator._continue_result)
-
-                # write converted code into body of if statement
-                for open_body in self.apply(inp._body, open_blocks=[open_block]):
-                    # add transition to start of while loop
-                    # required, if loop is made up of multiple states
-                    # add to front so the transition can be overwritten
-                    # by contained await expressions
-                    open_body.addfront(ir._Transition(new_state))
-
-                # ensure, that exactly one continue statement was contained in inp._body
-                assert len(IrGenerator._continue_result) == len_before + 1
-
-                # get the codeblock that contained the continue statement
-                for continue_block in IrGenerator._continue_result.pop():
-                    assert (
-                        ir.CodeBlock.common_block([continue_block, open_block]) is None
-                    ), f"cannot generate statemachine for coroutine '{ctx._name}', continue statement in first state of while-loop leeds to infinite recursion"
-                    # open_block contains code until first await/while statement
-                    # replace continue with a copy
-                    copied_body = open_block.copy(continue_block)
-                    copied_body._fix_alias()
-                    continue_block.append(copied_body)
-
-                class _InvalidStatement(ir.Statement):
-                    def dump(self):
-                        return "InvalidStatement"
-
-                # while loop containing continue without break
-                # can not terminate, no more following statements can be added
-                # set open block to an invalid state to ensure, that it is not used
-                # and return an empty list
-                open_block.get_parent_state().set_open_block(
-                    ir.CodeBlock([_InvalidStatement()], parent=None)
-                )
-
-                return []
-
-            ret_blocks = []
-
-            body = ir.CodeBlock([], parent=open_block)
-            orelse = ir.CodeBlock([], parent=open_block)
-
-            # write converted code into body of if statement
-            for open_body in self.apply(inp._body, open_blocks=[body]):
-                # add transition to start of while loop
-                # add to front so the transition can be overwritten
-                # by contained await expressions
-                open_body.addfront(ir._Transition(new_state))
-
-            open_block.append(ir.If(inp._test.result(), body, orelse))
-            open_block.get_parent_state().set_open_block(orelse)
-            ret_blocks.append(orelse)
-            return ret_blocks
+            else:
+                orelse = ir.CodeBlock([], parent=open_block)
+                open_block.append(ir.If(inp._test.result(), body, orelse))
+                open_block.get_parent_state().set_open_block(orelse)
+                return [orelse, *ret_blocks]
 
         if isinstance(inp, out.Continue):
             # store list of open blocks
             # so while loop can replace continue with statements
-            IrGenerator._continue_result.append(open_blocks)
+            IrGenerator._continue_result.extend(open_blocks)
 
             # no open blocks after continue since continue is always the last
             # statement in a codeblock
@@ -669,7 +539,7 @@ class IrGenerator:
         if isinstance(inp, out.Break):
             # store list of open blocks
             # so while loop can continue after break
-            IrGenerator._break_result.append(open_blocks)
+            IrGenerator._break_result.extend(open_blocks)
 
             # no open blocks after break since break is always the last
             # statement in a codeblock
@@ -815,8 +685,10 @@ class IrGenerator:
                         code_block = ir.CodeBlock([], parent=parent_block)
                         converted = self.apply(code, open_blocks=[code_block])
 
-                        assert len(converted) == 1
-                        assert converted[0] is code_block
+                        if len(converted) != 1 or converted[0] is not code_block:
+                            # generating case-when not possible, when a branch contains a transition
+                            # return None to fall back to if-else implementation
+                            return None
 
                         ret.append(code_block)
                     return ret
@@ -829,6 +701,9 @@ class IrGenerator:
                     if default is None:
                         for new_block in new_blocks:
                             ir_bodies = gen_bodies(new_block)
+
+                            if ir_bodies is None:
+                                return None
 
                             new_block.append(
                                 ir.CaseWhen(
@@ -845,10 +720,13 @@ class IrGenerator:
                             default_body = ir.CodeBlock([], parent=block)
                             converted = self.apply(default, open_blocks=[default_body])
 
-                            assert len(converted) == 1
-                            assert converted[0] is default_body
+                            if len(converted) != 1 or converted[0] is not default_body:
+                                return None
 
                             ir_bodies = gen_bodies(new_block)
+
+                            if ir_bodies is None:
+                                return None
 
                             new_block.append(
                                 ir.CaseWhen(
@@ -867,6 +745,10 @@ class IrGenerator:
                 inp: out.CondSelect,
                 open_blocks: list[ir.CodeBlock],
             ):
+                if inp.returns():
+                    # fallback to if-else implementation
+                    return None
+
                 lhs_map = IdMap()
                 rhs_map = IdMap()
 
@@ -876,7 +758,14 @@ class IrGenerator:
                 bodies = []
 
                 for expr, body in inp._branches:
+                    if body.contains_break() or body.contains_continue():
+                        # handling of state transitions and break/continue statements is complex
+                        # better opt out of case-when statement and instead use already implemented
+                        # if-else chain
+                        return None
+
                     if isinstance(expr, out.Compare) and expr._op is expr.Operator.EQ:
+
                         lhs = expr._lhs
                         rhs = expr._rhs
 
@@ -943,7 +832,7 @@ class IrGenerator:
             for branch in inp._branches[::-1]:
                 expr, code = branch
 
-                rewritten = out.If(expr, code, rewritten)
+                rewritten = out.If(expr, code, out.CodeBlock([rewritten]))
 
             return self.apply(rewritten, open_blocks=open_blocks)
 

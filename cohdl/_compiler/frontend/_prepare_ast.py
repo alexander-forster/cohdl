@@ -48,6 +48,7 @@ from cohdl.utility.virtual_traceback import VirtualFrame
 from ._value_branch import _MergedBranch, ObjTraits
 from . import _prepare_ast_out as out
 from cohdl._core._boolean import _Boolean, _BooleanLiteral
+from cohdl._core._boolean import true as cohdl_true
 
 from cohdl._core._collect_ast_and_scope import (
     InstantiatedFunction,
@@ -82,6 +83,11 @@ def _make_comparable(lhs, rhs):
 #
 
 
+class _Noreturn:
+    def __init__(self, reason):
+        self.reason = reason
+
+
 class _ReturnStack:
     class _NewEntry:
         def __init__(self, stack: _ReturnStack, value, aug_assign) -> None:
@@ -111,11 +117,19 @@ _return_stack = _ReturnStack()
 #
 #
 
+_noreturn_top_sequential = _Noreturn("cannot exit from sequential context")
+_noreturn_top_concurrent = _Noreturn("cannot exit from concurrent context")
+_noreturn_statemachine = _Noreturn("cannot exit from state machine")
+
 
 class PrepareAst:
     @staticmethod
     def convert_sequential(ctx: Context) -> out.Sequential:
-        conv = PrepareAst(ctx.instantiate_fn(), ContextType.SEQUENTIAL)
+        conv = PrepareAst(
+            ctx.instantiate_fn(),
+            ContextType.SEQUENTIAL,
+            noreturn=_noreturn_top_sequential,
+        )
         call = conv.convert_call()
 
         assert isinstance(call, out.Call)
@@ -131,7 +145,11 @@ class PrepareAst:
 
     @staticmethod
     def convert_concurrent(ctx: Context) -> out.Concurrent:
-        conv = PrepareAst(ctx.instantiate_fn(), ContextType.CONCURRENT)
+        conv = PrepareAst(
+            ctx.instantiate_fn(),
+            ContextType.CONCURRENT,
+            noreturn=_noreturn_top_concurrent,
+        )
         call = conv.convert_call()
 
         assert isinstance(call, out.Call)
@@ -174,7 +192,7 @@ class PrepareAst:
         if isinstance(arg, _type_qualifier.TypeQualifier):
             assert not issubclass(
                 arg.type, cohdl.enum.Enum
-            ), "arg may not be used in boolean contexts"
+            ), "enum type may not be used in boolean contexts"
             return out.Boolean(out.Value(arg, bound))
 
         if isinstance(arg, (_BitSignalEvent, _BitSignalEventGroup)):
@@ -254,7 +272,7 @@ class PrepareAst:
         if isinstance(result, _CoroutineStep):
             fn_def = FunctionDefinition.from_coroutine(result.coro)
 
-            sub = self.subcall(fn_def, [], {})
+            sub = self.subcall(fn_def, [], {}, noreturn=_noreturn_statemachine)
             assert (
                 sub.result() is None
             ), "the coroutine handed to cohdl.coroutine_step should not return a value"
@@ -445,6 +463,7 @@ class PrepareAst:
         parent: PrepareAst | None = None,
         first_arg=None,
         mutable_scope=False,
+        noreturn: _Noreturn = None,
     ):
         self._last_apply_inp = None
 
@@ -458,6 +477,7 @@ class PrepareAst:
         self._fn_def = fn_def
         self._context = context
         self._parent = parent
+        self._noreturn = noreturn
 
         # copy scope dict so it can be modified during the compilation
         # without affection possible future compilations to the same function
@@ -560,9 +580,11 @@ class PrepareAst:
     def context_location(self):
         return self._fn_def.location()
 
-    def subcall(self, fn, args: list, kwargs: dict[str, Any]) -> out.Statement:
+    def subcall(
+        self, fn, args: list, kwargs: dict[str, Any], noreturn=None
+    ) -> out.Statement:
         if isinstance(fn, InstantiatedFunction):
-            return PrepareAst(fn, self._context, self).convert_call()
+            return PrepareAst(fn, self._context, self, noreturn=noreturn).convert_call()
 
         # TODO: cleanup
         is_builtin_method = type(fn) is type("".__eq__)
@@ -593,7 +615,7 @@ class PrepareAst:
             return self.convert_intrinsic(fn, args, kwargs)
         if isinstance(fn, out.FunctionDef):
             return PrepareAst(
-                fn.bind_args(args, kwargs), self._context, self
+                fn.bind_args(args, kwargs), self._context, self, noreturn=noreturn
             ).convert_call()
 
         if inspect.iscoroutinefunction(fn):
@@ -618,7 +640,7 @@ class PrepareAst:
             fn_def = fn
 
         return PrepareAst(
-            fn_def.bind_args(args, kwargs), self._context, self
+            fn_def.bind_args(args, kwargs), self._context, self, noreturn=noreturn
         ).convert_call()
 
     def convert_call(self) -> out.Statement | out.SelectWith:
@@ -1364,18 +1386,17 @@ class PrepareAst:
             ), "while loops with else statement are not supported"
 
             test = cast(out.Expression, self.apply(inp.test))
+            test = self.convert_boolean(test.result(), [test])
+
+            if test.result() is False:
+                # ignore the body of always false while loops
+                # treat them as a single clock delay for equivalence with
+                # runtime false while arguments
+                return out.Await(out.Value(cohdl_true, []), True, expr_before=[test])
 
             body = cast(out.CodeBlock, self.apply(inp.body))
 
             assert len(inp.orelse) == 0, "else branch of while loops is not supported"
-
-            if body.contains_break() or body.contains_continue():
-                assert not ObjTraits.runtime_variable(
-                    test.result()
-                ), "test condition of while loops containing break or continue statements must be constant"
-                assert bool(
-                    test.result()
-                ), "constant test condition of while loop must evaluate to true"
 
             return out.While(test, body)
 
@@ -1898,6 +1919,10 @@ class PrepareAst:
             return converted
 
         if isinstance(inp, ast.Return):
+            assert (
+                self._noreturn is None
+            ), f"return not allowed: {self._noreturn.reason}"
+
             if inp.value is None:
                 return out.Return(out.Value(None, []))
 

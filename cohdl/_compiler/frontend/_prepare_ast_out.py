@@ -213,10 +213,6 @@ class CodeBlock(Statement):
         contains_continue = False
 
         for stmt in stmts:
-            # ensure, that there are no statements after a break or continue
-            assert not contains_break, "unreachable statement after break"
-            assert not contains_continue, "unreachable statement after continue"
-
             if isinstance(stmt, CodeBlock):
                 self._stmts.extend(stmt.statements())
             else:
@@ -315,15 +311,6 @@ class If(Statement):
         self._test = test
         self._body = body
         self._orelse = orelse
-
-        if body.contains_break():
-            assert (
-                orelse.empty() or orelse.contains_continue()
-            ), "else branch of if statement containing a break expression must be empty or end with a continue statement"
-        elif orelse.contains_break():
-            assert (
-                body.empty() or body.contains_continue()
-            ), "body branch of if statement containing a break expression in its else branch must be empty or end with a continue statement"
 
         returns_always = self._body.returns_always() and self._orelse.returns_always()
         return_paths = self._body.return_paths() + self._orelse.return_paths()

@@ -144,7 +144,7 @@ class RegisterTools(Generic[W]):
 
         def _print_(self, *args, **kwargs): ...
         @classmethod
-        def _unit_cnt_(cls) -> int:
+        def _unit_count_(cls) -> int:
             """
             Returns the number of addressable units (bytes) in a register word.
             """
