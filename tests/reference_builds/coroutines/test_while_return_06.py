@@ -51,9 +51,13 @@ class test_while_return_06(cohdl.Entity):
                         pass
 
                     continue
+                    std.comment("UNREACHABLE")
+                    return
                 elif self.do_return == 2:
                     self.cnt_return <<= self.cnt_return + 2
                     return
+                    std.comment("UNREACHABLE")
+                    continue
                 else:
                     while CondWithSideEffect(
                         False, self.cnt_return, self.cnt_return + 3
@@ -63,6 +67,8 @@ class test_while_return_06(cohdl.Entity):
                         except:
                             raise
                     break
+                    std.comment("UNREACHABLE")
+                    return
 
         @std.sequential(std.Clock(self.clk), std.Reset(self.reset))
         async def proc():
@@ -130,8 +136,9 @@ class Unittest(unittest.TestCase):
         cocotb_util.run_cocotb_tests(test_while_return_06, __file__, self.__module__)
 
     def test_duplicate_lines(self):
+        compiled = std.VhdlCompiler.to_string(test_while_return_06)
         # test for a bug where the bound statements of the while condition was duplicated
         # (no runtime effect so tested using number of generated comments)
-        self.assertEqual(
-            std.VhdlCompiler.to_string(test_while_return_06).count("XXXXXXXXX"), 2
-        )
+        self.assertEqual(compiled.count("XXXXXXXXX"), 2)
+
+        self.assertEqual(compiled.count("UNREACHABLE"), 0)

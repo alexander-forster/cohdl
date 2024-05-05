@@ -704,10 +704,26 @@ class VhdlScope:
             # since they are not allowed in vhdl
             name = name.strip("_")
 
-            cnt = 0
-            base_name = name
-            while name.lower() in used_names:
-                cnt += 1
+            # avoid name collisions by appending counter to names
+            if name.lower() in used_names:
+                cnt = 1
+                base_name = name
+                name = base_name + str(cnt)
+
+                while name.lower() in used_names:
+                    cnt *= 2
+                    name = base_name + str(cnt)
+
+                step = cnt // 2
+
+                while step:
+                    name = base_name + str(cnt - step)
+
+                    if name.lower() not in used_names:
+                        cnt -= step
+
+                    step //= 2
+
                 name = base_name + str(cnt)
 
             decl.name = name
