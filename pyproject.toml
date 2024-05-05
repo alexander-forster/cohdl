@@ -1,6 +1,6 @@
 [project]
 name="cohdl"
-version="0.2"
+version="0.2.1"
 
 authors = [
     { name = "Alexander Forster", email = "alexander.forster123@gmail.com" }
