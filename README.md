@@ -58,7 +58,7 @@ For a working example of this checkout [cohdl_xil](https://github.com/alexander-
 CoHDL requires Python3.10 or higher and has no further dependencies. You can install it by running
 
 ```shell
-python3.11 -m pip install git+https://github.com/alexander-forster/cohdl.git#egg=cohdl
+python3 -m pip install cohdl
 ```
 
-in a terminal window. You should then be able to run the code snippets, found in the introduction directory and implement own designs.
+in a terminal window. You should then be able to run the code snippets, found in the introduction directory of the git repository and implement own designs.
