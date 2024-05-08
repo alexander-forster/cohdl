@@ -1,1 +1,0 @@
-This directory gives a short introduction to CoHDL. `with_vhdl` contains the same jupyter notebooks plus the generated VHDL representation.

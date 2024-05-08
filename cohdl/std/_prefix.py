@@ -111,7 +111,7 @@ class _NamedQualifier:
 
         if is_primitive_type(T) or T is bool or T is int:
             name = self.prefix.name(kwargs.get("name", None))
-            return self.qualifier[T](*args, **kwargs, name=name)
+            return self.qualifier[T](*args, **{**kwargs, "name": name})
         else:
             with self.prefix:
                 return T(

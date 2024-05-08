@@ -3,6 +3,11 @@
 CoHDL is a hardware description language embedded in Python. It translates a subset of Python into synthesizable VHDL.
 
 ---
+
+## examples/introduction
+
+You can find an introduction and many examples in this [documentation repository](https://github.com/alexander-forster/cohdl_documentation).
+
 ## features
 
 At its core CoHDLs language model is very similar to VHDL. Designs are made up of signals and variables built from types like `Bit` and `BitVector`. There are concurrent contexts, for expressions that would appear in the architecture scope of VHDL entities and sequential contexts equivalent to VHDL processes.
@@ -61,4 +66,4 @@ CoHDL requires Python3.10 or higher and has no further dependencies. You can ins
 python3 -m pip install cohdl
 ```
 
-in a terminal window. You should then be able to run the code snippets, found in the introduction directory of the git repository and implement own designs.
+in a terminal window. You should then be able to run the code snippets, found in the [introduction repository](https://github.com/alexander-forster/cohdl_documentation) and implement own designs.
