@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 
 from cohdl._core._type_qualifier import (
     TypeQualifierBase,
@@ -18,13 +19,14 @@ from cohdl._core import (
     expr_fn,
     AssignMode,
     always,
-    is_primitive_type,
+    expr,
 )
 
 from cohdl._core import Array as CohdlArray
 
 from ._core_utility import (
     Ref,
+    _Ref,
     Value,
     nop,
     Nonlocal,
@@ -47,6 +49,9 @@ from cohdl._core._intrinsic import _intrinsic
 
 from ._context import Duration, SequentialContext, concurrent, at_end_of_context
 from ._prefix import prefix, name, NamedQualifier
+from ._exception import StdExceptionHandler, RefQualifierFail
+
+std_name = name
 
 
 # a singleton only used internally in the std module
@@ -99,10 +104,7 @@ class Serialized(Template[_SerializedTemplateArgs], AssignableType):
             ), "elem type of source does not match elem type of target"
             self._raw._assign_(source._raw, mode)
         else:
-            assert self._elemtype_ is base_type(
-                source
-            ), "source type does not match elem type of target"
-            self._raw._assign_(to_bits(source), mode)
+            self._raw._assign_(to_bits(Value[self._elemtype_](source)), mode)
 
     def __init__(self, raw=None, _qualifier_=Value, _use_as_raw=False):
         elem_type = self._elemtype_
@@ -187,6 +189,12 @@ def as_writeable_vector(*parts, default=None):
 #
 
 
+class _ArrayNestingMode(enum.Enum):
+    NONE = enum.auto()
+    COHDL_ARRAY = enum.auto()
+    STD_ARRAY = enum.auto()
+
+
 class _ArrayArgs:
     def __init__(self, args: tuple):
         assert (
@@ -196,6 +204,13 @@ class _ArrayArgs:
         elem_type, elem_cnt = args
         self.elem_type = elem_type
         self.elem_cnt = int(elem_cnt)
+
+        if issubclass(self.elem_type, CohdlArray):
+            self.nesting = _ArrayNestingMode.COHDL_ARRAY
+        elif issubclass(self.elem_type, Array):
+            self.nesting = _ArrayNestingMode.STD_ARRAY
+        else:
+            self.nesting = _ArrayNestingMode.NONE
 
     def __hash__(self):
         return hash((self.elem_type, self.elem_cnt))
@@ -207,84 +222,294 @@ class _ArrayArgs:
 @_intrinsic
 def _check_array_defaults(defaults: list, elem_width: int):
     for nr, elem in enumerate(defaults):
-        assert not isinstance(
-            elem, TypeQualifierBase
-        ), f"default value at index {nr} is not compile time constant"
-
-        assert isinstance(
+        assert instance_check(
             elem, BitVector[elem_width]
         ), f"serialized type of default element {nr} ({type(elem)}) does not match type needed for array elements ({BitVector[elem_width]})"
+
+
+class _ArraySlice(AssignableType):
+    @staticmethod
+    def _slice_to_indices(inp: slice, max_len: int):
+        result = []
+
+        start = inp.start if inp.start is not None else 0
+        stop = inp.stop if inp.stop is not None else max_len
+        step = inp.step if inp.step is not None else 1
+
+        assert isinstance(start, int), "slice parameters must be integers"
+        assert isinstance(stop, int), "slice parameters must be integers"
+        assert isinstance(step, int), "slice parameters must be integers"
+
+        if stop == start:
+            result.append(start)
+        elif stop < start:
+            result.extend([*range(start, stop - 1, -1)][::step])
+        else:
+            result.extend([*range(start, stop + 1)][::step])
+
+        return result
+
+    @_intrinsic
+    def __init__(self, arr: Array, s: int | slice | tuple | list, indices_ready=False):
+        self._arr = arr
+
+        if indices_ready:
+            self._indices = s
+        else:
+            self._indices = []
+
+            if not isinstance(s, (tuple, list)):
+                s = (s,)
+
+            for elem in s:
+                if isinstance(elem, slice):
+                    self._indices.extend(self._slice_to_indices(elem, len(arr) - 1))
+                else:
+                    self._indices.append(elem)
+
+            for elem in self._indices:
+                if isinstance(elem, int):
+                    # check compile time constant indices for validity
+                    assert (
+                        0 <= elem < len(self._arr)
+                    ), f"index {elem} out of allowed range [0-{len(self._arr)-1}]"
+
+    def _getitem_single(self, key: int):
+        assert isinstance(
+            key, int
+        ), "index into array slice must be compile time constant"
+        return self._arr.get_elem(self._indices[key])
+
+    @_intrinsic
+    def _getitem_multiple(self, key: tuple | list | slice):
+        result_keys = []
+
+        for elem in key:
+            if isinstance(elem, int):
+                result_keys.append(self._indices[elem])
+            else:
+                assert isinstance(elem, slice)
+                result_keys.extend(
+                    [
+                        self._indices[subindex]
+                        for subindex in self._slice_to_indices(
+                            elem, len(self._indices) - 1
+                        )
+                    ]
+                )
+
+        return _ArraySlice(self._arr, result_keys, indices_ready=True)
+
+    def __getitem__(self, key):
+        if not isinstance(key, (tuple, list, slice)):
+            return self._getitem_single(key)
+        else:
+            return self._getitem_multiple(key)
+
+    @_intrinsic
+    def __len__(self):
+        return len(self._indices)
+
+    def _assign_(self, source, mode: AssignMode) -> None:
+        if isinstance(source, _ArraySlice):
+            assert len(self) == len(source), "source width does not match target width"
+
+            for target_index, src_index in zip(self._indices, source._indices):
+                self._arr.set_elem(target_index, source._arr[src_index], mode)
+        elif source is Null or source is Full:
+            for target_index in self._indices:
+                self._arr.set_elem(target_index, source, mode)
+        elif isinstance(source, dict):
+            for idx, elem in source.items():
+                self._arr.set_elem(self._indices[idx], elem, mode)
+        else:
+            assert isinstance(
+                source, (Array, CohdlArray, tuple, list)
+            ), "invalid source type of assignment"
+
+            assert len(self) == len(source), "source width does not match target width"
+
+            for index, src_elem in zip(self._indices, source):
+                self._arr.set_elem(index, src_elem, mode)
+
+    def get_elem(self, index, qualifier=Ref):
+        return self._arr.get_elem(self._indices[index], qualifier)
+
+    def set_elem(self, index, value):
+        return self._arr.set_elem(self._indices[index], value)
 
 
 class Array(Template[_ArrayArgs], AssignableType):
     _count_: _ArrayArgs.elem_cnt
     _elemtype_: _ArrayArgs.elem_type
+    _nesting_: _ArrayArgs.nesting
+
+    @classmethod
+    @_intrinsic
+    def _is_nested(cls):
+        return issubclass(cls._elemtype_, (Array, CohdlArray))
+
+    @classmethod
+    @_intrinsic
+    def _underlying_array_type(cls):
+        match cls._nesting_:
+            case _ArrayNestingMode.NONE:
+                elem_type = BitVector[count_bits(cls._elemtype_)]
+            case _ArrayNestingMode.COHDL_ARRAY:
+                elem_type = cls._elemtype_
+            case _ArrayNestingMode.STD_ARRAY:
+                elem_type = cls._elemtype_._underlying_array_type()
+
+        return CohdlArray[elem_type, cls._count_]
 
     def _assign_(self, source, mode: AssignMode) -> None:
-        if isinstance(source, (Array, list, CohdlArray)):
-            assert self._count_ == len(source)
+        if type(self) is type(source):
+            self._content._assign_(source._content, mode)
+        elif instance_check(source, (Array, list, tuple, CohdlArray)):
+            assert self._count_ == len(
+                source
+            ), "source width does not match target width"
 
             for index in range(self._count_):
-                self[index]._assign_(source[index], mode)
+                self.set_elem(index, source[index], mode)
+        elif isinstance(source, _ArraySlice):
+            assert self._count_ == len(
+                source
+            ), "source width does not match target width"
+
+            for index in range(self._count_):
+                self.set_elem(index, source._arr[source._indices[index]], mode)
+
         elif isinstance(source, dict):
             for index, val in source.items():
-                self[index]._assign_(val, mode)
+                self.set_elem(index, val, mode)
         else:
             assert (
                 source is Null or source is Full
             ), "invalid argument type for array assignment"
 
             for index in range(self._count_):
-                self[index]._assign_(source, mode)
+                self.set_elem(index, source, mode)
 
-    def __init__(self, val=None, *, name=None, _qualifier_=Signal, attributes=None):
-        elem_width = count_bits(self._elemtype_)
+    def __init__(
+        self, val=None, *, name=None, _qualifier_=Signal, attributes=None, _raw_val=None
+    ):
+        Underlying = self._underlying_array_type()
 
-        if val is None or val is Null or val is Full:
-            self._content = _qualifier_[
-                CohdlArray[BitVector[elem_width], self._count_]
-            ](val, name=name, attributes=attributes)
+        if _raw_val is not None:
+            # used internally to create a subarray
+            assert type(TypeQualifierBase.decay(_raw_val)) is Underlying
+            self._content = _raw_val
+        elif isinstance(_qualifier_, _Ref) and type(val) is type(self):
+            self._content = val._content
         else:
-            assert isinstance(
-                val, (list, tuple)
-            ), "default argument must be a list or a tuple"
-            assert (
-                len(val) <= self._count_
-            ), "to many default arguments for array ({} > {})".format(
-                len(val), self._count_
-            )
 
-            default_as_elemtype = [
-                (
-                    val_elem
-                    if isinstance(val_elem, self._elemtype_)
-                    else Value[self._elemtype_](val_elem)
+            if val is None or val is Null or val is Full:
+                init_val = val
+            else:
+                assert isinstance(
+                    val, (list, tuple, CohdlArray, Array)
+                ), "default argument must be a list or a tuple"
+                assert (
+                    len(val) <= self._count_
+                ), "to many default arguments for array ({} > {})".format(
+                    len(val), self._count_
                 )
-                for val_elem in val
-            ]
 
-            default_as_bitvector = [
-                to_bits(default_elem) for default_elem in default_as_elemtype
-            ]
+                if self._nesting_ is _ArrayNestingMode.COHDL_ARRAY:
+                    init_val = val
+                else:
+                    default_as_elemtype = [
+                        (
+                            val_elem
+                            if isinstance(val_elem, self._elemtype_)
+                            else Value[self._elemtype_](val_elem)
+                        )
+                        for val_elem in val
+                    ]
 
-            _check_array_defaults(default_as_bitvector, elem_width)
+                    if self._nesting_ is _ArrayNestingMode.STD_ARRAY:
+                        init_val = [elem._content for elem in default_as_elemtype]
+                    else:
+                        init_val = [
+                            to_bits(default_elem)
+                            for default_elem in default_as_elemtype
+                        ]
 
-            self._content = _qualifier_[
-                CohdlArray[BitVector[elem_width], self._count_]
-            ](default_as_bitvector, name=name, attributes=attributes)
+                        _check_array_defaults(init_val, count_bits(self._elemtype_))
+
+            self._content = _qualifier_[Underlying](
+                init_val, name=std_name(name), attributes=attributes
+            )
 
     @_intrinsic
     def __len__(self):
         return self._count_
 
     def get_elem(self, index, qualifier=Ref):
-        return from_bits[self._elemtype_](self._content[index], qualifier)
+        error_text = [
+            "attempt to create a reference to an array element failed, maybe use a value qualifier"
+        ]
 
-    def set_elem(self, index, value):
-        self._content[index]._assign_(value, AssignMode.AUTO)
+        with StdExceptionHandler(info=error_text, type=RefQualifierFail):
+            if self._nesting_ is _ArrayNestingMode.NONE:
+                return from_bits[self._elemtype_](self._content[index], qualifier)
+            elif self._nesting_ is _ArrayNestingMode.COHDL_ARRAY:
+                return qualifier(self._content[index])
+            else:
+                return self._elemtype_(_raw_val=qualifier(self._content[index]))
+
+    def set_elem(self, index, value, mode=AssignMode.AUTO):
+        if self._nesting_ is _ArrayNestingMode.COHDL_ARRAY:
+            self._content[index]._assign_(value, mode)
+        elif self._nesting_ is _ArrayNestingMode.STD_ARRAY:
+            self._elemtype_(_raw_val=self._content[index])._assign_(value, mode)
+
+            # self._content[index]._assign_(value, mode)
+        else:
+            b = to_bits(Value[self._elemtype_](value))
+            self._content[index]._assign_(b, mode)
 
     def __getitem__(self, index):
-        return self.get_elem(index, Ref)
+        error_text = [
+            "std.Array.__getitem__ only works for trivially serializable types",
+            "to fix this, change the element type or use the",
+            "methods get_elem and/or set_elem instead of the []-operator.",
+            "__getitem__ is also used when iterating over arrays.",
+        ]
+
+        with StdExceptionHandler(info=error_text, type=RefQualifierFail):
+            if isinstance(index, (slice, tuple, list)):
+                return _ArraySlice(self, index)
+            else:
+                return self.get_elem(index, Ref)
+
+    @classmethod
+    @_intrinsic
+    def _count_bits_(cls):
+        return cls._count_ * count_bits(cls._elemtype_)
+
+    @classmethod
+    def _from_bits_(cls, bits, qualifier):
+        elem_cnt = cls._count_
+        elem_width = count_bits(cls._elemtype_)
+
+        return cls(
+            [
+                from_bits[cls._elemtype_](
+                    bits[elem_width * (nr + 1) - 1 : elem_width * nr]
+                )
+                for nr in range(elem_cnt)
+            ],
+            _qualifier_=qualifier,
+        )
+
+    def _to_bits_(self):
+        return concat(
+            *[to_bits(self._content[index]) for index in range(len(self._content))][
+                ::-1
+            ]
+        )
 
 
 #
@@ -1276,7 +1501,6 @@ class Fifo(Template[_FifoArgs]):
                     )
 
             else:
-                a = a = 0
                 self._set_write_index = self._write_index
                 self._set_read_index = self._read_index
 
@@ -1291,23 +1515,27 @@ class Fifo(Template[_FifoArgs]):
                 at_end_of_context(self._impl_sync_read_index)
 
         assert not self._full, "writing to full fifo"
-        self._mem[self._set_write_index] <<= data
+        self._mem.set_elem(self._set_write_index, data)
         self._set_write_index <<= self._next_index(self._set_write_index)
 
-    def pop(self):
+    def pop(self, *, qualifier=Ref):
         if self._sync_contexts:
             if self._sync_flag._impl_tx_delay():
                 at_end_of_context(self._impl_sync_write_index)
 
         assert not self._empty, "reading from empty fifo"
         self._set_read_index <<= self._next_index(self._set_read_index)
-        return self._mem[self._set_read_index]
+        return self._mem.get_elem(self._set_read_index, qualifier)
 
-    def front(self):
-        return self._mem[self._set_read_index]
+    def front(self, *, qualifier=Ref):
+        return self._mem.get_elem(self._set_read_index, qualifier=qualifier)
 
     def empty(self):
         return self._cmp_empty()
 
     def full(self):
         return self._cmp_full()
+
+    async def receive(self, *, qualifier=Ref):
+        await expr(not self.empty())
+        return self.pop(qualifier=qualifier)

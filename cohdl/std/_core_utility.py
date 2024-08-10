@@ -24,11 +24,16 @@ from cohdl._core import (
     Full,
     static_assert,
     is_primitive_type,
+    Array as CohdlArray,
+    Integer as CohdlInteger,
+    Boolean as CohdlBool,
 )
 
 from cohdl._core._intrinsic import _intrinsic
 
 from cohdl._core._intrinsic import comment as cohdl_comment
+
+from ._exception import RefQualifierFail, SerializationFail
 
 
 def nop(*args, **kwargs):
@@ -106,7 +111,17 @@ def regenerate_defaults(fn, /):
     return helper
 
 
+@_intrinsic
+def _check_type_qualifier_params(kwargs):
+    return ("name" in kwargs) + ("attributes" in kwargs) == len(kwargs)
+
+
 class _Value:
+    @_intrinsic
+    def _any_instance(self, iter, base):
+        return any(isinstance(elem, base) for elem in iter)
+
+    @_intrinsic
     def __init__(self, T=None):
         self._T = T
 
@@ -125,49 +140,59 @@ class _Value:
         else:
             T = self._T
 
-        if is_primitive_type(T):
-            if len(args) == 0 and len(kwargs) == 0:
+        if is_primitive_type(T) or T is bool or T is int:
+            if len(args) == 0 and _check_type_qualifier_params(kwargs):
                 return T()
-
-            assert len(args) == 1 and (
-                len(kwargs) == 0 or (len(kwargs) == 1 and kwargs.__contains__("name"))
-            )
-            arg = args[0]
-
-            if isinstance(arg, TypeQualifier):
-                if isinstance(arg, Temporary[T]):
-                    return arg
-                else:
-                    return Temporary[T](arg, **kwargs)
-            elif isinstance(arg, TypeQualifierBase):
-                return TypeQualifierBase.decay(arg)
             else:
-                return T(arg, **kwargs)
+                assert len(args) == 1 and _check_type_qualifier_params(kwargs)
+                arg = args[0]
+
+                if issubclass(T, CohdlArray) and isinstance(arg, (list, tuple)):
+                    if self._any_instance(arg, TypeQualifier):
+                        return Temporary[T](arg, **kwargs)
+                    elif self._any_instance(arg, TypeQualifierBase):
+                        return T([TypeQualifierBase.decay(elem) for elem in arg])
+                    else:
+                        return T(arg)
+                else:
+                    if isinstance(arg, TypeQualifier):
+                        if isinstance(arg, Temporary[T]):
+                            return arg
+                        else:
+                            return Temporary[T](arg, **kwargs)
+                    elif isinstance(arg, TypeQualifierBase):
+                        return TypeQualifierBase.decay(arg)
+                    else:
+                        return T(arg)
         else:
             return T(*args, **kwargs, _qualifier_=Value)
 
+    @_intrinsic
     def __getitem__(self, arg):
-        assert isinstance(arg, type)
+        assert isinstance(
+            arg, type
+        ), f"type argument of Value[T] is not a type (T={arg})"
 
         return _Value(arg)
 
 
 class _Ref:
+    @_intrinsic
     def __init__(self, T=None):
         self._T = T
 
     @_intrinsic
     def __call__(self, *args, **kwargs):
         if self._T is None:
-            assert len(args) == 1 and len(kwargs) == 0
+            assert (
+                len(args) == 1 and len(kwargs) == 0
+            ), "std.Ref() without explicit target type expects a single argument"
             T = type(TypeQualifierBase.decay(args[0]))
         else:
             T = self._T
 
-        if is_primitive_type(T):
-            assert len(args) == 1 and (
-                len(kwargs) == 0 or (len(kwargs) == 1 and kwargs.__contains__("name"))
-            )
+        if is_primitive_type(T) or T is bool or T is CohdlBool:
+            assert len(args) == 1 and _check_type_qualifier_params(kwargs)
             arg = args[0]
 
             if subclass_check(T, BitVector):
@@ -177,12 +202,24 @@ class _Ref:
                     return arg.unsigned
                 else:
                     return arg.bitvector
+            if T is bool or T is CohdlBool:
+                RefQualifierFail.raise_if(
+                    not instance_check(arg, (bool, CohdlBool)),
+                    f"cannot create reference of type '{T}' from argument '{arg}'",
+                )
+
+                return arg
             else:
-                assert instance_check(arg, T)
+                RefQualifierFail.raise_if(
+                    not instance_check(arg, T),
+                    f"cannot create reference of type '{T}' from argument '{arg}'",
+                )
+
                 return arg
         else:
             return T(*args, **kwargs, _qualifier_=Ref)
 
+    @_intrinsic
     def __getitem__(self, arg):
         return _Ref(arg)
 
@@ -193,6 +230,7 @@ class _Ref:
 
 
 class _Nonlocal:
+    @_intrinsic
     def __init__(self, qualified_type):
         self._qualified_type = qualified_type
 
@@ -217,6 +255,7 @@ class _Nonlocal:
 class _Noreset:
     _Qualifier: Signal
 
+    @_intrinsic
     def __init__(self, T=None):
         self._T = T
 
@@ -233,6 +272,7 @@ class _Noreset:
         else:
             return T(*args, **kwargs, _qualifier_=type(self)())
 
+    @_intrinsic
     def __getitem__(self, arg):
         return type(self)(arg)
 
@@ -419,6 +459,13 @@ def count_bits(inp):
         return 1
     elif subclass_check(inp, BitVector):
         return inp.width
+    elif subclass_check(inp, CohdlArray):
+        inp = TypeQualifierBase.decay(inp)
+        return inp._count_ * count_bits(inp._elemtype_)
+    elif subclass_check(inp, (bool, CohdlBool)):
+        return 1
+    elif subclass_check(inp, (int, CohdlInteger)):
+        raise SerializationFail("integer type cannot be serialized")
     else:
         return inp._count_bits_()
 
@@ -426,6 +473,10 @@ def count_bits(inp):
 def to_bits(inp, /):
     if instance_check(inp, (Bit, BitVector)):
         return as_bitvector(inp)
+    elif instance_check(inp, CohdlArray):
+        return concat(*[to_bits(elem) for elem in inp][::-1])
+    elif instance_check(inp, (bool, CohdlBool)):
+        return BitVector[1]("1") if inp else BitVector[1]("0")
     else:
         return inp._to_bits_()
 
@@ -437,7 +488,9 @@ class _FromBits:
 
         if target_type is not None:
             assert isinstance(target_type, type), "target_type is not a type"
-            assert issubclass(target_type, (Bit, BitVector)) or hasattr(
+            assert issubclass(
+                target_type, (Bit, BitVector, CohdlArray, bool, CohdlBool)
+            ) or hasattr(
                 target_type, "_from_bits_"
             ), "target_type does not implement from_bits"
 
@@ -462,6 +515,21 @@ class _FromBits:
                 bv.width == self._target_type.width
             ), "cannot deserialize BitVector to BitVector, width does not match"
             return qualifier[self._target_type](bv)
+        elif issubclass(self._target_type, CohdlArray):
+            elem_width = count_bits(self._target_type._elemtype_)
+            assert bv.width == count_bits(
+                self._target_type
+            ), "cannot deserialize BitVector to Array, width does not match"
+            return qualifier[self._target_type](
+                [
+                    from_bits[self._target_type._elemtype_](
+                        bv[elem_width * idx + elem_width - 1 : elem_width * idx]
+                    )
+                    for idx in range(self._target_type._count_)
+                ]
+            )
+        elif self._target_type is bool or self._target_type is CohdlBool:
+            return qualifier[CohdlBool](bv[0])
         else:
             assert (
                 self._target_type._count_bits_() == bits.width

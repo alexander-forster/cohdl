@@ -81,6 +81,16 @@ class _ClassifyNames(ast.NodeVisitor):
     def visit_Lambda(self, node: Lambda) -> Any:
         self._visit_fn_or_lambda(node)
 
+    def visit_Try(self, node: ast.Try) -> Any:
+
+        # mark names declared in try statements as used
+        # try statements are not synthesizable but can occur
+        # in inactive if-bodies (example if not cohdl.evaluated())
+        for handler in node.handlers:
+            if handler.name is not None:
+                self.used_names.add(handler.name)
+                self.local_names.add(handler.name)
+
     def __init__(self, args, body: list | ast.AST):
         self.used_names: set[str] = set()
         self.local_names: set[str] = set(args)

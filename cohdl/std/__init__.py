@@ -125,4 +125,6 @@ from ._template import Template, template_arg
 from ._record import Record
 from .enum import Enum, FlagEnum
 
+from . import _exception as exception
+
 # from . import experimental as exp

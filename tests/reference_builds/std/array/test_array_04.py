@@ -130,7 +130,6 @@ class Mock(MockBase):
                     self.memory[index] = data
                 case 1:
                     self.memory[index] = (prev & ~1) | (data & 1)
-                    print(f"{prev} : {self.memory[index]} = {prev&~1} {data&1}")
                 case 2:
                     self.memory[index] = (
                         (prev & ~0x0F0000FE)

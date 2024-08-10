@@ -49,12 +49,14 @@ from ._value_branch import _MergedBranch, ObjTraits
 from . import _prepare_ast_out as out
 from cohdl._core._boolean import _Boolean, _BooleanLiteral
 from cohdl._core._boolean import true as cohdl_true
+from cohdl._core._array import Array
 
 from cohdl._core._collect_ast_and_scope import (
     InstantiatedFunction,
     FunctionDefinition,
     _Unbound,
 )
+
 
 from ._traceback import pretty_traceback_active
 
@@ -402,6 +404,10 @@ class PrepareAst:
                 if isinstance(
                     result.assigned_value, _type_qualifier.TypeQualifier
                 ) or is_primitive(result.assigned_value):
+                    assigned = result.assigned_value
+                elif isinstance(result.assigned_value, (list, tuple)) and isinstance(
+                    _type_qualifier.TypeQualifier.decay(result.new_obj), Array
+                ):
                     assigned = result.assigned_value
                 elif isinstance(result.assigned_value, _MergedBranch):
                     pass
@@ -843,7 +849,7 @@ class PrepareAst:
                 assert (
                     value.aug_assign is None
                 ), "only operator '=' is allowed in starred assignment"
-                assert isinstance(value.value, (list, tuple))
+                assert isinstance(value.value, (list, tuple)), "expected list or tuple"
 
                 # convert name object
                 return self.apply(inp.value)
@@ -866,7 +872,9 @@ class PrepareAst:
                     self.set_local(inp.id, rhs.value)
                     return out.Nop()
                 else:
-                    assert self.name_bound(inp.id)
+                    assert self.name_bound(
+                        inp.id
+                    ), f"name '{inp.id}' has no associated value at this point"
                     lhs = self.lookup_name(inp.id)
 
                     return self._do_aug_assign(rhs.aug_assign, lhs, rhs.value)
@@ -1052,7 +1060,9 @@ class PrepareAst:
                 reverse_call.add_bound_statement(lhs)
                 reverse_call.add_bound_statement(rhs)
 
-                assert ObjTraits.get(reverse_call.result()) is not NotImplemented
+                assert (
+                    ObjTraits.get(reverse_call.result()) is not NotImplemented
+                ), f"both '{default_op}' and '{reverse_op}' returned NotImplemented"
                 return reverse_call
 
             op = inp.op
@@ -1094,7 +1104,9 @@ class PrepareAst:
             type_arg = ObjTraits.gettype(arg)
 
             def overloaded_operator(fn_name):
-                assert ObjTraits.hasattr(type_arg, fn_name)
+                assert ObjTraits.hasattr(
+                    type_arg, fn_name
+                ), f"type '{type_arg}' as no attribute '{fn_name}'"
                 call = self.subcall(ObjTraits.getattr(type_arg, fn_name), [arg], {})
 
                 call.add_bound_statement(operand)
@@ -1193,7 +1205,7 @@ class PrepareAst:
 
                 if not ObjTraits.runtime_variable(single.result()):
                     result = ObjTraits.get(single.result())
-                    assert isinstance(result, bool)
+                    assert isinstance(result, bool), f"expected bool but got '{result}'"
 
                     # if a single comparissons is constant and false
                     # the entire expression evaluates to false
@@ -1469,7 +1481,9 @@ class PrepareAst:
                     # a single if statement where break/return is the last statement in the
                     # body of the loop
 
-                    assert not (body_breaks and body_returns)
+                    assert not (
+                        body_breaks and body_returns
+                    ), "using both break and return is not allowed in this context"
 
                     if is_first:
                         use_if_else = True
@@ -1480,25 +1494,39 @@ class PrepareAst:
 
                     # for loops containing break can only
                     # contain a single if statement without an orelse block
-                    assert len(body.statements()) == 1
+                    assert (
+                        len(body.statements()) == 1
+                    ), "for-loops containing break may only contain a single if statement"
                     if_stmt = body.statements()[0]
-                    assert isinstance(if_stmt, out.If)
-                    assert if_stmt._orelse.empty()
+                    assert isinstance(
+                        if_stmt, out.If
+                    ), "for-loops containing break may only contain a single if statement"
+                    assert (
+                        if_stmt._orelse.empty()
+                    ), "for-loops containing break may only contain a single if statement, else branch not allowed"
 
                     if_body = if_stmt._body.statements()
 
                     if uses_return:
                         # ensure, that the body of the if statement
                         # always leeds to a return statement
-                        assert if_stmt._body.returns_always()
-                        assert isinstance(if_body[-1], out.Return)
+                        assert (
+                            if_stmt._body.returns_always()
+                        ), "all branches in the if statements must return"
+                        assert isinstance(
+                            if_body[-1], out.Return
+                        ), "the last statement in the if block must be a return"
                     else:
                         # ensure, that the trailing break statement is
                         # the only one in the loop body
                         for substmt in if_body[:-1]:
-                            assert not substmt.contains_break()
+                            assert (
+                                not substmt.contains_break()
+                            ), "the if body may only contain a single break statement (at the end)"
 
-                        assert isinstance(if_body[-1], out.Break)
+                        assert isinstance(
+                            if_body[-1], out.Break
+                        ), "the if body must end in a break statement"
 
                         # remove break statement since it only serves as a marker
                         # and is not needed after it was detected

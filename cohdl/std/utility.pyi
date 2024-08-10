@@ -131,6 +131,21 @@ def as_writeable_vector(
     >>>         assert a == Bit(True)
     """
 
+class _ArraySlice(Generic[T]):
+    """
+    Returned by std.Array.__getitem__ when a slice or tuple argument is passed.
+    Makes parts of Arrays objects accessible with an interface consistent
+    with a full Array.
+
+    Accessing elements of an array slice requires compile time constant indices.
+    """
+
+    def __getitem__(self, key) -> _ArraySlice[T]: ...
+    def __len__(self) -> int: ...
+    def _assign_(self, source, mode: AssignMode) -> None: ...
+    def get_elem(self, index: int, qualifier=Ref) -> T: ...
+    def set_elem(self, index: int, value: T): ...
+
 class Array(Generic[T, N]):
     """
     A wrapper utility around cohdl.Array.
@@ -144,6 +159,7 @@ class Array(Generic[T, N]):
         returns the number of elements in the Array
         """
 
+    @overload
     def __getitem__(self, index: Unsigned | int) -> T:
         """
         Returns the element at the given index.
@@ -153,6 +169,28 @@ class Array(Generic[T, N]):
         to obtain the returned value.
 
         Use `self.get_elem` for other types.
+        """
+
+    @overload
+    def __getitem__(self, subrange: slice | tuple | list) -> _ArraySlice[T]:
+        """
+        Returns a proxy object that can be used to conveniently access
+        subsets of the array.
+
+        >>> arr = std.Array[Bit, 8]()
+        >>>
+        >>> # set elements 0,1,2 to '0'
+        >>> arr[0,1,2] <<= Null
+        >>>
+        >>> # set elements 1 to 6 to '1'
+        >>> arr[6:1] <<= Full
+        >>>
+        >>> # set event elements to odd values
+        >>> arr[::2] <<= arr[1::2]
+        >>> # equivalent to
+        >>> arr[0,2,4,6] <<= arr[1,3,5,7]
+        >>> # equivalent to
+        >>> arr[::2] <<= arr[1,3,5,7]
         """
 
     def get_elem(self, index: Unsigned | int, qualifier=Ref) -> T:
@@ -740,7 +778,7 @@ class Mailbox(Generic[T]):
         self, *, delay: int = None, tx_delay: int = None, rx_delay: int = None
     ):
         """
-        Create a Mailbox that can transmit data of the given `type`.
+        Create a Mailbox that can transmit data of the given generic type `T`.
         Internally a `std.SyncFlag` is used to synchronize data access between
         a sending and a receiving context.
         The delay parameters are forwarded to that `std.SyncFlag` and allow for
@@ -751,6 +789,11 @@ class Mailbox(Generic[T]):
 
         `rx_delay` specifies after how many clock ticks the sender context
         sees acknowledge states set by the receiver. (relative to the sender context clock).
+
+        `delay` is a default setter for both `tx_delay` and `rx_delay` e.g.
+
+        >>> rx_delay = delay if rx_delay is None else rx_delay
+        >>> tx_delay = delay if tx_delay is None else tx_delay
         """
 
     def send(self, data: T):
@@ -794,12 +837,28 @@ class Mailbox(Generic[T]):
 
 class Fifo(Generic[T, N]):
     """
-    A first-in-first-out container that can hold up to N-1 elements
-    of type T.
-
+    A first-in-first-out container that can hold up to `N-1` elements
+    of type `T`.
     """
 
-    def __init__(self, name: str): ...
+    def __init__(
+        self, name="fifo", delay: int = None, tx_delay: int = None, rx_delay: int = None
+    ):
+        """
+        Create a Fifo that can transmit data of the given generic type `T`.
+
+        Similar to std.SyncFlag and std.MailBox, the delay parameters can be used to
+        implement basic clock domain crossing. The synchronization is performed using
+        a ping-pong flag that is passed between sender and receiver context.
+        `tx_delay` and `rx_delay` specify the number of delay stages in the
+        sending and receiving direction respectively.
+
+        `delay` is a default setter for both `tx_delay` and `rx_delay` e.g.
+
+        >>> rx_delay = delay if rx_delay is None else rx_delay
+        >>> tx_delay = delay if tx_delay is None else tx_delay
+        """
+
     def push(self, data: T):
         """
         push one element onto the Fifo
@@ -832,4 +891,9 @@ class Fifo(Generic[T, N]):
     def full(self) -> Bit:
         """
         check if fifo is full
+        """
+
+    async def receive(self, *, qualifier=Ref) -> T:
+        """
+        Waits until fifo is non-empty, then calls self.pop() and returns the result.
         """

@@ -12,10 +12,11 @@ from cohdl._core._intrinsic_operations import AssignMode
 
 from cohdl._core._primitive_type import is_primitive, is_primitive_type
 from cohdl._core._integer import Integer
-from cohdl._core._boolean import _Boolean, Null
+from cohdl._core._boolean import _Boolean, Null, Full
 from cohdl._core._bit_vector import BitVector
 from cohdl._core._signed import Signed
 from cohdl._core._unsigned import Unsigned
+from cohdl._core._array import Array
 
 #
 #
@@ -194,7 +195,6 @@ class _TypeQualifier(type):
                             {},
                         )
                     else:
-                        print(cls, WrappedType._width, direction)
                         parent_cls = type(
                             cls.__name__,
                             (
@@ -251,10 +251,12 @@ class _TypeQualifier(type):
         return cls.__str__()
 
     @property
+    @_intrinsic
     def type(cls):
         return cls._Wrapped
 
     @property
+    @_intrinsic
     def qualifier(cls):
         return cls._Qualifier
 
@@ -318,9 +320,20 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         _ref_spec: list[RefSpec] | None = None,
     ):
         if _root is not None:
-            assert (
-                _root.qualifier is self.qualifier
-            ), f"internal error: _root.qualifier != self.qualifier {_root.qualifier} {self.qualifier}"
+            root_qualifier = _root.qualifier
+            self_qualifier = self.qualifier
+
+            if isinstance(root_qualifier, _PortQualifier):
+                assert isinstance(
+                    self_qualifier, _PortQualifier
+                ), f"internal error: expected port qualifier"
+                assert (
+                    root_qualifier._direction is self_qualifier._direction
+                ), f"internal error: port direction mismatch"
+            else:
+                assert (
+                    _root.qualifier is self.qualifier
+                ), f"internal error: _root.qualifier != self.qualifier {_root.qualifier} {self.qualifier}"
             assert type(value) is self.type, "internal error: type(value) != self.type"
             self._value = value
         else:
@@ -564,6 +577,42 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
             self @= value
         else:
             raise AssertionError(f"invalid assign_mode {assign_mode}")
+
+    @_intrinsic
+    def _needs_array_elem_assignment(self, src):
+        # check if array elements must be assigned individually
+        return issubclass(self._Wrapped, Array) and not isinstance(_decay(src), Array)
+
+    @_intrinsic
+    def _perform_array_elem_assignment(self, src, assignment_fn):
+        if src is Null or src is Full:
+
+            def assign_null_full_elements():
+                for index in range(len(self)):
+                    assignment_fn(self[index], src)
+                return self
+
+            return intr_op._IntrinsicSynthesizableFunctionCall(
+                assign_null_full_elements, [], {}
+            )
+
+        # special case for assignment of lists/tuples to arrays, assigned elements individually
+        assert isinstance(
+            src, (tuple, list)
+        ), f"only tuples/lists and array can be assigned to arrays (got {src})"
+
+        assert len(self) == len(
+            src
+        ), f"source width does not match target width ({len(self)} != {len(src)})"
+
+        def assign_array_elements(value):
+            for index in range(len(self)):
+                assignment_fn(self[index], value[index])
+            return self
+
+        return intr_op._IntrinsicSynthesizableFunctionCall(
+            assign_array_elements, [src], {}
+        )
 
     #
     #
@@ -1071,7 +1120,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @property
     def unsigned(self):
         cast = self._value.unsigned
-        return type(self)._Qualifier[type(cast)](
+        return self.qualifier[type(cast)](
             cast, _ref_spec=self._ref_spec, _root=self._root
         )
 
@@ -1085,7 +1134,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @property
     def signed(self):
         cast = self._value.signed
-        return type(self)._Qualifier[type(cast)](
+        return self.qualifier[type(cast)](
             cast, _ref_spec=self._ref_spec, _root=self._root
         )
 
@@ -1099,7 +1148,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @property
     def bitvector(self):
         cast = self._value.bitvector
-        return type(self)._Qualifier[type(cast)](
+        return self.qualifier[type(cast)](
             cast, _ref_spec=self._ref_spec, _root=self._root
         )
 
@@ -1192,6 +1241,13 @@ class Signal(TypeQualifier):
 
     @_intrinsic_replacement(next.fset, assignment_spec=(0, 1))
     def _next_setter_replacement(self, value):
+        if self._needs_array_elem_assignment(value):
+
+            def assign_next(a, b):
+                a <<= b
+
+            return self._perform_array_elem_assignment(value, assign_next)
+
         # assign value to check whether operation is allowed
         inp_value = _decay(value)
         self._value._assign(inp_value)
@@ -1244,9 +1300,25 @@ class Signal(TypeQualifier):
     _intrinsic_replacement(__ixor__, assignment_spec=(0, 1))(_push_setter_replacement)
 
 
+class _PortQualifier:
+    @_intrinsic
+    def __init__(self, direction, type):
+        self._direction = direction
+        self._type = type
+
+    @_intrinsic
+    def __getitem__(self, type):
+        return Port[type, self._direction]
+
+
 class Port(Signal):
     _SubTypes = {}
     _direction: Direction
+
+    @property
+    @_intrinsic
+    def qualifier(self):
+        return _PortQualifier(self._direction, None)
 
     class Direction(enum.Enum):
         INPUT = enum.auto()

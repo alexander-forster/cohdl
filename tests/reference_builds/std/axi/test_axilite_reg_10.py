@@ -320,12 +320,13 @@ async def testbench_axilite_reg_10(dut: test_axilite_reg_10):
         mock.reset()
 
 
-from cohdl.std.reg.system_rdl import to_system_rdl
-
-with open("file.rdl", "w") as file:
-    print(to_system_rdl(MyRoot), file=file)
-
-
 class Unittest(unittest.TestCase):
     def test_axilite_reg_10(self):
         cohdl_testutil.run_cocotb_tests(test_axilite_reg_10, __file__, self.__module__)
+
+    def test_rdl_writer(self):
+        from cohdl.std.reg.system_rdl import to_system_rdl
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w") as file:
+            print(to_system_rdl(MyRoot), file=file)

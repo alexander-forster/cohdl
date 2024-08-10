@@ -658,7 +658,14 @@ class SignalAssignment(Statement):
     def visit_objects(self, operation: Callable):
         try:
             self._target = operation(self._target, AccessFlags.WRITE)
-            self._source = operation(self._source, AccessFlags.READ)
+
+            if isinstance(self._source, (tuple, list)):
+                # special case for assignment to arrays
+                self._source = [
+                    operation(elem, AccessFlags.READ) for elem in self._source
+                ]
+            else:
+                self._source = operation(self._source, AccessFlags.READ)
         except Exception as err:
             raise VisitException(self, err)
 
@@ -688,7 +695,14 @@ class SignalPush(Statement):
     def visit_objects(self, operation: Callable):
         try:
             self._target = operation(self._target, AccessFlags.PUSH)
-            self._source = operation(self._source, AccessFlags.READ)
+
+            if isinstance(self._source, (tuple, list)):
+                # special case for assignment to arrays
+                self._source = [
+                    operation(elem, AccessFlags.READ) for elem in self._source
+                ]
+            else:
+                self._source = operation(self._source, AccessFlags.READ)
         except Exception as err:
             raise VisitException(self, err)
 
@@ -747,7 +761,14 @@ class VariableAssignment(Statement):
     def visit_objects(self, operation: Callable):
         try:
             self._target = operation(self._target, AccessFlags.WRITE)
-            self._source = operation(self._source, AccessFlags.READ)
+
+            if isinstance(self._source, (tuple, list)):
+                # special case for assignment to arrays
+                self._source = [
+                    operation(elem, AccessFlags.READ) for elem in self._source
+                ]
+            else:
+                self._source = operation(self._source, AccessFlags.READ)
         except Exception as err:
             raise VisitException(self, err)
 
@@ -1683,7 +1704,9 @@ class EntityTemplate(Block):
             # check, that signals are only written in a single context
             if access is AccessFlags.WRITE or access is AccessFlags.PUSH:
                 if isinstance(obj, Port) and obj.is_input():
-                    raise AssertionError(f"writing to input port '{obj}' not allowed")
+                    raise AssertionError(
+                        f"writing to input port '{obj._root._name}' not allowed"
+                    )
 
                 if isinstance(obj, (Signal, Variable, Temporary)):
                     obj_root = obj._root

@@ -18,6 +18,7 @@ from ._core_utility import (
 from ._assignable_type import AssignableType
 from ._template import Template, _TemplateMode
 from ._prefix import NamedQualifier
+from ._exception import StdExceptionHandler, RefQualifierFail
 
 
 @_intrinsic
@@ -36,7 +37,8 @@ def _args_to_kwargs(kwargs, args, names):
 
 @_intrinsic
 def _make_serializable(cls: Record):
-    if hasattr(cls, "_cohdlstd_bitcount"):
+    # lookup in dict so values are recalculated for every derived class
+    if "_cohdlstd_bitcount" in cls.__dict__:
         return
 
     slice_map = {}
@@ -94,10 +96,16 @@ class Record(AssignableType, Template):
             # record derived without template arguments
             module_dict = inspect.getmodule(cls).__dict__
 
-            annotations = {
-                name: eval(value, module_dict)
-                for name, value in cls.__annotations__.items()
-            }
+            try:
+                annotations = {
+                    name: eval(value, module_dict)
+                    for name, value in cls.__annotations__.items()
+                }
+            except TypeError as err:
+                err.add_note(
+                    "add 'from __future__ import annotations' at the top of the file declaring this record"
+                )
+                raise
         else:
             # record derived with template arguments
 
@@ -168,17 +176,28 @@ class Record(AssignableType, Template):
         _make_serializable(cls)
         assert bits.width == cls._count_bits_()
 
-        result = cls(
-            **{
-                name: from_bits[elem_type](
-                    bits[cls._cohdlstd_slice_map[name]], qualifier
-                )
-                for name, elem_type in cls._cohdlstd_record_annotations.items()
-            },
-            # use Ref qualifier because outer qualifier has already been
-            # applied during dict construction
-            _qualifier_=Ref,
-        )
+        error_text = [
+            "Deserialization using std.Ref qualifier failed because",
+            "record type '{}' is not trivially serializable.".format(cls),
+            "To fix this error, either use a different qualifier (std.Value) or adjust the type.",
+            "Records are trivially serializable is all their member are.",
+            "  - allowed     (Bit/BitVector/Signed/Unsigned)",
+            "  - not allowed (bool/int/arrays)",
+        ]
+
+        with StdExceptionHandler(info=error_text, type=RefQualifierFail):
+
+            result = cls(
+                **{
+                    name: from_bits[elem_type](
+                        bits[cls._cohdlstd_slice_map[name]], qualifier
+                    )
+                    for name, elem_type in cls._cohdlstd_record_annotations.items()
+                },
+                # use Ref qualifier because outer qualifier has already been
+                # applied during dict construction
+                _qualifier_=Ref,
+            )
 
         return result
 

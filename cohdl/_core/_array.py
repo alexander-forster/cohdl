@@ -75,6 +75,17 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
 
     @_intrinsic
     def __getitem__(self, index: int):
+        if index < 0:
+            raise IndexError(f"negative Array index ({index}) not allowed")
+
+        if index >= self._count_:
+            raise IndexError(
+                f"index '{index}' not in allowed range [0-{self._count_-1}]"
+            )
+
+        if self._value is not None and index < len(self._value):
+            return self._value[index]
+
         elem_type = self._elemtype_
 
         if issubclass(elem_type, Enum):
@@ -91,18 +102,30 @@ class Array(_PrimitiveType, metaclass=_MetaArray):
 
     @_intrinsic
     def _assign(self, value):
-        assert isinstance(value, Array)
-        assert (
-            value._count_ == self._count_
-        ), f"width of source array does not match width of target ({value._count_} != {self._count_})"
-
         self_val = self._elemtype_()
 
-        for val in value._value:
+        if isinstance(value, Array):
+            assert (
+                value._count_ == self._count_
+            ), f"width of source array does not match width of target ({value._count_} != {self._count_})"
+
             # Dummy assignment, does not actually assign to array members
             # to avoid creating potentially large number of elements.
             # Only used to ensure, that the assignment is sound.
-            self_val._assign(val)
+            self_val._assign(value._elemtype_())
+
+        elif isinstance(value, (list, tuple)):
+            assert (
+                len(value) == self._count_
+            ), f"width of source does not match width of target ({len(value)} != {len(self._count_)})"
+
+            for val in value:
+                # Dummy assignment, does not actually assign to array members
+                # to avoid creating potentially large number of elements.
+                # Only used to ensure, that the assignment is sound.
+                self_val._assign(val)
+        else:
+            assert value is Null or value is Full, f"cannot assigned {value} to array"
 
     @_intrinsic
     def copy(self) -> Array:

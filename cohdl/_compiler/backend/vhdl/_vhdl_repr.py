@@ -330,9 +330,17 @@ class SignalAssignment(Statement):
         self._source = source
 
     def write(self, scope: VhdlScope) -> str:
+        decayed_target = TypeQualifier.decay(self._target.result)
+        is_array = isinstance(decayed_target, Array)
+
         target = self._target.write(scope)
-        source = self._source.write(scope)
-        return f"{target} <= {scope.format_cast(self._target.result, self._source.result, source)};"
+
+        if is_array:
+            source = self._source.write(scope, decayed_target)
+            return f"{target} <= {source};"
+        else:
+            source = self._source.write(scope)
+            return f"{target} <= {scope.format_cast(self._target.result, self._source.result, source)};"
 
 
 class VariableAssignment(Statement):
@@ -345,9 +353,17 @@ class VariableAssignment(Statement):
         self._source = source
 
     def write(self, scope: VhdlScope) -> str:
+        decayed_target = TypeQualifier.decay(self._target.result)
+        is_array = isinstance(decayed_target, Array)
+
         target = self._target.write(scope)
-        source = self._source.write(scope)
-        return f"{target} := {scope.format_cast(self._target.result, self._source.result, source)};"
+
+        if is_array:
+            source = self._source.write(scope, decayed_target)
+            return f"{target} := {source};"
+        else:
+            source = self._source.write(scope)
+            return f"{target} := {scope.format_cast(self._target.result, self._source.result, source)};"
 
 
 class If(Statement):
@@ -867,7 +883,7 @@ class VhdlScope:
                 return f'"{obj}"'
         else:
             val = obj._value
-            assert val is not None, "array has not default value"
+            assert val is not None, "array has no default value"
             elemtype = obj._elemtype_
 
             # use ( 0 => ELEM0, 1 => ELEM1 ) notation because
@@ -1016,6 +1032,18 @@ class VhdlScope:
             result = self.format_literal(obj)
         elif isinstance(obj, cohdl.BitState):
             result = self.format_literal(obj)
+        elif isinstance(obj, (list, tuple)):
+            assert isinstance(target_hint, Array)
+            assert len(obj) == len(target_hint)
+
+            elem_type = target_hint._elemtype_
+            elem_hint = elem_type()
+
+            components = ", ".join(
+                f"{index} => {self.format_cast(elem_hint, elem, self.format_value(elem))}"
+                for index, elem in enumerate(obj)
+            )
+            return f"( {components} )"
         else:
             assert isinstance(obj, TypeQualifier)
             root_name = self.lookup_name(obj._root)
