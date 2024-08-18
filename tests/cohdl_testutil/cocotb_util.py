@@ -253,8 +253,7 @@ class ConstraindValue:
 
 class TestValue:
     @staticmethod
-    def random_values(width: int, cnt: int):
-        ...
+    def random_values(width: int, cnt: int): ...
 
     def __init__(self, value):
         self.val = value

@@ -413,9 +413,11 @@ class IrGenerator:
                         # return empty list, there are no open blocks after await false
                         # because execution stops at that point
                         return []
-                    
-                    assert inp.result() is _boolean.true, f"internal error: expected boolean literal, got {inp.result()}"
-                else: 
+
+                    assert (
+                        inp.result() is _boolean.true
+                    ), f"internal error: expected boolean literal, got {inp.result()}"
+                else:
                     if_body = ir.CodeBlock([], parent=new_state.open_block())
                     new_state.append(
                         ir.If(
@@ -842,7 +844,7 @@ class IrGenerator:
 
                 assert (
                     len(result_blocks) == 1 and result_blocks[0] is block
-                ), "transistions are not allowed in assertation test"
+                ), "transitions are not allowed in assertion test"
 
                 msg = inp._msg
 

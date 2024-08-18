@@ -48,8 +48,21 @@ class Signed(BitVector):
         self,
         val: None | BitVector | str | int = None,
     ):
+        import cohdl
+
         if isinstance(val, Integer):
             val = int(val)
+        elif isinstance(val, Signed):
+            assert (
+                val.width <= self.width
+            ), f"cannot initialize {type(self)} with wider type {type(val)}"
+
+            val = val.to_int()
+        elif isinstance(val, cohdl.Unsigned):
+            assert (
+                val.width < self.width
+            ), f"cannot initialize {type(self)} from {type(val)}"
+            val = val.to_int()
 
         if isinstance(val, int):
             min = -(2 ** (self.width - 1))
@@ -287,8 +300,13 @@ class Signed(BitVector):
 
     @_intrinsic
     def __lshift__(self, rhs) -> Signed:
+        try:
+            rhs = int(rhs)
+        except TypeError:
+            return NotImplemented
+
         width = self.width
-        val = (self.to_int() << int(rhs)) & ((1 << width) - 1)
+        val = (self.to_int() << rhs) & ((1 << width) - 1)
 
         if val & (1 << (width - 1)):
             val = val - (1 << (width))
@@ -297,7 +315,12 @@ class Signed(BitVector):
 
     @_intrinsic
     def __rshift__(self, rhs) -> Signed:
-        val = self.to_int() >> int(rhs)
+        try:
+            rhs = int(rhs)
+        except TypeError:
+            return NotImplemented
+
+        val = self.to_int() >> rhs
         return Signed[self.width](val)
 
     @_intrinsic
@@ -387,6 +410,12 @@ class Signed(BitVector):
         ), f"width of zero extended value ({self.width}+{zeros}) exceeds target width ({target_width})"
         val = self.to_int() * 2**zeros
         return Signed[target_width](val)
+
+    @_intrinsic
+    def __hash__(self) -> int:
+        # redefine has method because it is implicitly deleted
+        # when __eq__ is defined
+        return super().__hash__()
 
     @_intrinsic
     def __repr__(self):

@@ -41,7 +41,7 @@ from ._core_utility import (
     instance_check,
     as_pyeval,
 )
-from ._template import Template, template_arg
+from ._template import Template, TemplateArg
 from ._assignable_type import AssignableType
 
 from cohdl._core._intrinsic import _intrinsic
@@ -1276,7 +1276,7 @@ class SyncFlag:
         self.clear()
 
 
-_MailboxType = template_arg.Type
+_MailboxType = TemplateArg.Type
 
 
 class Mailbox(Template[_MailboxType]):
@@ -1426,7 +1426,7 @@ class Fifo(Template[_FifoArgs]):
     def __len__(self):
         return self._count_
 
-    def __init__(self, name="fifo", delay=None, rx_delay=None, tx_delay=None):
+    def __init__(self, *, name="fifo", delay=None, rx_delay=None, tx_delay=None):
         count = self._count_
         self._max_index = count - 1
         CounterType = Unsigned.upto(self._max_index)
@@ -1444,7 +1444,9 @@ class Fifo(Template[_FifoArgs]):
         self._sync_contexts = self._rx_delay != 0 or self._tx_delay != 0
 
         with prefix(name) as p:
-            self._mem = Signal[Array[self._elemtype_, count]](name=p.name("mem"))
+            self._mem = Array[self._elemtype_, count](
+                name=p.name("mem"), _qualifier_=Signal
+            )
 
             self._write_index = Signal[CounterType](0, name=p.name("wr_index"))
             self._read_index = Signal[CounterType](0, name=p.name("rd_index"))
@@ -1518,7 +1520,7 @@ class Fifo(Template[_FifoArgs]):
         self._mem.set_elem(self._set_write_index, data)
         self._set_write_index <<= self._next_index(self._set_write_index)
 
-    def pop(self, *, qualifier=Ref):
+    def pop(self, *, qualifier=Value):
         if self._sync_contexts:
             if self._sync_flag._impl_tx_delay():
                 at_end_of_context(self._impl_sync_write_index)
@@ -1527,7 +1529,7 @@ class Fifo(Template[_FifoArgs]):
         self._set_read_index <<= self._next_index(self._set_read_index)
         return self._mem.get_elem(self._set_read_index, qualifier)
 
-    def front(self, *, qualifier=Ref):
+    def front(self, *, qualifier=Value):
         return self._mem.get_elem(self._set_read_index, qualifier=qualifier)
 
     def empty(self):
@@ -1536,6 +1538,98 @@ class Fifo(Template[_FifoArgs]):
     def full(self):
         return self._cmp_full()
 
-    async def receive(self, *, qualifier=Ref):
+    async def receive(self, *, qualifier=Value):
         await expr(not self.empty())
         return self.pop(qualifier=qualifier)
+
+
+#
+#
+#
+#
+#
+
+
+class StackMode(enum.Enum):
+    NO_OVERFLOW = enum.auto()
+    DROP_OLD = enum.auto()
+
+
+class Stack(Template[_FifoArgs]):
+    _elemtype_: _FifoArgs.elemtype
+    _count_: _FifoArgs.count
+
+    def _prev_index(self):
+        if self._mode is StackMode.NO_OVERFLOW:
+            return self._index - 1
+        else:
+            return (self._count_ - 1) if self._index == 0 else (self._index - 1)
+
+    def _next_index(self):
+        if self._mode is StackMode.NO_OVERFLOW:
+            return self._index + 1
+        else:
+            return (self._index + 1) if self._index != self._count_ - 1 else 0
+
+    #
+    #
+    #
+
+    @_intrinsic
+    def __len__(self):
+        return self._count_
+
+    def __init__(self, *, name="stack", mode=StackMode.NO_OVERFLOW):
+        count = self._count_
+        CounterType = Unsigned.upto(count)
+
+        self._mode = mode
+
+        with prefix(name) as p:
+            self._mem = Array[self._elemtype_, self._count_](
+                name=p.name("mem"), _qualifier_=Signal
+            )
+            self._index = Signal[CounterType](0, name=p.name("index"))
+
+            if mode is StackMode.DROP_OLD:
+                self._cnt = Signal[CounterType](0, name=p.name("cnt"))
+            else:
+                self._cnt = self._index
+
+    def push(self, data):
+        self._mem.set_elem(self._index, data)
+
+        if self._mode is StackMode.DROP_OLD:
+            self._cnt <<= self._count_ if self._cnt == self._count_ else (self._cnt + 1)
+        else:
+            assert self._index < self._count_, "push to full stack"
+
+        self._index <<= self._next_index()
+
+    def pop(self, *, qualifier=Value):
+        assert self._cnt != 0, "pop from empty stack"
+
+        if self._mode is StackMode.DROP_OLD:
+            self._cnt <<= self._cnt - 1
+
+        prev_index = self._prev_index()
+        self._index <<= prev_index
+        return self._mem.get_elem(prev_index, qualifier=qualifier)
+
+    def front(self, *, qualifier=Value):
+        return self._mem.get_elem(self._prev_index(), qualifier=qualifier)
+
+    def empty(self):
+        return self._cnt == 0
+
+    def full(self):
+        return self._cnt == self._count_
+
+    def reset(self):
+        self._index <<= 0
+
+        if self._mode is StackMode.DROP_OLD:
+            self._cnt <<= 0
+
+    def size(self):
+        return Value(self._cnt)

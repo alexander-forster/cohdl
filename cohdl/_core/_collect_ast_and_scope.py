@@ -229,6 +229,7 @@ class FunctionDefinition:
         ) = None,  # if set to None ast representation is used for defaults
         *,
         location: SourceLocation,
+        add_self_to_nonlocal=False,
     ):
         if isinstance(fn_def, (ast.FunctionDef, ast.Lambda)):
             is_async = False
@@ -301,7 +302,7 @@ class FunctionDefinition:
         else:
             body = fn_def.body
 
-        return FunctionDefinition.from_ast_body(
+        result = FunctionDefinition.from_ast_body(
             body,
             name,
             scope_ref,
@@ -316,6 +317,11 @@ class FunctionDefinition:
             self_arg=self_arg,
             location=location,
         )
+
+        if add_self_to_nonlocal:
+            scope_ref._scope[name] = result
+
+        return result
 
     @staticmethod
     def from_coroutine(coroutine):

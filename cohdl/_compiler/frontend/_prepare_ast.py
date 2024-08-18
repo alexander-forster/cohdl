@@ -28,7 +28,7 @@ from cohdl._core._intrinsic import (
     _BitSignalEventGroup,
     _IntrinsicComment,
 )
-from cohdl._core import _intrinsic
+from cohdl._core import _intrinsic, Null, Full
 
 from cohdl._core._primitive_type import is_primitive
 
@@ -45,7 +45,7 @@ from cohdl._core._intrinsic_definitions import (
 from cohdl._core._context import Context, ContextType
 from cohdl.utility.virtual_traceback import VirtualFrame
 
-from ._value_branch import _MergedBranch, ObjTraits
+from ._value_branch import _MergedBranch, _ValueBranch, ObjTraits
 from . import _prepare_ast_out as out
 from cohdl._core._boolean import _Boolean, _BooleanLiteral
 from cohdl._core._boolean import true as cohdl_true
@@ -305,10 +305,58 @@ class PrepareAst:
             return out.SelectWith(result.arg, branches, result.default)
 
         if isinstance(result, _Any):
-            return out.Any([x for x in result.iterable], [])
+            exprs = [self.convert_boolean(x) for x in result.iterable]
+
+            var_elems = []
+            always_true = False
+
+            for val in result.iterable:
+                if isinstance(val, _type_qualifier.TypeQualifier):
+                    var_elems.append(val)
+                else:
+                    converted = self.convert_boolean(val)
+                    expr_result = converted.result()
+                    exprs.append(converted)
+
+                    if isinstance(expr_result, bool):
+                        always_true = always_true or expr_result
+                    else:
+                        var_elems.append(expr_result)
+
+            if always_true:
+                return out.Value(True, exprs)
+
+            if len(var_elems) == 0:
+                return out.Value(False, exprs)
+
+            return out.Any(var_elems, exprs)
 
         if isinstance(result, _All):
-            return out.All([x for x in result.iterable], [])
+            exprs = [self.convert_boolean(x) for x in result.iterable]
+
+            var_elems = []
+            always_false = False
+
+            for val in result.iterable:
+                if isinstance(val, _type_qualifier.TypeQualifier):
+                    var_elems.append(val)
+                else:
+                    converted = self.convert_boolean(val)
+                    expr_result = converted.result()
+                    exprs.append(converted)
+
+                    if isinstance(expr_result, bool):
+                        always_false = always_false or not expr_result
+                    else:
+                        var_elems.append(expr_result)
+
+            if always_false:
+                return out.Value(False, exprs)
+
+            if len(var_elems) == 0:
+                return out.Value(True, exprs)
+
+            return out.All(var_elems, exprs)
 
         if isinstance(result, _Bool):
             return self.convert_boolean(result.value)
@@ -592,7 +640,41 @@ class PrepareAst:
         if isinstance(fn, InstantiatedFunction):
             return PrepareAst(fn, self._context, self, noreturn=noreturn).convert_call()
 
-        # TODO: cleanup
+        if isinstance(fn, _MergedBranch):
+            first, *rest = fn.branches
+
+            is_builtin_method = type(first.obj) is type("".__eq__)
+
+            if is_builtin_method or inspect.ismethod(first.obj):
+                if is_builtin_method:
+                    func = getattr(type(first.obj.__self__), first.obj.__name__)
+
+                    for r in rest:
+                        assert func is getattr(
+                            type(r.obj.__self__), r.obj.__name__
+                        ), "methods in merged branch differ"
+                else:
+                    func = first.obj.__func__
+
+                    for r in rest:
+                        assert func is r.obj.__func__, "methods in merged branch differ"
+
+                merged_self = _MergedBranch(
+                    [
+                        _ValueBranch(branch.hook, branch.obj.__self__)
+                        for branch in fn.branches
+                    ]
+                )
+
+                args.insert(0, merged_self)
+                fn = func
+
+            else:
+                fn = first.obj
+
+                for r in rest:
+                    assert fn is r.obj, "functions in merged branch differ"
+
         is_builtin_method = type(fn) is type("".__eq__)
         original_fn = fn
 
@@ -1022,11 +1104,15 @@ class PrepareAst:
             if isinstance(inp.op, ast.And):
                 if not all(const_vars):
                     return out.Value(False, [*val_expr, *bool_expr])
+                elif len(runtime_vars) == 0:
+                    return out.Value(True, [*val_expr, *bool_expr])
                 return out.All(runtime_vars, [*val_expr, *bool_expr])
 
             if isinstance(inp.op, ast.Or):
                 if any(const_vars):
                     return out.Value(True, [*val_expr, *bool_expr])
+                elif len(runtime_vars) == 0:
+                    return out.Value(False, [*val_expr, *bool_expr])
                 return out.Any(runtime_vars, [*val_expr, *bool_expr])
 
             raise AssertionError(f"invalid operator {inp.op}")
@@ -1167,9 +1253,19 @@ class PrepareAst:
                     return result
 
                 if isinstance(operator, ast.Is):
-                    return out.Value(val_lhs is val_rhs, [lhs, rhs])
+                    if isinstance(val_lhs, _MergedBranch):
+                        result = val_lhs._is(val_rhs)
+                    else:
+                        result = val_lhs is val_rhs
+
+                    return out.Value(result, [lhs, rhs])
                 elif isinstance(operator, ast.IsNot):
-                    return out.Value(val_lhs is not val_rhs, [lhs, rhs])
+                    if isinstance(val_lhs, _MergedBranch):
+                        result = not val_lhs._is(val_rhs)
+                    else:
+                        result = val_lhs is not val_rhs
+
+                    return out.Value(result, [lhs, rhs])
 
                 elif isinstance(operator, ast.Eq):
                     return evaluate("__eq__", "__eq__")
@@ -1278,34 +1374,21 @@ class PrepareAst:
                 if key_expr is None:
                     value = self.apply(val_expr)
                     bound_statements.append(value)
-                    r = value.result()
                     result.update(value.result())
                 else:
                     key = self.apply(key_expr)
                     bound_statements.append(key)
                     value = self.apply(val_expr)
                     bound_statements.append(value)
-                    r = value.result()
                     result[key.result()] = value.result()
 
             return out.Value(result, bound_statements)
-
-            #
-            #
-            #
-
-            keys = [cast(out.Expression, self.apply(key)) for key in inp.keys]
-            values = [cast(out.Expression, self.apply(value)) for value in inp.values]
-
-            value = {key.result(): value.result() for key, value in zip(keys, values)}
-
-            return out.Value(value, cast(list[out.Statement], values))
 
         if isinstance(inp, ast.Subscript):
             value_expr = cast(out.Expression, self.apply(inp.value))
             slice_expr = cast(out.Expression, self.apply(inp.slice))
 
-            value_result = ObjTraits.get(value_expr.result())
+            value_result = value_expr.result()
             slice_result = ObjTraits.get(slice_expr.result())
 
             if isinstance(inp.ctx, ast.Store):
@@ -1959,6 +2042,9 @@ class PrepareAst:
         if isinstance(inp, ast.FunctionDef):
             bound_stmt = []
 
+            loc = self._fn_def.location().relative(1)
+            loc.function = inp.name
+
             assert (
                 len(inp.decorator_list) == 0
             ), "decorators on local functions not supported"
@@ -1977,7 +2063,8 @@ class PrepareAst:
                     global_dict={},
                     nonlocal_dict=self._scope,
                     default_converter=default_converter,
-                    location=self._fn_def.location().relative(inp.lineno),
+                    location=loc,
+                    add_self_to_nonlocal=True,
                 ),
             )
 

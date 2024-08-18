@@ -5,7 +5,7 @@ import unittest
 import itertools
 
 import cohdl
-from cohdl import Bit, BitVector, Port, Null, Full, select_with
+from cohdl import Bit, BitVector, Port, Null, Full, select_with, Unsigned, Signed
 from cohdl import std
 
 from cohdl_testutil import cocotb_util
@@ -26,6 +26,8 @@ def gen_entity():
         inp_vec_a = Port.input(BitVector[3])
         inp_vec_b = Port.input(BitVector[3])
         out_vec = Port.output(BitVector[3])
+        out_unsigned = Port.output(Unsigned[5])
+        out_signed = Port.output(Signed[6])
 
         inp_bit_a = Port.input(Bit)
         inp_bit_b = Port.input(Bit)
@@ -43,6 +45,26 @@ def gen_entity():
                         keys[0]: self.inp_vec_a & self.inp_vec_b,
                         keys[1]: self.inp_vec_a | self.inp_vec_b,
                         keys[2]: self.inp_vec_a ^ self.inp_vec_b,
+                        keys[3]: Full,
+                    },
+                )
+
+                self.out_unsigned <<= select_with(
+                    self.op,
+                    {
+                        keys[0]: self.inp_vec_a.unsigned & self.inp_vec_b.unsigned,
+                        keys[1]: self.inp_vec_a.unsigned | self.inp_vec_b.unsigned,
+                        keys[2]: self.inp_vec_a.unsigned ^ self.inp_vec_b.unsigned,
+                        keys[3]: Full,
+                    },
+                )
+
+                self.out_signed <<= select_with(
+                    self.op,
+                    {
+                        keys[0]: self.inp_vec_a.signed & self.inp_vec_b.signed,
+                        keys[1]: Null,
+                        keys[2]: self.inp_vec_a.unsigned ^ self.inp_vec_b.unsigned,
                         keys[3]: Full,
                     },
                 )
@@ -85,15 +107,23 @@ async def testbench_match_simple(dut):
             case "00":
                 out_vec = vec_a & vec_b
                 out_bit = bit_a & bit_b
+                out_unsigned = vec_a & vec_b
+                out_signed = (vec_a & vec_b).signed()
             case "01":
                 out_vec = vec_a | vec_b
                 out_bit = bit_a | bit_b
+                out_unsigned = vec_a | vec_b
+                out_signed = 0
             case "10":
                 out_vec = vec_a ^ vec_b
                 out_bit = bit_a ^ bit_b
+                out_unsigned = vec_a ^ vec_b
+                out_signed = vec_a ^ vec_b
             case "11":
                 out_vec = vec_generator.full()
                 out_bit = vec_generator.null()
+                out_unsigned = (1 << 5) - 1
+                out_signed = -1
             case _:
                 raise AssertionError("invalid test case")
 
@@ -108,6 +138,8 @@ async def testbench_match_simple(dut):
             [
                 (dut.out_vec, out_vec),
                 (dut.out_bit, out_bit),
+                (dut.out_unsigned, out_unsigned),
+                (dut.out_signed, out_signed),
             ],
         )
 

@@ -303,7 +303,16 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
             wrapped_class = cls
 
         if not is_primitive_type(wrapped_class._Wrapped):
-            return wrapped_class._Wrapped(*args, **kwargs, _qualifier_=cls._Qualifier)
+            if issubclass(wrapped_class._Wrapped, (tuple, list)):
+                assert len(args) == 1
+                assert (
+                    len(kwargs) == 0
+                ), "TypeQualifier called with tuple/list argument does not expect any keyword arguments"
+                return wrapped_class._Wrapped([cls(elem) for elem in args[0]])
+            else:
+                return wrapped_class._Wrapped(
+                    *args, **kwargs, _qualifier_=cls._Qualifier
+                )
         else:
             return object.__new__(wrapped_class)
 
@@ -726,6 +735,16 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         result = self._value.__rshift__(_decay(rhs))
         return Temporary[type(result)](result)
 
+    @_intrinsic
+    def __rlshift__(self, lhs):
+        result = _decay(lhs).__lshift__(self._value)
+        return Temporary[type(result)](result)
+
+    @_intrinsic
+    def __rrshift__(self, lhs):
+        result = _decay(lhs).__rshift__(self._value)
+        return Temporary[type(result)](result)
+
     #
     # compare
     #
@@ -1013,6 +1032,18 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
             intr_op.BinaryOperator.RSHIFT, self.__rshift__(rhs), self, rhs
         )
 
+    @_intrinsic_replacement(__rlshift__)
+    def _lshift_replacement(self, lhs):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.LSHIFT, self.__rlshift__(lhs), lhs, self
+        )
+
+    @_intrinsic_replacement(__rrshift__)
+    def _rshift_replacement(self, lhs):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.RSHIFT, self.__rrshift__(lhs), lhs, self
+        )
+
     #
     # compare
     #
@@ -1020,6 +1051,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @_intrinsic_replacement(__eq__)
     def _eq_replacement(self, other):
         result = self.__eq__(other)
+
+        if other is Null or other is Full:
+            other = self.type(other)
 
         return (
             result
@@ -1033,6 +1067,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     def _ne_replacement(self, other):
         result = self.__ne__(other)
 
+        if other is Null or other is Full:
+            other = self.type(other)
+
         return (
             result
             if result is NotImplemented
@@ -1044,6 +1081,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @_intrinsic_replacement(__lt__)
     def _lt_replacement(self, other):
         result = self.__lt__(other)
+
+        if other is Null or other is Full:
+            other = self.type(other)
 
         return (
             result
@@ -1057,6 +1097,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     def _gt_replacement(self, other):
         result = self.__gt__(other)
 
+        if other is Null or other is Full:
+            other = self.type(other)
+
         return (
             result
             if result is NotImplemented
@@ -1069,6 +1112,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     def _le_replacement(self, other):
         result = self.__le__(other)
 
+        if other is Null or other is Full:
+            other = self.type(other)
+
         return (
             result
             if result is NotImplemented
@@ -1080,6 +1126,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @_intrinsic_replacement(__ge__)
     def _ge_replacement(self, other):
         result = self.__ge__(other)
+
+        if other is Null or other is Full:
+            other = self.type(other)
 
         return (
             result
@@ -1119,10 +1168,13 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @property
     def unsigned(self):
-        cast = self._value.unsigned
-        return self.qualifier[type(cast)](
-            cast, _ref_spec=self._ref_spec, _root=self._root
-        )
+        if issubclass(self._Wrapped, Unsigned):
+            return self
+        else:
+            cast = self._value.unsigned
+            return self.qualifier[type(cast)](
+                cast, _ref_spec=self._ref_spec, _root=self._root
+            )
 
     @unsigned.setter
     def unsigned(self, value):
@@ -1133,10 +1185,13 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @property
     def signed(self):
-        cast = self._value.signed
-        return self.qualifier[type(cast)](
-            cast, _ref_spec=self._ref_spec, _root=self._root
-        )
+        if issubclass(self._Wrapped, Signed):
+            return self
+        else:
+            cast = self._value.signed
+            return self.qualifier[type(cast)](
+                cast, _ref_spec=self._ref_spec, _root=self._root
+            )
 
     @signed.setter
     def signed(self, value):
@@ -1147,10 +1202,13 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @property
     def bitvector(self):
-        cast = self._value.bitvector
-        return self.qualifier[type(cast)](
-            cast, _ref_spec=self._ref_spec, _root=self._root
-        )
+        if not issubclass(self._Wrapped, (Signed, Unsigned)):
+            return self
+        else:
+            cast = self._value.bitvector
+            return self.qualifier[type(cast)](
+                cast, _ref_spec=self._ref_spec, _root=self._root
+            )
 
     @bitvector.setter
     def bitvector(self, value):

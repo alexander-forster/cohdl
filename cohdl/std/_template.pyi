@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar, Self, Any
 
 T = TypeVar("T")
-TemplateArg = TypeVar("TemplateArg")
+TempArg = TypeVar("TempArg")
 
 class _TemplateMode(enum.Enum):
     ROOT = enum.auto()
@@ -19,7 +19,7 @@ class _TemplateMeta:
     instances: dict[str, type[Template]]
     annotations: dict[str, Any]
 
-class Template(Generic[TemplateArg]):
+class Template(Generic[TempArg]):
     """
     Helper class, that implements a basic template functionality
     similar to C++.
@@ -81,13 +81,13 @@ class Template(Generic[TemplateArg]):
 
     def __class_getitem__(cls: Self, args) -> Self: ...
 
-class _TemplateArg:
-    Type: type
+class TemplateArg:
+    Type = T
 
-    def __call__(self, cls: type[T]) -> type[T]:
+    def __new__(cls, arg: type[T]) -> type[T]:
         """
         Decorator that adds __init__, __hash__ and __eq__
+        Use new instead of __call__ because TemplateArg is a class.
+
         to a class so it can be used as an argument for std.Template.
         """
-
-template_arg = _TemplateArg()

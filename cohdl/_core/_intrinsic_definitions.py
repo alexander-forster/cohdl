@@ -129,6 +129,13 @@ _intrinsic(dict.__contains__)
 _intrinsic(tuple)
 _intrinsic(tuple.__getitem__)
 
+
+# indirect needed for case where tuples are merged
+@_intrinsic_replacement(tuple.__getitem__, special_case=False)
+def tuple_getitem_replacement(self, idx):
+    return self.__getitem__(idx)
+
+
 #
 # list methods
 #
@@ -138,6 +145,13 @@ _intrinsic(list.__getitem__)
 _intrinsic(list.__add__)
 _intrinsic(list.__mul__)
 _intrinsic(list.__rmul__)
+
+
+# indirect needed for case where lists are merged
+@_intrinsic_replacement(list.__getitem__, special_case=False)
+def list_getitem_replacement(self, idx):
+    return self.__getitem__(idx)
+
 
 #
 # str methods

@@ -396,13 +396,8 @@ class Compare(Expression):
 
 class All(Expression):
     def __init__(self, conditions: list, bound_expressions: list[Expression]):
-        if len(conditions) == 0:
-            result = True
-        else:
-            result = _type_qualifier.Temporary[bool]()
-
         super().__init__(
-            result,
+            _type_qualifier.Temporary[bool](),
             bound_statements=bound_expressions,
         )
 
@@ -414,13 +409,8 @@ class All(Expression):
 
 class Any(Expression):
     def __init__(self, conditions: list, bound_expressions: list[Expression]):
-        if len(conditions) == 0:
-            result = False
-        else:
-            result = _type_qualifier.Temporary[bool]()
-
         super().__init__(
-            result,
+            _type_qualifier.Temporary[bool](),
             bound_statements=bound_expressions,
         )
 
@@ -730,7 +720,7 @@ class ResetPushed(Statement):
 
 class Assert(Statement):
     def __init__(self, cond: Expression, message: str | None):
-        super().__init__(bound_statements=cond.bound_statements())
+        super().__init__()
 
         self._cond = cond
         self._msg = message

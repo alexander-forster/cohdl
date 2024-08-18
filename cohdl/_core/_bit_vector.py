@@ -150,7 +150,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
             elif isinstance(val, _NullFullType):
                 start_val = [Bit(val) for _ in range(self._width)]
             else:
-                raise AssertionError("invalid default value")
+                raise AssertionError(
+                    f"invalid default value '{val}' for type {type(self)}"
+                )
 
             self._value.apply_zip(
                 lambda bit, state: bit._assign(state),
@@ -467,6 +469,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
     def unsigned(self: BitVector):
         from . import Unsigned
 
+        if isinstance(self, Unsigned):
+            return self
+
         return Unsigned[self._width](self._value)
 
     @_intrinsic
@@ -479,6 +484,9 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
     def signed(self):
         from . import Signed
 
+        if isinstance(self, Signed):
+            return self
+
         return Signed[self._width](self._value)
 
     @_intrinsic
@@ -489,6 +497,11 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
     @_intrinsic
     @property
     def bitvector(self) -> BitVector:
+        from . import Unsigned, Signed
+
+        if not isinstance(self, (Unsigned, Signed)):
+            return self
+
         return BitVector[self._width](self._value)
 
     @_intrinsic

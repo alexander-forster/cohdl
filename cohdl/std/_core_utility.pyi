@@ -11,13 +11,7 @@ from typing import (
     Any,
 )
 
-from cohdl._core import (
-    Entity,
-    Bit,
-    BitVector,
-    Signed,
-    Unsigned,
-)
+from cohdl._core import Entity, Bit, BitVector, Signed, Unsigned, AssignMode
 
 from cohdl._core import Signal as CohdlSignal
 from cohdl._core import Variable as CohdlVariable
@@ -46,6 +40,16 @@ def comment(*lines: str) -> None:
     >>> -- Hello, world!
     >>> -- A
     >>> -- B
+    """
+
+def assign(target, source, mode: AssignMode = AssignMode.AUTO):
+    """
+    Assign the source value to target using the specified mode.
+    Used for generic code where the assignment operator (<<=, @= or ^=)
+    depends on the context the operation is used in.
+
+    Equivalent to:
+    >>> target._assign_(source, mode)
     """
 
 def as_pyeval(fn, /, *args, **kwargs):
@@ -168,13 +172,32 @@ class _TemporaryQualifierWrapper:
 
 Ref: _RefQualifierWrapper
 """
-std.Ref asfdasdf
+std.Ref is a pseudo type qualifier. When applied to a primitive
+object (Bit, BitVector, Signed, Unsigned, Array), it returns its argument unchanged.
+For other types, std.Ref attempts to construct a deep copy with std.Ref applied to all members.
 """
 
 Value: _ValueQualifierWrapper
+"""
+std.Value is a pseudo type qualifier. It returns a read only copy of its argument.
+If the argument is a literal type, it is returned directly, otherwise a new Temporary
+is constructed.
+"""
+
 Signal: _SignalQualifierWrapper
+"""
+std.Signal is an alias to cohdl.Signal
+"""
+
 Variable: _VariableQualifierWrapper
+"""
+std.Variable is an alias to cohdl.Variable
+"""
+
 Temporary: _TemporaryQualifierWrapper
+"""
+std.Temporary is an alias to cohdl.Temporary
+"""
 
 NoresetSignal: _SignalQualifierWrapper
 """
@@ -259,6 +282,11 @@ def one_hot(width: int, bit_pos: int | Unsigned) -> BitVector:
     """
     Returns a BitVector of `width` bits where the single bit at index
     `bit_pos` is set to `1`.
+    """
+
+def is_one_hot(inp: BitVector) -> Bit:
+    """
+    Returns '1' if a single bit in `inp` is `1` otherwise `0`.
     """
 
 def reverse_bits(inp: BitVector) -> BitVector:
@@ -459,7 +487,7 @@ def binary_fold(fn: Callable[[Any, Any], Any], args: Iterable, right_fold=False)
 
 def batched_fold(fn: Callable[[Any, Any], Any], args: Iterable, batch_size=2):
     """
-    Alternative to binary_fold for commutative operations.
+    Alternative to binary_fold optimized for associative operations.
 
     - splits args into batches of the given size
     - runs std.binary fold on each batch
@@ -488,9 +516,20 @@ def concat(first, *args) -> BitVector:
     is a new BitVector (even when the argument was a single Bit)
     """
 
+def repeat(val: Bit | BitVector, times: int) -> BitVector:
+    """
+    Repeat `val` `times` times:
+
+    example:
+
+    >>> repeat(Bit('0'), 1)            # -> "0"
+    >>> repeat(Bit('1'), 3)            # -> "111"
+    >>> repeat(BitVector[3]('110'), 2) # -> "110110"
+    """
+
 def stretch(val: Bit | BitVector, factor: int) -> BitVector:
     """
-    repeat the bits of `val` `factor` times:
+    Repeat each Bit of `val` `factor` times:
 
     example:
 
@@ -610,10 +649,10 @@ def rshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
     >>> rshift_fill(abcdef, XYZ) == XYZabc
     """
 
-def batched(input: BitVector, n: int) -> list[BitVector]:
+def batched(input: BitVector, n: int, allow_partial: bool = False) -> list[BitVector]:
     """
     Splits an input vector of length `M` into subvectors of length `n`.
-    `M` must be a multiple of `n`.
+    `M` must be a multiple of `n` unless `allow_partial` is set to True.
     The result is a list of BitVectors starting with the least significant slice.
     The elements of the result are references to the corresponding slices of `input`.
 

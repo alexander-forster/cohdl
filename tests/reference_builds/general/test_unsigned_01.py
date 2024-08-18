@@ -60,6 +60,14 @@ class test_operations(cohdl.Entity):
         slice_u_c = Port.output(BitVector[3])
         slice_u_d = Port.output(BitVector[3])
 
+        init_from_same = Port.output(Unsigned[4])
+        init_from_shorter = Port.output(Unsigned[5])
+        init_from_shorter2 = Port.output(Unsigned[6])
+
+        choose_shorter1 = Port.output(Unsigned[5])
+        choose_shorter2 = Port.output(Unsigned[6])
+        choose_shorter3 = Port.output(Unsigned[7])
+
     def architecture(self):
         array = Signal[Array[BitVector[4], 16]]()
 
@@ -95,6 +103,20 @@ class test_operations(cohdl.Entity):
             self.slice_u_b <<= self.b.lsb(3)
             self.slice_u_c <<= self.b[3:1]
             self.slice_u_d <<= self.b.msb(3)
+
+        @std.concurrent
+        def logic_init():
+            self.init_from_same <<= Signal[Unsigned[4]](self.a)
+            self.init_from_shorter <<= Signal[Unsigned[5]](self.a)
+            self.init_from_shorter2 <<= Signal[Unsigned[6]](self.a)
+
+            self.choose_shorter1 <<= self.a if self.a < self.b else self.b
+            self.choose_shorter2 <<= (
+                self.init_from_shorter if self.a < self.b else self.b
+            )
+            self.choose_shorter3 <<= (
+                self.b if self.a < self.b else self.init_from_shorter2
+            )
 
 
 #
@@ -153,6 +175,12 @@ async def testbench_operations(dut: test_operations):
                     (dut.slice_u_b, b_lower, "slice_u_b"),
                     (dut.slice_u_c, b_upper, "slice_u_c"),
                     (dut.slice_u_d, b_upper, "slice_u_d"),
+                    (dut.init_from_same, a, "init_from_same"),
+                    (dut.init_from_shorter, a, "init_from_shorter"),
+                    (dut.init_from_shorter2, a, "init_from_shorter2"),
+                    (dut.choose_shorter1, (a if a < b else b), "choose_shorter1"),
+                    (dut.choose_shorter2, (a if a < b else b), "choose_shorter2"),
+                    (dut.choose_shorter3, (b if a < b else a), "choose_shorter3"),
                 ],
                 check_msg=f"{a=}, {b=}",
             )

@@ -4,16 +4,11 @@ import unittest
 
 import cohdl
 from cohdl import (
-    Bit,
     BitVector,
     Port,
     Signal,
     Unsigned,
     Signed,
-    select_with,
-    Null,
-    Full,
-    enum,
     Array,
 )
 
@@ -54,6 +49,20 @@ class test_operations(cohdl.Entity):
         slice_s_c = Port.output(BitVector[3])
         slice_s_d = Port.output(BitVector[3])
 
+        init_from_same = Port.output(Signed[4])
+        init_from_shorter = Port.output(Signed[5])
+        init_from_shorter2 = Port.output(Signed[6])
+
+        init_from_unsigned1 = Port.output(Signed[5])
+        init_from_unsigned2 = Port.output(Signed[6])
+        init_from_unsigned3 = Port.output(Signed[7])
+
+        choose_shorter1 = Port.output(Signed[5])
+        choose_shorter2 = Port.output(Signed[6])
+        choose_shorter3 = Port.output(Signed[7])
+
+        choose_unsigned = Port.output(Signed[6])
+
     def architecture(self):
         array = Signal[Array[BitVector[4], 8]]()
 
@@ -83,6 +92,26 @@ class test_operations(cohdl.Entity):
             self.slice_s_c <<= self.b[3:1]
             self.slice_s_d <<= self.b.msb(3)
 
+        @std.concurrent
+        def logic_init():
+            self.init_from_same <<= Signal[Signed[4]](self.a)
+            self.init_from_shorter <<= Signal[Signed[5]](self.a)
+            self.init_from_shorter2 <<= Signal[Signed[6]](self.a)
+
+            self.init_from_unsigned1 <<= Signal[Signed[5]](self.a.unsigned)
+            self.init_from_unsigned2 <<= Signal[Signed[6]](self.a.unsigned)
+            self.init_from_unsigned3 <<= Signal[Signed[7]](self.a.unsigned)
+
+            self.choose_shorter1 <<= self.a if self.a < self.b else self.b
+            self.choose_shorter2 <<= (
+                self.init_from_shorter if self.a < self.b else self.b
+            )
+            self.choose_shorter3 <<= (
+                self.b if self.a < self.b else self.init_from_shorter2
+            )
+
+            self.choose_unsigned <<= self.a if self.a < self.b else self.b.unsigned
+
 
 #
 # test code
@@ -101,6 +130,9 @@ def as_signed(inp):
 async def testbench_operations(dut: test_operations):
     for a in range(16):
         for b in range(16):
+            sa = as_signed(a)
+            sb = as_signed(b)
+
             b_div = as_signed(b if b != 0 else 1)
 
             op_add = as_signed(a + b)
@@ -141,6 +173,16 @@ async def testbench_operations(dut: test_operations):
                     (dut.slice_s_b, b_lower, "slice_s_b"),
                     (dut.slice_s_c, b_upper, "slice_s_c"),
                     (dut.slice_s_d, b_upper, "slice_s_d"),
+                    (dut.init_from_same, as_signed(a), "init_from_same"),
+                    (dut.init_from_shorter, as_signed(a), "init_from_shorter"),
+                    (dut.init_from_shorter2, as_signed(a), "init_from_shorter2"),
+                    (dut.init_from_unsigned1, a, "init_from_unsigned1"),
+                    (dut.init_from_unsigned2, a, "init_from_unsigned2"),
+                    (dut.init_from_unsigned3, a, "init_from_unsigned3"),
+                    (dut.choose_shorter1, sa if sa < sb else sb, "choose_shorter1"),
+                    (dut.choose_shorter2, sa if sa < sb else sb, "choose_shorter2"),
+                    (dut.choose_shorter3, sb if sa < sb else sa, "choose_shorter3"),
+                    (dut.choose_unsigned, sa if sa < sb else b, "choose_unsigned"),
                 ],
                 check_msg=f"{a=}, {b=}, {b_div=}, {as_signed(b_div)=}",
             )

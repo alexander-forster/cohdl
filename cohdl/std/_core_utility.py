@@ -24,6 +24,7 @@ from cohdl._core import (
     Full,
     static_assert,
     is_primitive_type,
+    AssignMode,
     Array as CohdlArray,
     Integer as CohdlInteger,
     Boolean as CohdlBool,
@@ -42,6 +43,10 @@ def nop(*args, **kwargs):
 
 def comment(*lines):
     cohdl_comment(*lines)
+
+
+def assign(target, source, mode: AssignMode = AssignMode.AUTO):
+    target._assign_(source, mode)
 
 
 @_intrinsic
@@ -164,6 +169,12 @@ class _Value:
                         return TypeQualifierBase.decay(arg)
                     else:
                         return T(arg)
+        elif issubclass(T, (tuple, list)):
+            assert len(args) == 1
+            assert (
+                len(kwargs) == 0
+            ), "std.Value called with tuple/list argument does not expect any keyword arguments"
+            return T([Value(elem) for elem in args[0]])
         else:
             return T(*args, **kwargs, _qualifier_=Value)
 
@@ -216,6 +227,12 @@ class _Ref:
                 )
 
                 return arg
+        elif issubclass(T, (tuple, list)):
+            assert len(args) == 1
+            assert (
+                len(kwargs) == 0
+            ), "std.Ref called with tuple/list argument does not expect any keyword arguments"
+            return T([Ref(elem) for elem in args[0]])
         else:
             return T(*args, **kwargs, _qualifier_=Ref)
 
@@ -355,6 +372,15 @@ def width(inp: Bit | BitVector) -> int:
 def one_hot(width: int, bit_pos: int | Unsigned) -> BitVector:
     assert 0 <= bit_pos < width, "bit_pos out of range"
     return (Unsigned[width](1) << bit_pos).bitvector
+
+
+@_intrinsic
+def _one_hot_map(l):
+    return {one_hot(l, bit): True for bit in range(l)}
+
+
+def is_one_hot(inp):
+    return select(inp, _one_hot_map(len(inp)), False)
 
 
 def reverse_bits(inp: BitVector) -> BitVector:
@@ -577,7 +603,7 @@ def check_return(fn):
 #
 
 
-def binary_fold(fn, args, right_fold=False):
+def binary_fold(fn, args, *, right_fold=False):
     if len(args) == 1:
         return Value(args[0])
     else:
@@ -599,26 +625,21 @@ def _batch_args(args: list, batch_size: int):
     return batches
 
 
-def batched_fold(fn, args, batch_size=2):
+def batched_fold(fn, args, *, batch_size=2):
     if const_cond(len(args) <= batch_size):
-        return binary_fold(fn, *args)
+        return binary_fold(fn, args)
     else:
         return batched_fold(
             fn,
-            *[
+            [
                 batched_fold(fn, batch, batch_size=batch_size)
                 for batch in _batch_args(args, batch_size)
             ],
         )
 
 
-def _concat_pairwise(args: list):
-    result = []
-
-    for a, b in zip(args[0::2], args[1::2]):
-        as_pyeval(result.append, a @ b)
-
-    return result
+def _concat_impl(a, b):
+    return a @ b
 
 
 def concat(first, *args):
@@ -631,10 +652,7 @@ def concat(first, *args):
             ), "first is {} and not a BitVector".format(first)
             return Value[BitVector[len(first)]](first)
     else:
-        if len(args) % 2 == 0:
-            return first @ concat(*_concat_pairwise(args))
-        else:
-            return concat(*_concat_pairwise([first, *args]))
+        return batched_fold(_concat_impl, [first, *args])
 
 
 def _repeat_filter_by_factor(stretch_list, factor: int):
@@ -828,10 +846,18 @@ def rshift_fill(val: BitVector, fill: Bit | BitVector) -> BitVector:
         return fill @ val.msb(width_val - width_fill)
 
 
-def batched(input: BitVector, n: int) -> list[BitVector]:
-    static_assert(len(input) % n == 0)
+@_intrinsic
+def _batched_indices(l, n):
+    last = l - 1
+    return [(min(off + n - 1, last), off) for off in range(0, l, n)]
 
-    return [input[off + n - 1 : off] for off in range(0, len(input), n)]
+
+def batched(input: BitVector, n: int, allow_partial=False) -> list[BitVector]:
+    is_multiple = len(input) % n == 0
+
+    static_assert(is_multiple or const_cond(allow_partial))
+
+    return [input[upper:lower] for upper, lower in _batched_indices(len(input), n)]
 
 
 def select_batch(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TypeVar, Generic, overload, NoReturn, Literal
+import enum
+from typing import TypeVar, Generic, overload, NoReturn, Literal, Iterator
 
 from cohdl._core import (
     Entity,
@@ -142,6 +143,7 @@ class _ArraySlice(Generic[T]):
 
     def __getitem__(self, key) -> _ArraySlice[T]: ...
     def __len__(self) -> int: ...
+    def __iter__(self) -> Iterator[T]: ...
     def _assign_(self, source, mode: AssignMode) -> None: ...
     def get_elem(self, index: int, qualifier=Ref) -> T: ...
     def set_elem(self, index: int, value: T): ...
@@ -193,6 +195,7 @@ class Array(Generic[T, N]):
         >>> arr[::2] <<= arr[1,3,5,7]
         """
 
+    def __iter__(self) -> Iterator[T]: ...
     def get_elem(self, index: Unsigned | int, qualifier=Ref) -> T:
         """
         Returns the value obtained by deserializing the stored element
@@ -842,10 +845,15 @@ class Fifo(Generic[T, N]):
     """
 
     def __init__(
-        self, name="fifo", delay: int = None, tx_delay: int = None, rx_delay: int = None
+        self,
+        *,
+        name="fifo",
+        delay: int = None,
+        tx_delay: int = None,
+        rx_delay: int = None,
     ):
         """
-        Create a Fifo that can transmit data of the given generic type `T`.
+        Create a Fifo that can hold data of the given generic type `T`.
 
         Similar to std.SyncFlag and std.MailBox, the delay parameters can be used to
         implement basic clock domain crossing. The synchronization is performed using
@@ -859,41 +867,121 @@ class Fifo(Generic[T, N]):
         >>> tx_delay = delay if tx_delay is None else tx_delay
         """
 
-    def push(self, data: T):
+    def push(self, data: T) -> None:
         """
-        push one element onto the Fifo
+        Push one element onto the Fifo.
 
-        may only be called once per clock cycle
-        may not be called on a full Fifo
-        """
-
-    def pop(self) -> T:
-        """
-        remove one element from the Fifo
-        returns the removed element
-
-        may not be called on an empty Fifo
+        May only be called once per clock cycle.
+        May not be called on a full Fifo.
         """
 
-    def front(self) -> T:
+    def pop(self, *, qualifier=Value) -> T:
         """
-        Returns the state of element at the front of the Fifo
+        Remove one element from the Fifo.
+        Returns the removed element (after applying `qualifier` to it).
+
+        May not be called on an empty Fifo.
+        """
+
+    def front(self, *, qualifier=Value) -> T:
+        """
+        Returns the state of the element at the front of the Fifo
         i.e. the next value returned by `pop` without removing it.
 
-        The result is undefined while the Fifo is empty
+        The result is undefined while the Fifo is empty.
         """
 
     def empty(self) -> Bit:
         """
-        check if fifo is empty
+        Check if Fifo is empty.
         """
 
     def full(self) -> Bit:
         """
-        check if fifo is full
+        Check if Fifo is full.
         """
 
-    async def receive(self, *, qualifier=Ref) -> T:
+    async def receive(self, *, qualifier=Value) -> T:
         """
         Waits until fifo is non-empty, then calls self.pop() and returns the result.
+        """
+
+class StackMode(enum.Enum):
+    """
+    Defines the overflow behavior of a `Stack`.
+    """
+
+    NO_OVERFLOW = enum.auto()
+    """
+    Default mode. The user must take care to never push
+    data onto a full `Stack`.
+    """
+
+    DROP_OLD = enum.auto()
+    """
+    In this mode, push operations to full Stacks are allowed.
+    For each push to a full Stack, the oldest element is dropped.
+    Subsequent calls to pop can get the last `N` elements back.
+    """
+
+class Stack(Generic[T, N]):
+    """
+    A first-in-last-out container that can hold up to `N` elements
+    of type `T`.
+    """
+
+    def __init__(self, *, name="stack", mode=StackMode.NO_OVERFLOW):
+        """
+        Create a Stack that can hold data of the given type `T`.
+
+        The optional `mode` parameter defines the overflow behavior of the Stack.
+        """
+
+    def push(self, data: T) -> None:
+        """
+        Push one element onto the Stack.
+
+        May only be called once per clock cycle.
+        May not be called on a full Stack (unless StackMode.DROP_OLD is used).
+
+        `push`, `pop` and `reset` work by modifying the internal write index.
+        Only one of these operations can be performed per clock cycle.
+        If more than one used in a sequential context, the last operation
+        is performed (consequence of the VHDL signal assignment rules).
+        """
+
+    def pop(self, *, qualifier=Value) -> T:
+        """
+        Remove one element from the Stack.
+        Returns the removed element (after applying `qualifier` to it).
+
+        May not be called on an empty Stack.
+        """
+
+    def front(self, *, qualifier=Value) -> T:
+        """
+        Returns the state of the element at the front of the Stack
+        i.e. the next value returned by `pop` without removing it.
+
+        The result is undefined while the Stack is empty.
+        """
+
+    def empty(self):
+        """
+        Check if Stack is empty.
+        """
+
+    def full(self) -> Bit:
+        """
+        Check if Stack is full.
+        """
+
+    def reset(self):
+        """
+        Clear the Stack by resetting the write index to 0.
+        """
+
+    def size(self) -> Unsigned:
+        """
+        Returns the current number of elements on the Stack.
         """

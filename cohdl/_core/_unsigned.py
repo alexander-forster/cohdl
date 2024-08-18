@@ -52,8 +52,21 @@ class Unsigned(BitVector):
         self,
         val: None | BitVector | str | int = None,
     ):
+        import cohdl
+
         if isinstance(val, Integer):
             val = int(val)
+
+        elif isinstance(val, Unsigned):
+            assert (
+                val.width <= self.width
+            ), f"cannot initialize {type(self)} with wider type {type(val)}"
+
+            val = val.to_int()
+        elif isinstance(val, cohdl.Signed):
+            raise AssertionError(
+                f"cannot initialize unsigned type {type(self)} from signed {type(val)}"
+            )
 
         if isinstance(val, int):
             assert (
@@ -250,14 +263,22 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __lshift__(self, rhs: Unsigned | int | Integer) -> Unsigned:
-        i = self.to_int()
-        s = int(rhs)
-        val = (self.to_int() << int(rhs)) & ((1 << self.width) - 1)
+        try:
+            rhs = int(rhs)
+        except TypeError:
+            return NotImplemented
+
+        val = (self.to_int() << rhs) & ((1 << self.width) - 1)
         return Unsigned[self.width](val)
 
     @_intrinsic
     def __rshift__(self, rhs: Unsigned | int | Integer) -> Unsigned:
-        val = self.to_int() >> int(rhs)
+        try:
+            rhs = int(rhs)
+        except TypeError:
+            return NotImplemented
+
+        val = self.to_int() >> rhs
         return Unsigned[self.width](val)
 
     @_intrinsic
@@ -336,6 +357,12 @@ class Unsigned(BitVector):
         ), f"width of zero extended value ({self.width}+{zeros}) exceeds target width ({target_width})"
         val = self.to_int() * 2**zeros
         return Unsigned[target_width](val)
+
+    @_intrinsic
+    def __hash__(self) -> int:
+        # redefine has method because it is implicitly deleted
+        # when __eq__ is defined
+        return super().__hash__()
 
     @_intrinsic
     def __repr__(self):

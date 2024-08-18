@@ -67,6 +67,12 @@ class _ValueBranch:
     def __getitem__(self, args):
         return _ValueBranch(self.hook, self.obj.__getitem__(args))
 
+    def __iter__(self):
+        return iter(_ValueBranch(self.hook, elem) for elem in self.obj)
+
+    def __len__(self):
+        return len(self.obj)
+
     def _getattr(self, name):
         return _ValueBranch(self.hook, ObjTraits.getattr(self.obj, name))
 
@@ -87,6 +93,13 @@ def _try_join(options):
 
     # find most constrained primitive type compatible with all options
     for option in options:
+        if isinstance(option, _NullFullType):
+            # do not join Null/Full assignments like the following
+            # would lead to errors
+            #
+            # Signal[Unsigned[8]]() <<= Signal[Unsigned[4]]() if a else Full
+            return None
+
         option = TypeQualifier.decay(option)
         option_type = type(option)
 
@@ -120,26 +133,22 @@ def _try_join(options):
             elif issubclass(result_type, BitVector) and issubclass(
                 option_type, BitVector
             ):
-                if issubclass(result_type, Signed) and issubclass(option_type, Signed):
+                r_signed = isinstance(result_type, Signed)
+                r_unsigned = isinstance(result_type, Unsigned)
+
+                o_signed = isinstance(option_type, Signed)
+                o_unsigned = isinstance(option_type, Unsigned)
+
+                if (r_signed and o_signed) or (r_unsigned and o_unsigned):
                     result_type = (
                         result_type
                         if result_type.width >= option_type.width
                         else option_type
                     )
-                elif issubclass(result_type, Unsigned) and issubclass(
-                    option_type, Unsigned
-                ):
-                    result_type = (
-                        result_type
-                        if result_type.width >= option_type.width
-                        else option_type
-                    )
-                else:
+                elif not (r_unsigned or r_signed or o_unsigned or o_signed):
                     if result_type.width != option_type.width:
                         # incompatible branches, return early
                         return None
-
-                    result_type = BitVector[result_type.width]
 
     if result_type is None:
         return None
@@ -221,6 +230,15 @@ class _MergedBranch:
     def id(self):
         return _MergedBranch([branch._id() for branch in self.branches])
 
+    def _is(self, other):
+        if not isinstance(other, _MergedBranch):
+            return False
+
+        if len(self.branches) != len(other.branches):
+            return False
+
+        return all(a.obj is b.obj for a, b in zip(self.branches, other.branches))
+
     def _getitem(self, *args):
         return _MergedBranch([branch.__getitem__(*args) for branch in self.branches])
 
@@ -233,6 +251,32 @@ class _MergedBranch:
     def _redirect_values(self, target):
         for branch in self.branches:
             branch._redirect(target)
+
+    def __getitem__(self, *args):
+        return self._getitem(*args)
+
+    def __len__(self):
+        result = None
+
+        for elem in self.branches:
+            l = len(elem)
+
+            if result is None:
+                result = l
+            else:
+                assert (
+                    result == l
+                ), f"length of possible sources is not consistent {result} != {l}"
+
+        return result
+
+    def __iter__(self):
+        result = []
+
+        for elems in zip(*self.branches, strict=True):
+            result.append(_MergedBranch(elems))
+
+        return iter(result)
 
 
 class ObjTraits:

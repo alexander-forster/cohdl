@@ -413,9 +413,23 @@ class SelectWith(Statement):
         else:
             separators = "," * len(self._branches)
 
+        assert isinstance(self._arg, Value)
+
+        arg: Value = self._arg
+
+        if isinstance(TypeQualifier.decay(arg.result), BitVector):
+            root = TypeQualifier.decay(arg.result._root)
+
+            if isinstance(root, Unsigned):
+                arg = Value(arg.result.unsigned)
+            elif isinstance(root, Signed):
+                arg = Value(arg.result.signed)
+            else:
+                arg = Value(arg.result.bitvector)
+
         return TextBlock(
             [
-                f"with {self._arg.write(scope, constrain=True)} select {self._target.write(scope)} <=",
+                f"with {arg.write(scope, constrain=True)} select {self._target.write(scope)} <=",
                 IndentBlock(
                     [
                         *[

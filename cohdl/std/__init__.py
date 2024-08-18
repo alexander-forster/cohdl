@@ -38,6 +38,7 @@ from ._core_utility import (
     as_pyeval,
     fail,
     identity,
+    assign,
     regenerate_defaults,
     Ref,
     Value,
@@ -56,6 +57,7 @@ from ._core_utility import (
     ones,
     width,
     one_hot,
+    is_one_hot,
     reverse_bits,
     is_qualified,
     const_cond,
@@ -70,6 +72,7 @@ from ._core_utility import (
     binary_fold,
     batched_fold,
     concat,
+    repeat,
     stretch,
     leftpad,
     rightpad,
@@ -112,6 +115,8 @@ from .utility import (
     SyncFlag,
     Mailbox,
     Fifo,
+    StackMode,
+    Stack,
 )
 
 from ._fixed import SFixed, UFixed, FixedOverflowStyle, FixedRoundStyle
@@ -121,10 +126,8 @@ from . import bitfield
 from . import _crc as crc
 from . import uart
 
-from ._template import Template, template_arg
+from ._template import Template, TemplateArg
 from ._record import Record
 from .enum import Enum, FlagEnum
 
 from . import _exception as exception
-
-# from . import experimental as exp

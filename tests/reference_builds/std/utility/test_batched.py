@@ -14,6 +14,7 @@ class test_batched(cohdl.Entity):
     output_1 = Port.output(BitVector[6])
     output_2 = Port.output(BitVector[6])
     output_6 = Port.output(BitVector[6])
+    output_5 = Port.output(BitVector[6])
 
     selector_1 = Port.input(BitVector[6])
     selector_2 = Port.input(BitVector[3])
@@ -38,6 +39,12 @@ class test_batched(cohdl.Entity):
 
             for inp, out in zip(
                 std.batched(self.input, 6), std.batched(self.output_6, 6)
+            ):
+                out <<= inp
+
+            for inp, out in zip(
+                std.batched(self.input, 5, allow_partial=True),
+                std.batched(self.output_5, 5, allow_partial=True),
             ):
                 out <<= inp
 
@@ -66,6 +73,7 @@ async def testbench_batched(dut: test_batched):
 
         assert dut.output_1.value == input
         assert dut.output_2.value == input
+        assert dut.output_5.value == input
         assert dut.output_6.value == input
 
         assert dut.selected_1.value == (input >> (selector % 6)) & 1
@@ -105,3 +113,15 @@ class Unittest(unittest.TestCase):
                 assert elem == BitVector[n](Null)
                 elem <<= Full
                 assert part == BitVector[n](Full)
+
+        self.assertRaises(AssertionError, std.batched, value, 7)
+
+        a, b = std.batched(value, 7, allow_partial=True)
+
+        assert a.width == 7
+        assert b.width == 5
+
+        a <<= "1101001"
+        b <<= "01110"
+
+        assert value == "011101101001"

@@ -13,7 +13,7 @@ import cocotb
 import random
 
 
-@std.template_arg
+@std.TemplateArg
 class PairArg:
     first: type
     second: type

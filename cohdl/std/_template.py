@@ -193,7 +193,12 @@ def _unpack_init(self, real_init, arg):
         real_init(self, arg)
 
 
-class _TemplateArg:
+#
+#
+#
+
+
+class _MetaTemplateArg(type):
     @property
     @_intrinsic
     def Type(self):
@@ -214,8 +219,11 @@ class _TemplateArg:
 
         return _Type
 
+
+class TemplateArg(metaclass=_MetaTemplateArg):
+
     @_intrinsic
-    def __call__(self, cls):
+    def __new__(self, cls):
         dataclassed = dataclass(cls, unsafe_hash=True)
 
         real_init = dataclassed.__init__
@@ -226,6 +234,3 @@ class _TemplateArg:
         dataclassed.__init__ = __init__
 
         return dataclassed
-
-
-template_arg = _TemplateArg()
