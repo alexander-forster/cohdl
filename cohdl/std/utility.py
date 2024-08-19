@@ -50,6 +50,7 @@ from cohdl._core._intrinsic import _intrinsic
 from ._context import Duration, SequentialContext, concurrent, at_end_of_context
 from ._prefix import prefix, name, NamedQualifier
 from ._exception import StdExceptionHandler, RefQualifierFail
+from cohdl._core import Entity
 
 std_name = name
 
@@ -61,13 +62,21 @@ class _None:
 
 @_intrinsic
 def add_entity_port(entity, port, name: str | None = None):
+    if not isinstance(entity, type):
+        entity = type(entity)
+
+    assert issubclass(
+        entity, Entity
+    ), "first argument must be derived from cohdl.Entity"
+
     if name is None:
         name = port.name()
         assert name is not None, "cannot determine name of new port"
 
     assert name not in entity._info.ports, f"port '{name}' already exists"
-
     entity._info.add_port(name, port)
+    setattr(entity, name, port)
+
     return port
 
 

@@ -86,6 +86,11 @@ from ._core_utility import (
     rshift_fill,
     batched,
     select_batch,
+    minimum,
+    maximum,
+    count,
+    count_set_bits,
+    count_clear_bits,
 )
 
 from . import utility

@@ -37,6 +37,9 @@ from cohdl._core._intrinsic import comment as cohdl_comment
 from ._exception import RefQualifierFail, SerializationFail
 
 
+class _PrivateNone: ...
+
+
 def nop(*args, **kwargs):
     pass
 
@@ -866,8 +869,118 @@ def select_batch(
     static_assert(len(input) == len(onehot_selector) * batch_size)
     masked = input.bitvector & stretch(onehot_selector, batch_size)
 
-    return binary_fold(lambda a, b: a | b, batched(masked, batch_size))
+    return batched_fold(lambda a, b: a | b, batched(masked, batch_size))
 
 
 def parity(vec: BitVector) -> Bit:
-    return binary_fold(lambda a, b: a ^ b, vec)
+    return batched_fold(lambda a, b: a ^ b, vec)
+
+
+_lt = lambda a, b: a < b
+_gt = lambda a, b: a > b
+
+
+def minimum(first, /, *args, key=identity, cmp=_lt):
+    if len(args) != 0:
+        return minimum([first, *args], key=key, cmp=cmp)
+    else:
+        assert len(first) != 0, "first argument is empty"
+        # reverse order of elements before fold so the first found
+        # minimum is returned
+        return batched_fold(lambda a, b: a if cmp(key(a), key(b)) else b, first[::-1])
+
+
+def maximum(first, /, *args, key=identity, cmp=_gt):
+    return minimum(first, *args, key=key, cmp=cmp)
+
+
+@_intrinsic
+def _safe_add_unsigned_target(a: Unsigned, b: Unsigned):
+    return Value[Unsigned[max(a.width, b.width) + 1]]
+
+
+def _safe_add_unsigned(a: Unsigned, b: Unsigned):
+    # add two unsigned numbers and extend the result
+    # size so no overflow is possible
+
+    T = _safe_add_unsigned_target(a, b)
+    return T(a) + b
+
+
+def _count_impl(container, cmp):
+    T_bit = Value[Bit]
+    inital_cnt = [as_bitvector(T_bit(bool(cmp(elem)))).unsigned for elem in container]
+
+    result_width = len(inital_cnt).bit_length()
+
+    result = batched_fold(_safe_add_unsigned, inital_cnt)
+
+    # TODO check if need, might always work because of batched_fold
+    if result.width != result_width:
+        return result.lsb(result_width).unsigned
+    else:
+        return result
+
+
+def count(container, /, value=_PrivateNone, *, check=_PrivateNone):
+    if len(container) == 0:
+        return Unsigned[1](0)
+    else:
+        if value is _PrivateNone:
+            assert check is not _PrivateNone, "one of value or check must be specified"
+            _check = check
+        else:
+            assert check is _PrivateNone, "only one of value and check can be specified"
+            _check = lambda x: x == value
+
+        return _count_impl(container, _check)
+
+
+@_intrinsic
+def _set_bit_map(w: int):
+    T = Unsigned.upto(w)
+    return {nr: T(nr.bit_count()) for nr in range(2**w)}
+
+
+def _count_set_bits_impl(vector: BitVector):
+    return select(vector.unsigned, _set_bit_map(vector.width), default=0)
+
+
+def count_set_bits(vector: BitVector, /, *, batch_size: int = 6):
+    set_cnt = [
+        _count_set_bits_impl(vec)
+        for vec in batched(vector, batch_size, allow_partial=True)
+    ]
+
+    result = batched_fold(_safe_add_unsigned, set_cnt)
+    result_width = vector.width.bit_length()
+
+    if result.width != result_width:
+        return result.lsb(result_width).unsigned
+    else:
+        return result
+
+
+@_intrinsic
+def _clear_bit_map(w: int):
+    T = Unsigned.upto(w)
+    return {nr: T(w - nr.bit_count()) for nr in range(2**w)}
+
+
+def _count_clear_bits_impl(vector: BitVector):
+    return select(vector.unsigned, _clear_bit_map(vector.width), default=0)
+
+
+def count_clear_bits(vector: BitVector, /, *, batch_size: int = 6):
+    set_cnt = [
+        _count_clear_bits_impl(vec)
+        for vec in batched(vector, batch_size, allow_partial=True)
+    ]
+
+    result = batched_fold(_safe_add_unsigned, set_cnt)
+    result_width = vector.width.bit_length()
+
+    if result.width != result_width:
+        return result.lsb(result_width).unsigned
+    else:
+        return result

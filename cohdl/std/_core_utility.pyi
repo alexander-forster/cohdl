@@ -25,6 +25,9 @@ class Full: ...
 T = TypeVar("T")
 U = TypeVar("U")
 
+SupportsGt = TypeVar("SupportsGt")
+SupportsLt = TypeVar("SupportsLt")
+
 def nop(*args, **kwargs) -> None:
     """
     A function that takes arbitrary arguments, does nothing and returns None.
@@ -685,4 +688,80 @@ def parity(vec: BitVector) -> Bit:
     Returns the parity of a given BitVector
     calculated as a repeated xor operation over
     all bits.
+    """
+
+@overload
+def minimum(
+    elements: Iterable[T],
+    key: Callable[[T], SupportsLt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a < b,
+) -> T: ...
+@overload
+def minimum(
+    *args: T,
+    key: Callable[[T], SupportsLt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a < b,
+) -> T:
+    """
+    Synthesizable alternative to Pythons builtin `min` function.
+
+    When only a single positional argument is specified, it is
+    interpreted as an iterable and its minimal value is returned.
+
+    When multiple positional arguments are specified, their minimum is returned.
+
+    The function specified by the `key` parameter is used to extract
+    an comparison key for each element (see documentation of the Python `min` function).
+
+    The `cmp` parameter defines the function used to compare elements.
+    `cmp` takes two positional arguments and is expected to return
+    True when the first is smaller than the second.
+    """
+
+@overload
+def maximum(
+    elements: Iterable[T],
+    /,
+    *,
+    key: Callable[[T], SupportsGt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a > b,
+) -> T: ...
+@overload
+def maximum(
+    *args: T,
+    key: Callable[[T], SupportsGt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a > b,
+) -> T:
+    """
+    Synthesizable alternative to Pythons builtin `max` function.
+
+    See description if `std.minimum`.
+    """
+
+@overload
+def count(container: Iterable, /, value) -> Unsigned: ...
+@overload
+def count(container: Iterable[T], *, check: Callable[[T], bool | Bit]) -> Unsigned:
+    """
+    Counts how often a value occurs in the `container`.
+
+    The overload with `value` counts all elements comparing equal to it.
+
+    The overload with `check` uses the return value of that callable
+    to determine if an element should be counted.
+    """
+
+def count_set_bits(vector: BitVector, /, *, batch_size: int = 6) -> Unsigned:
+    """
+    Returns the number of '1' bits in `vector`.
+
+    `batch_size` is an optional tuning parameter used to improve
+    the algorithm. It does not affect the output. Ideally it should
+    be set to the input size of LUTs available on the FPGA.
+    """
+
+def count_clear_bits(vector: BitVector, /, *, batch_size: int = 6) -> Unsigned:
+    """
+    Returns the number of '0' bits in `vector`.
+    See `count_set_bits` for more information.
     """
