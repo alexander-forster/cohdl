@@ -128,21 +128,27 @@ class Record(AssignableType, Template):
             # default constructor
             for name, elem_type in elem_types.items():
                 setattr(self, name, NamedQualifier[_qualifier_, name][elem_type]())
+
+            _init_members = False
         elif len(args) == 1 and len(kwargs) == 0:
             arg = args[0]
 
             if arg is Null or arg is Full:
+                _init_members = False
                 for name, elem_type in elem_types.items():
                     setattr(
                         self, name, NamedQualifier[_qualifier_, name][elem_type](arg)
                     )
-            else:
+            elif type(arg) is type(self):
+                _init_members = False
                 # copy constructor
-                assert type(arg) is type(self), "type mismatch {} != {}".format(
-                    type(arg), type(self)
-                )
                 self.__init__(**arg.__dict__, _qualifier_=_qualifier_)
+            else:
+                _init_members = True
         else:
+            _init_members = True
+
+        if _init_members:
             _args_to_kwargs(kwargs, args, elem_types)
 
             if len(kwargs) != len(elem_types):
@@ -161,9 +167,9 @@ class Record(AssignableType, Template):
                     f"argument error: missing args = {missing}, additional args = {additional}"
                 )
 
-            for name, arg in kwargs.items():
+            for name, val in kwargs.items():
                 expected_type = elem_types[name]
-                setattr(self, name, _qualifier_[expected_type](arg))
+                setattr(self, name, _qualifier_[expected_type](val))
 
     @classmethod
     @_intrinsic

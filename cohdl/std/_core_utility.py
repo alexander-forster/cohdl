@@ -894,6 +894,26 @@ def maximum(first, /, *args, key=identity, cmp=_gt):
     return minimum(first, *args, key=key, cmp=cmp)
 
 
+def min_element(container, /, *, key=identity, cmp=_lt):
+    Index = Unsigned.upto(len(container))
+    indexed_container = [(Index(nr), elem) for nr, elem in enumerate(container)]
+    return minimum(indexed_container, key=lambda x: key(x[1]), cmp=cmp)
+
+
+def max_element(container, /, *, key=identity, cmp=_gt):
+    return min_element(container, key=key, cmp=cmp)
+
+
+def min_index(container, /, *, key=identity, cmp=lambda a, b: a < b):
+    keys = [key(elem) for elem in container]
+    return min_element(keys, cmp=cmp)[0]
+
+
+def max_index(container, /, *, key=identity, cmp=lambda a, b: a > b):
+    keys = [key(elem) for elem in container]
+    return max_element(keys, cmp=cmp)[0]
+
+
 @_intrinsic
 def _safe_add_unsigned_target(a: Unsigned, b: Unsigned):
     return Value[Unsigned[max(a.width, b.width) + 1]]
@@ -984,3 +1004,15 @@ def count_clear_bits(vector: BitVector, /, *, batch_size: int = 6):
         return result.lsb(result_width).unsigned
     else:
         return result
+
+
+def clamp(val, low, high, cmp=_lt):
+    T = base_type(val)
+    val_low = Value[T](low)
+    val_high = Value[T](high)
+
+    return (
+        val_low
+        if cmp(val, val_low)
+        else (val_high if cmp(val_high, val) else Value[T](val))
+    )

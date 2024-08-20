@@ -354,7 +354,8 @@ class Signed(BitVector):
 
     @_intrinsic
     def __lt__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
+        if not isinstance(rhs, (Signed, int, Integer)):
+            return NotImplemented
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
@@ -366,7 +367,8 @@ class Signed(BitVector):
 
     @_intrinsic
     def __gt__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
+        if not isinstance(rhs, (Signed, int, Integer)):
+            return NotImplemented
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
@@ -378,7 +380,8 @@ class Signed(BitVector):
 
     @_intrinsic
     def __le__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
+        if not isinstance(rhs, (Signed, int, Integer)):
+            return NotImplemented
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()
@@ -390,7 +393,8 @@ class Signed(BitVector):
 
     @_intrinsic
     def __ge__(self, rhs: Signed | int | Integer) -> bool:
-        assert isinstance(rhs, (Signed, int, Integer)), f"invalid argument '{rhs}'"
+        if not isinstance(rhs, (Signed, int, Integer)):
+            return NotImplemented
 
         if isinstance(rhs, Integer):
             rhs = rhs.get_value()

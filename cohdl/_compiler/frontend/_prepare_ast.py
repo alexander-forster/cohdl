@@ -2074,6 +2074,9 @@ class PrepareAst:
         if isinstance(inp, ast.Lambda):
             bound_stmt = []
 
+            loc = self._fn_def.location().relative(1)
+            loc.function = f"LAMBDA_{loc.line+inp.lineno-1}"
+
             def default_converter(x):
                 stmt = self.apply(x)
                 bound_stmt.append(stmt)
@@ -2087,7 +2090,7 @@ class PrepareAst:
                     global_dict={},
                     nonlocal_dict=self._scope,
                     default_converter=default_converter,
-                    location=self._fn_def.location().relative(inp.lineno),
+                    location=loc,
                 ),
                 bound_statements=bound_stmt,
             )

@@ -27,6 +27,7 @@ U = TypeVar("U")
 
 SupportsGt = TypeVar("SupportsGt")
 SupportsLt = TypeVar("SupportsLt")
+ConvertibleToT = TypeVar("ConvertibleToT")
 
 def nop(*args, **kwargs) -> None:
     """
@@ -738,6 +739,67 @@ def maximum(
     See description if `std.minimum`.
     """
 
+def min_element(
+    container: Iterable[T],
+    /,
+    *,
+    key: Callable[[T], SupportsLt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a < b,
+) -> tuple[Unsigned, T]:
+    """
+    Finds the smallest element in the given `container` and returns
+    a tuple consisting of the index where the element was found and
+    a copy of the element.
+
+    The `key` and `cmp` parameters have the same meaning
+    as in `std.minimum`.
+
+    >>> U = Unsigned[4]
+    >>> l = [U(4), U(2), U(1), U(9), U(1), U(11)]
+    >>> idx, elem = std.min_element(l)
+    >>>
+    >>> assert idx == 2
+    >>> assert elem == 1
+    """
+
+def max_element(
+    container: Iterable[T],
+    /,
+    *,
+    key: Callable[[T], SupportsGt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a > b,
+) -> tuple[Unsigned, T]:
+    """
+    See `std.min_element`.
+    """
+
+def min_index(
+    container: Iterable[T],
+    /,
+    *,
+    key: Callable[[T], SupportsLt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a < b,
+) -> Unsigned:
+    """
+    Finds the index of the smallest element in the given `container`.
+    Unlike the minimum and min_element functions, this one does not have
+    to propagate all values. Instead, the keys are computed only once and then
+    used for all comparisons. This can be more efficient for large types with
+    small keys.
+    """
+
+def max_index(
+    container: Iterable[T],
+    /,
+    *,
+    key: Callable[[T], SupportsGt] = identity,
+    cmp: Callable[[T, T], bool] = lambda a, b: a > b,
+) -> Unsigned:
+    """
+    Finds the index of the largest element in the given `container`.
+    See `std.min_index`.
+    """
+
 @overload
 def count(container: Iterable, /, value) -> Unsigned: ...
 @overload
@@ -764,4 +826,21 @@ def count_clear_bits(vector: BitVector, /, *, batch_size: int = 6) -> Unsigned:
     """
     Returns the number of '0' bits in `vector`.
     See `count_set_bits` for more information.
+    """
+
+def clamp(
+    val: T, /, low: ConvertibleToT, high: ConvertibleToT, cmp=lambda a, b: a < b
+) -> T:
+    """
+    Compares `val`, `low` and `high` using `cmp`.
+    Returns
+        - `val` if it is in the range [low, high].
+        - `low` if `val` is less than `low`
+        - `high` if `val` is greater than `high`
+
+    The two bound values are converted to the type of `val`
+    before the comparison is performed.
+
+    `cmp` takes two positional arguments and should return True
+    when the first is smaller than the second.
     """
