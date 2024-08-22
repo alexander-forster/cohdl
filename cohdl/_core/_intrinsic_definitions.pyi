@@ -1,7 +1,11 @@
-class _Always:
-    def __call__(self, expr, /):
-        return expr
+from __future__ import annotations
 
+from typing import TypeVar
+
+T = TypeVar(T)
+
+class _Always:
+    def __call__(self, expr: T, /) -> T: ...
     def __enter__(self) -> None: ...
     def __exit__(self, type, value, traceback): ...
 
@@ -9,7 +13,7 @@ always = _Always()
 """
 `cohdl.always` creates concurrent logic within an sequential context.
 
-When called the argument expression is hoisted out of the generated VHDL process
+When called, the argument expression is hoisted out of the generated VHDL process
 into the concurrent scope. The return value can be used from within the sequential
 context.
 

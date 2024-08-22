@@ -275,7 +275,6 @@ def run_cocotb_tests(
     entity_name = entity.__name__
     local_dir = os.path.dirname(os.path.realpath(file))
     build_dir = f"{local_dir}/test_build"
-    vhdl_path = f"{build_dir}/{entity_name}.vhd"
     sim_dir = f"{local_dir}/test_sim"
 
     if sim_args is None:
@@ -296,14 +295,17 @@ def run_cocotb_tests(
 
         pathlib.Path(build_dir).mkdir()
         pathlib.Path(sim_dir).mkdir()
-        std.VhdlCompiler.to_dir(entity, build_dir)
+
+        build_result = std.VhdlCompiler.to_dir(entity, build_dir)
+    else:
+        build_result = []
 
     simulator.run(
         simulator="ghdl",
         sim_args=["--vcd=waveform.vcd", *sim_args],
         sim_build=sim_dir,
         vhdl_sources=[
-            vhdl_path,
+            *build_result,
             *[f"{build_dir}/{filename}" for filename in build_files],
             *vhdl_sources,
         ],

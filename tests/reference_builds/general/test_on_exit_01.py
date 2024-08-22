@@ -30,8 +30,8 @@ class test_on_exit_01(cohdl.Entity):
             def proc():
                 self.out_a <<= self.inp_a
 
-        cohdl.Block.on_exit(on_exit_a)
-        cohdl.Block.on_exit(self.on_exit_b)
+        cohdl.on_block_exit(on_exit_a)
+        cohdl.on_block_exit(self.on_exit_b)
 
 
 #

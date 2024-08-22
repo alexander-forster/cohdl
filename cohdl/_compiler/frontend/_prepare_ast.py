@@ -27,6 +27,7 @@ from cohdl._core._intrinsic import (
     _BitSignalEvent,
     _BitSignalEventGroup,
     _IntrinsicComment,
+    _IntrinsicInlineEntity,
 )
 from cohdl._core import _intrinsic, Null, Full
 
@@ -61,6 +62,7 @@ from cohdl._core._collect_ast_and_scope import (
 from ._traceback import pretty_traceback_active
 
 _parent_frame: None | VirtualFrame = None
+_inline_declared_entities: list = []
 
 #
 #
@@ -504,6 +506,13 @@ class PrepareAst:
 
         if isinstance(result, _IntrinsicComment):
             return out.Comment(result.lines)
+
+        if isinstance(result, _IntrinsicInlineEntity):
+            assert (
+                self._context is ContextType.CONCURRENT
+            ), "inline entity definition only allowed in concurrent contexts or always expression"
+            _inline_declared_entities.append(result.entity)
+            return out.Value(None, [])
 
         if result is NotImplemented:
             return out.Value(result, [])
@@ -1894,8 +1903,10 @@ class PrepareAst:
                 assert (
                     len(inp.args) == 1 and len(inp.keywords) == 0
                 ), "cohdl.always expects a single positional argument and no keyword arguments"
-
+                # change context type while the always expression is evaluated
+                self._context = ContextType.CONCURRENT
                 arg_expr = self.apply(inp.args[0])
+                self._context = ContextType.SEQUENTIAL
 
                 self.add_always_expr(arg_expr)
                 return out.Value(arg_expr.result(), [])
@@ -2247,17 +2258,17 @@ class ConvertPythonInstance:
 
             return out.Entity(
                 template,
-                inp.port_definitions,
-                inp.generic_definitions,
+                inp._cohdl_port_definitions,
+                inp._cohdl_generic_definitions,
             )
 
         if isinstance(inp, type):
             assert issubclass(inp, cohdl._core._context.Entity)
 
-            if inp._info.instantiated_template is None:
-                if inp._info.extern:
-                    inp._info.instantiated_template = out.EntityTemplate(
-                        inp._info, None, None
+            if inp._cohdl_info.instantiated_template is None:
+                if inp._cohdl_info.extern:
+                    inp._cohdl_info.instantiated_template = out.EntityTemplate(
+                        inp._cohdl_info, None, None
                     )
                 else:
                     #
@@ -2266,29 +2277,46 @@ class ConvertPythonInstance:
                     # the architecture
                     #
 
-                    inp(**inp._info.ports, **inp._info.generics)
-                    assert isinstance(inp._info.instantiated, inp)
+                    inp(**inp._cohdl_info.ports, **inp._cohdl_info.generics)
+                    instantiated = inp._cohdl_info.instantiated
+                    assert isinstance(instantiated, inp)
 
-                    inp._info.instantiated_template = out.EntityTemplate(
-                        inp._info,
-                        [
-                            self.apply(block)
-                            for block in inp._info.instantiated.contained_blocks()
-                        ],
-                        [
-                            self.apply(ctx)
-                            for ctx in inp._info.instantiated.contained_contexts()
-                        ],
+                    #
+
+                    converted_blocks = [
+                        self.apply(block)
+                        for block in instantiated._cohdl_block_info._subblocks
+                    ]
+
+                    converted_contexts = [
+                        self.apply(ctx)
+                        for ctx in instantiated._cohdl_block_info._subcontext
+                    ]
+
+                    global _inline_declared_entities
+                    while len(_inline_declared_entities) != 0:
+                        inline_entities = _inline_declared_entities
+                        _inline_declared_entities = []
+
+                        for inline_entity in inline_entities:
+                            converted_blocks.append(self.apply(inline_entity))
+
+                    #
+
+                    inp._cohdl_info.instantiated_template = out.EntityTemplate(
+                        inp._cohdl_info, converted_blocks, converted_contexts
                     )
 
-            return inp._info.instantiated_template
+            return inp._cohdl_info.instantiated_template
 
         if isinstance(inp, Block):
+            info = inp._cohdl_block_info
+
             return out.Block(
-                inp._name,
-                [self.apply(block) for block in inp._subblocks],
-                [self.apply(ctx) for ctx in inp._subcontext],
-                inp._attributes,
+                info._name,
+                [self.apply(block) for block in info._subblocks],
+                [self.apply(ctx) for ctx in info._subcontext],
+                info._attributes,
             )
 
         if isinstance(inp, Context):

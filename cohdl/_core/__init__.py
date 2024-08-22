@@ -18,7 +18,13 @@ from ._type_qualifier import (
     Attribute,
 )
 
-from ._context import sequential_context, concurrent_context, Block, Entity
+from ._context import (
+    sequential_context,
+    concurrent_context,
+    on_block_exit,
+    Block,
+    Entity,
+)
 
 from ._intrinsic import (
     comment,

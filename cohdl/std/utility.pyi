@@ -24,10 +24,83 @@ N = TypeVar(
     "N", Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 20, 24, 32, 64, 100, 128]
 )
 
-def add_entity_port(entity: Entity, port: Port, name: str | None = None) -> Port:
+EntityT = TypeVar("EntityT", bound=Entity)
+
+def add_entity_port(entity: type[Entity], port: Port, name: str | None = None) -> Port:
     """
     Adds a new port to the given entity.
+    One usage for this class is, to dynamically add needed ports
+    in hardware access layers.
     """
+
+class _EntityConnector(Generic[T]):
+    def __getitem__(self, entity_type: type[EntityT]) -> _EntityConnector[EntityT]: ...
+    def __call__(self, **kwargs) -> T: ...
+
+OpenEntity: _EntityConnector
+"""
+`std.OpenEntity` is a helper object that instantiates entities
+and automatically generates signals for unconnected output ports.
+`std.ConnectedEntity` is a more general form of `std.OpenEntity`
+that also auto-generates input ports.
+
+Overview of ways to instantiate entities:
+
+* plain cohdl.Entity
+
+    All ports must be explicitly specified as named parameters.
+
+* std.OpenEntity
+
+    All input ports must be explicitly specified as named parameters.
+    Missing output ports are auto-generated.
+
+* std.ConnectedEntity
+
+    All missing ports are auto-generated.
+    The user must ensure that all inputs are driven.
+
+Example:
+
+>>> class ExampleEntity(cohdl.Entity):
+>>>     inp_a = Port.input(Bit)
+>>>     inp_b = Port.input(Bit)
+>>> 
+>>>     out_a = Port.output(Bit)
+>>>     out_b = Port.output(Bit)
+>>> 
+>>>     def architecture(self):
+>>>         ...
+>>> 
+>>> 
+>>> class TopEntity(cohdl.Entity):
+>>>     top_in_a = Port.input(Bit)
+>>>     top_in_b = Port.input(Bit)
+>>> 
+>>>     top_out_a = Port.output(Bit)
+>>>     top_out_b = Port.output(Bit)
+>>> 
+>>>     def architecture(self):
+>>>         # instantiate ExampleEntity, leave `out_b` unconnected
+>>>         example = std.OpenEntity[ExampleEntity](
+>>>             inp_a=self.top_in_a, inp_b=self.top_in_b, out_a=self.top_out_a
+>>>         )
+>>> 
+>>>         @std.concurrent
+>>>         def logic():
+>>>             # Because, the signal `example.out_b` has not been specified in the
+>>>             # initializer list of std.OpenEntity. A Signal has been auto-generated for it.
+>>>             self.top_out_b <<= example.out_b
+
+"""
+
+ConnectedEntity: _EntityConnector
+"""
+Instantiates CoHDL entities and auto-generates connections
+for missing ports.
+
+See `std.OpenEntity` for more information.
+"""
 
 class Serialized(Generic[T], AssignableType):
     _elemtype_: type[T]

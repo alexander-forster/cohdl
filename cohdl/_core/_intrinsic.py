@@ -108,6 +108,16 @@ def _comment_replacement(*lines: str):
 
 
 #
+# inline entity
+#
+
+
+class _IntrinsicInlineEntity:
+    def __init__(self, entity):
+        self.entity = entity
+
+
+#
 #
 # select
 #

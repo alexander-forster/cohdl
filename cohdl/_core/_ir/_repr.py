@@ -1498,6 +1498,14 @@ class Block:
         for sub in self._subblocks:
             yield from sub.all_contexts()
 
+    def all_blocks(self):
+        # iterate over all nested blocks
+
+        yield self
+
+        for sub in self._subblocks:
+            yield from sub.all_blocks()
+
     def dump(self) -> IndentBlock:
         return IndentBlock(
             title="Block",
@@ -1739,7 +1747,38 @@ class EntityTemplate(Block):
 
         for ctx in self.all_contexts():
             current_ctx = ctx
-            ctx.code().visit_objects(check_usage)
+            ctx.visit_objects(check_usage)
+
+        for block in self.all_blocks():
+            if isinstance(block, Entity):
+                port_decl = block._template._info.ports
+
+                for name, sig in block._ports.items():
+                    decl: Port = port_decl[name]
+
+                    if not decl.is_output():
+                        continue
+
+                    sig_root: Signal = sig._root
+
+                    if sig_root in written_in:
+                        other = written_in[sig_root]
+                        current_name = f"entity instantiation: {block.name()}"
+
+                        if isinstance(other, Entity):
+                            other_name = f"entity instantiation: {other.name()}"
+                        else:
+                            other_name = f"{other.source_location()}"
+
+                        raise AssertionError(
+                            f"object '{sig_root}, name={sig_root.name()}' written in multiple contexts\n"
+                            " written in this context\n"
+                            f"{current_name}\n"
+                            " also written in this context\n"
+                            f"{other_name}\n"
+                        )
+                    else:
+                        written_in[sig_root] = block
 
     def info(self):
         return self._info

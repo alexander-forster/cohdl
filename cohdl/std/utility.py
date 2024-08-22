@@ -73,11 +73,58 @@ def add_entity_port(entity, port, name: str | None = None):
         name = port.name()
         assert name is not None, "cannot determine name of new port"
 
-    assert name not in entity._info.ports, f"port '{name}' already exists"
-    entity._info.add_port(name, port)
+    assert name not in entity._cohdl_info.ports, f"port '{name}' already exists"
+    entity._cohdl_info.add_port(name, port)
     setattr(entity, name, port)
 
     return port
+
+
+class _EntityConnector:
+    def __init__(self, require_inputs: bool, entity_type: type[Entity]):
+        self.require_inputs = require_inputs
+        self.entity_type = entity_type
+
+    @_intrinsic
+    def _gen_port_args(self, kwargs: dict):
+        result = {}
+
+        entity_name = self.entity_type._cohdl_info.name
+        port_info = self.entity_type._cohdl_info.ports
+        generic_info = self.entity_type._cohdl_info.generics
+
+        invalid_args = kwargs.keys() - port_info.keys() - generic_info.keys()
+        assert (
+            len(invalid_args) == 0
+        ), f"invalid arguments for '{self.entity_type}': ({invalid_args})"
+
+        for name, port in port_info.items():
+            if name in kwargs:
+                result[name] = kwargs[name]
+            else:
+                if self.require_inputs:
+                    assert (
+                        port.is_output()
+                    ), f"missing connection for input port '{name}'"
+
+                port_type = base_type(port)
+                result[name] = Signal[port_type](name=f"con_{entity_name}_{name}")
+
+        return result
+
+    @_intrinsic
+    def __getitem__(self, entity_type: type[Entity]):
+        assert self.entity_type is None
+        assert issubclass(entity_type, Entity)
+        return _EntityConnector(self.require_inputs, entity_type)
+
+    def __call__(self, **kwargs):
+        assert self.entity_type is not None
+        return self.entity_type(**self._gen_port_args(kwargs))
+
+
+ConnectedEntity = _EntityConnector(require_inputs=False, entity_type=None)
+OpenEntity = _EntityConnector(require_inputs=True, entity_type=None)
 
 
 class _SerializedTemplateArgs:

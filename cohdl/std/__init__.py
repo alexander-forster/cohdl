@@ -88,14 +88,21 @@ from ._core_utility import (
     select_batch,
     minimum,
     maximum,
+    min_element,
+    max_element,
+    min_index,
+    max_index,
     count,
     count_set_bits,
     count_clear_bits,
+    clamp,
 )
 
 from . import utility
 from .utility import (
     add_entity_port,
+    OpenEntity,
+    ConnectedEntity,
     Serialized,
     as_readable_vector,
     as_writeable_vector,

@@ -46,8 +46,6 @@ class test_clamp(cohdl.Entity):
             ).val
 
 
-print(std.VhdlCompiler.to_string(test_clamp))
-
 #
 # test code
 #
