@@ -459,6 +459,20 @@ class CaseWhen(Statement):
         self._others = others
 
     def write(self, scope) -> TextBlock:
+        assert isinstance(self._cond, Value)
+
+        cond: Value = self._cond
+
+        if isinstance(TypeQualifier.decay(cond.result), BitVector):
+            root = TypeQualifier.decay(cond.result._root)
+
+            if isinstance(root, Unsigned):
+                cond = Value(cond.result.unsigned)
+            elif isinstance(root, Signed):
+                cond = Value(cond.result.signed)
+            else:
+                cond = Value(cond.result.bitvector)
+
         def write_block(block: CodeBlock) -> TextBlock:
             if block.empty():
                 return TextBlock("null;")
@@ -466,11 +480,11 @@ class CaseWhen(Statement):
 
         return TextBlock(
             [
-                f"case {self._cond.write(scope, constrain=True)} is",
+                f"case {cond.write(scope, constrain=True)} is",
                 *[
                     IndentBlock(
                         [
-                            f"when {value.write(scope, target_hint=self._cond.result)} =>",
+                            f"when {value.write(scope, target_hint=cond.result)} =>",
                             IndentBlock(write_block(block)),
                         ]
                     )

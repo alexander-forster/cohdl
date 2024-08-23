@@ -227,12 +227,13 @@ class CoHDL_TestWriter(TestWriter):
 
         self._entity_name = entity_name
         self._Entity = CoHDLTest
+        self._ports = {}
 
     def name(self):
         return self._entity_name
 
     def ports(self):
-        return self._Entity._cohdl_info.ports
+        return self._ports
 
     def write(self, file=None):
         print(std.VhdlCompiler.to_string(self._Entity), file=file)
@@ -246,13 +247,15 @@ class CoHDL_TestWriter(TestWriter):
     @cohdl.pyeval
     def make_input(self, type, name):
         port = Port[type, Port.Direction.INPUT](name=name)
-        self._Entity._cohdl_info.add_port(name, port)
+        std.add_entity_port(self._Entity, port)
+        self._ports[name] = port
         return port
 
     @cohdl.pyeval
     def make_output(self, type, name):
         port = Port[type, Port.Direction.OUTPUT](name=name)
-        self._Entity._cohdl_info.add_port(name, port)
+        std.add_entity_port(self._Entity, port)
+        self._ports[name] = port
         return port
 
     def start_section(self, name: str):
@@ -319,12 +322,12 @@ def make_combined(test_fn, name):
                 for port_name, port in vhdl_ports.items():
                     port_name = f"{vhdl_prefix}_{port_name}"
                     port._name = port_name
-                    CombinedTest._cohdl_info.add_port(port_name, port)
+                    std.add_entity_port(CombinedTest, port)
 
                 for port_name, port in cohdl_ports.items():
                     port_name = f"{cohdl_prefix}_{port_name}"
                     port._name = port_name
-                    CombinedTest._cohdl_info.add_port(port_name, port)
+                    std.add_entity_port(CombinedTest, port)
 
                 vhdl_entity(
                     **{port_name: port for port_name, port in vhdl_ports.items()}

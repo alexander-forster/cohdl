@@ -330,6 +330,7 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
 
     @_intrinsic
     def __eq__(self, other: BitVector) -> bool:
+
         if isinstance(other, _NullFullType):
             if other:
                 return all(bit for bit in self._value)
@@ -338,6 +339,16 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
 
         if isinstance(other, str):
             other = BitVector[len(other)](other)
+        else:
+            assert isinstance(other, BitVector)
+
+            from ._signed import Signed
+            from ._unsigned import Unsigned
+
+            if isinstance(other, (Signed, Unsigned)):
+                raise AssertionError(
+                    "cannot directly compare bitvector to signed/unsigned, cast required"
+                )
 
         assert self.width == other.width, "cannot compare bitvectors of different width"
 

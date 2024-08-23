@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ._bit_vector import BitVector, BitOrder
 from ._integer import Integer
+from ._boolean import Null, Full
 
 from ._intrinsic import _intrinsic
 from cohdl.utility import Span
@@ -335,25 +336,42 @@ class Signed(BitVector):
         return ~self + 1
 
     @_intrinsic
-    def __eq__(self, other: BitVector | int | Integer) -> bool:
+    def __eq__(self, other: Signed | int | Integer) -> bool:
+        if other is Null or other is Full:
+            other = type(self)(other)
+
+        if not isinstance(other, (Signed, int, Integer)):
+            return NotImplemented
+
         if isinstance(other, Integer):
             other = other.get_value()
 
         if isinstance(other, int):
             return bool(other == self.to_int())
-        return super().__eq__(other)
+
+        return bool(other.to_int() == self.to_int())
 
     @_intrinsic
-    def __ne__(self, other: BitVector | int | Integer) -> bool:
+    def __ne__(self, other: Signed | int | Integer) -> bool:
+        if other is Null or other is Full:
+            other = type(self)(other)
+
+        if not isinstance(other, (Signed, int, Integer)):
+            return NotImplemented
+
         if isinstance(other, Integer):
             other = other.get_value()
 
         if isinstance(other, int):
             return bool(other != self.to_int())
-        return super().__ne__(other)
+
+        return bool(other.to_int() != self.to_int())
 
     @_intrinsic
     def __lt__(self, rhs: Signed | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Signed, int, Integer)):
             return NotImplemented
 
@@ -367,6 +385,9 @@ class Signed(BitVector):
 
     @_intrinsic
     def __gt__(self, rhs: Signed | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Signed, int, Integer)):
             return NotImplemented
 
@@ -380,6 +401,9 @@ class Signed(BitVector):
 
     @_intrinsic
     def __le__(self, rhs: Signed | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Signed, int, Integer)):
             return NotImplemented
 
@@ -393,6 +417,9 @@ class Signed(BitVector):
 
     @_intrinsic
     def __ge__(self, rhs: Signed | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Signed, int, Integer)):
             return NotImplemented
 

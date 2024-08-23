@@ -6,5 +6,7 @@ from cohdl._compiler.frontend._generate_ir import ConvertInstance
 
 
 def generate_internal_representation(instance):
-    preprocessed = ConvertPythonInstance().apply(instance)
+    with ConvertPythonInstance() as inst:
+        preprocessed = inst.apply(instance)
+
     return ConvertInstance().apply(preprocessed)

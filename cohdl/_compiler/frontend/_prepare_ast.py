@@ -51,6 +51,7 @@ from . import _prepare_ast_out as out
 from cohdl._core._boolean import _Boolean, _BooleanLiteral
 from cohdl._core._boolean import true as cohdl_true
 from cohdl._core._array import Array
+from cohdl._core._bit_vector import BitVector
 
 from cohdl._core._collect_ast_and_scope import (
     InstantiatedFunction,
@@ -69,17 +70,22 @@ _inline_declared_entities: list = []
 #
 
 
-def _make_comparable(lhs, rhs):
-    if isinstance(lhs, _type_qualifier.TypeQualifier) or is_primitive(lhs):
-        if isinstance(rhs, _type_qualifier.TypeQualifier) or is_primitive(rhs):
-            return lhs, rhs
+def _make_static_comparable(lhs, rhs):
+    assert not isinstance(
+        rhs, _type_qualifier.TypeQualifier
+    ), f"branch value '{rhs}' must be constant"
 
-        return lhs, type(_type_qualifier.TypeQualifier.decay(lhs))(rhs)
+    decay = _type_qualifier.TypeQualifier.decay
+    lhs_val = decay(lhs)
 
-    if isinstance(rhs, _type_qualifier.TypeQualifier) or is_primitive(rhs):
-        return type(_type_qualifier.TypeQualifier.decay(rhs))(lhs), rhs
+    assert is_primitive(
+        lhs_val
+    ), f"selector value must have primitive type, not {type(lhs_val)}"
 
-    raise AssertionError(f"invalid comparison between {lhs} and {rhs}")
+    if isinstance(lhs_val, BitVector):
+        return lhs.bitvector, type(lhs_val)(rhs).bitvector
+
+    return lhs, type(lhs_val)(rhs)
 
 
 #
@@ -298,7 +304,7 @@ class PrepareAst:
                 (
                     # convert cond from str literal to compatible primitive
                     # according to argument
-                    _make_comparable(result.arg, cond)[1],
+                    _make_static_comparable(result.arg, cond)[1],
                     expr,
                 )
                 for cond, expr in result.branches.items()
@@ -1792,7 +1798,7 @@ class PrepareAst:
 
                     subject_val, pattern_val = subject.result(), pattern.result()
 
-                    subject_val, pattern_val = _make_comparable(
+                    subject_val, pattern_val = _make_static_comparable(
                         subject_val, pattern_val
                     )
 
@@ -2246,9 +2252,46 @@ class PrepareAst:
 #
 #
 
+_active_converter_instance = None
+
 
 class ConvertPythonInstance:
+    def _entity_instantiation_handler(self, entity_info):
+        self._entity_infos.append(entity_info)
+
+    def __enter__(self):
+        from cohdl._core._context import _set_entity_instantiation_handler
+
+        global _active_converter_instance
+        assert (
+            _active_converter_instance is None
+        ), "only one converter instance can be active at a given time"
+        _active_converter_instance = self
+
+        _set_entity_instantiation_handler(self._entity_instantiation_handler)
+
+        self._entity_infos = []
+        return self
+
+    def __exit__(self, *args):
+        from cohdl._core._context import _set_entity_instantiation_handler
+
+        global _active_converter_instance
+        assert _active_converter_instance is self, "exit does not match enter"
+        _active_converter_instance = None
+        _set_entity_instantiation_handler(None)
+
+        for info in self._entity_infos:
+            # delete instantiation info from entity after compilation is complete
+            # this is done so future compilations do not contain cached results
+            # from the current run
+            info._discard_instantiation()
+
     def apply(self, inp):
+        assert (
+            _active_converter_instance is self
+        ), "apply may only be called on the active converter instance"
+
         if isinstance(inp, Entity):
             # convert template
             template = self.apply(type(inp))
@@ -2268,7 +2311,7 @@ class ConvertPythonInstance:
             if inp._cohdl_info.instantiated_template is None:
                 if inp._cohdl_info.extern:
                     inp._cohdl_info.instantiated_template = out.EntityTemplate(
-                        inp._cohdl_info, None, None
+                        inp._cohdl_info.copy(), None, None
                     )
                 else:
                     #
@@ -2304,7 +2347,7 @@ class ConvertPythonInstance:
                     #
 
                     inp._cohdl_info.instantiated_template = out.EntityTemplate(
-                        inp._cohdl_info, converted_blocks, converted_contexts
+                        inp._cohdl_info.copy(), converted_blocks, converted_contexts
                     )
 
             return inp._cohdl_info.instantiated_template

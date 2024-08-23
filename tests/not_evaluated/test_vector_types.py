@@ -61,4 +61,32 @@ class TestVectorTypes(unittest.TestCase):
             assert Signed[w](0) == Null
             assert Signed[w](-1) == Full
 
-        ...
+            assert Unsigned[w](0) == 0
+            assert Unsigned[w](0) == Null
+            assert Unsigned[w](2**w - 1) == Full
+
+            self.assertRaises(
+                AssertionError, lambda: BitVector[w]().__eq__(Signed[w]())
+            )
+            self.assertRaises(
+                AssertionError, lambda: BitVector[w]().__eq__(Unsigned[w]())
+            )
+
+            assert Signed[w]().__eq__(Unsigned[w]()) is NotImplemented
+            assert Signed[w]().__eq__(BitVector[w]()) is NotImplemented
+
+            assert Unsigned[w]().__eq__(Signed[w]()) is NotImplemented
+            assert Unsigned[w]().__eq__(BitVector[w]()) is NotImplemented
+
+            self.assertRaises(
+                AssertionError, lambda: BitVector[w]().__ne__(Signed[w]())
+            )
+            self.assertRaises(
+                AssertionError, lambda: BitVector[w]().__ne__(Unsigned[w]())
+            )
+
+            assert Signed[w]().__ne__(Unsigned[w]()) is NotImplemented
+            assert Signed[w]().__ne__(BitVector[w]()) is NotImplemented
+
+            assert Unsigned[w]().__ne__(Signed[w]()) is NotImplemented
+            assert Unsigned[w]().__ne__(BitVector[w]()) is NotImplemented

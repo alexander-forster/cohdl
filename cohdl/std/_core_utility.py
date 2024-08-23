@@ -383,7 +383,7 @@ def _one_hot_map(l):
 
 
 def is_one_hot(inp):
-    return select(inp, _one_hot_map(len(inp)), False)
+    return select(inp.bitvector, _one_hot_map(len(inp)), False)
 
 
 def reverse_bits(inp: BitVector) -> BitVector:

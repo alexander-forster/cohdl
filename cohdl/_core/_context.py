@@ -14,6 +14,12 @@ import inspect
 #
 
 _block_stack: list[Block] = []
+_entity_instantiation_handler = None
+
+
+def _set_entity_instantiation_handler(fn):
+    global _entity_instantiation_handler
+    _entity_instantiation_handler = fn
 
 
 def _enter_block(block: Block):
@@ -101,7 +107,40 @@ class EntityInfo:
         self.instantiated = None
         self.instantiated_template = None
 
+        # This should be set to a list of all port names that
+        # were available before the entity was instantiated.
+        # After the compilation is done, all other ports
+        # will be removed from the entity to restore the previous state.
+        self.non_dynamic_ports: list[str] = None
+
         self.attributes = attributes if attributes is not None else {}
+
+    def copy(self):
+        # copy needed because _discard_instantiation is called before
+        # entity info is passed to later compiler stages
+        return EntityInfo(
+            name=self.name,
+            ports={**self.ports},
+            generics={**self.generics},
+            architecture=self.architecture,
+            extern=self.extern,
+            attributes={**self.attributes},
+        )
+
+    def _discard_instantiation(self):
+        if self.non_dynamic_ports is not None:
+            entity_type = type(self.instantiated)
+
+            for port_name in list(self.ports):
+                if port_name in self.non_dynamic_ports:
+                    continue
+
+                del self.ports[port_name]
+                delattr(entity_type, port_name)
+
+        self.instantiated = None
+        self.instantiated_template = None
+        self.non_dynamic_ports = None
 
     def add_port(self, name, port):
         #
@@ -226,11 +265,15 @@ class Entity(Block):
                 template_instance = type(self)(_cohdl_internal_ctor=True)
                 _block_stack = [template_instance]
 
+                info.non_dynamic_ports = set(info.ports)
                 info.architecture(template_instance)
                 info.instantiated = template_instance
 
                 for handler in template_instance._cohdl_block_info._exit_handlers[::-1]:
                     handler()
+
+                if _entity_instantiation_handler is not None:
+                    _entity_instantiation_handler(info)
             finally:
                 assert len(_block_stack) == 1
                 _block_stack = prev_block_stack

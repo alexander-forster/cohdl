@@ -6,7 +6,7 @@ from ._bit import Bit
 from ._intrinsic import _intrinsic
 from ._integer import Integer
 
-from ._boolean import Null
+from ._boolean import Null, Full
 
 from cohdl.utility import Span
 
@@ -286,25 +286,42 @@ class Unsigned(BitVector):
         return ~self + 1
 
     @_intrinsic
-    def __eq__(self, other: BitVector | int | Integer) -> bool:
+    def __eq__(self, other: Unsigned | int | Integer) -> bool:
+        if other is Null or other is Full:
+            other = type(self)(other)
+
+        if not isinstance(other, (Unsigned, int, Integer)):
+            return NotImplemented
+
         if isinstance(other, Integer):
             other = other.get_value()
 
         if isinstance(other, int):
             return bool(other == self.to_int())
-        return super().__eq__(other)
+
+        return bool(other.to_int() == self.to_int())
 
     @_intrinsic
-    def __ne__(self, other: BitVector | int | Integer) -> bool:
+    def __ne__(self, other: Unsigned | int | Integer) -> bool:
+        if other is Null or other is Full:
+            other = type(self)(other)
+
+        if not isinstance(other, (Unsigned, int, Integer)):
+            return NotImplemented
+
         if isinstance(other, Integer):
             other = other.get_value()
 
         if isinstance(other, int):
             return bool(other != self.to_int())
-        return super().__ne__(other)
+
+        return bool(other.to_int() != self.to_int())
 
     @_intrinsic
     def __lt__(self, rhs: Unsigned | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Unsigned, int, Integer)):
             return NotImplemented
 
@@ -318,6 +335,9 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __gt__(self, rhs: Unsigned | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Unsigned, int, Integer)):
             return NotImplemented
 
@@ -331,6 +351,9 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __le__(self, rhs: Unsigned | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Unsigned, int, Integer)):
             return NotImplemented
 
@@ -344,6 +367,9 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __ge__(self, rhs: Unsigned | int | Integer) -> bool:
+        if rhs is Null or rhs is Full:
+            rhs = type(self)(rhs)
+
         if not isinstance(rhs, (Unsigned, int, Integer)):
             return NotImplemented
 
