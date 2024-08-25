@@ -112,6 +112,7 @@ class EntityInfo:
         # After the compilation is done, all other ports
         # will be removed from the entity to restore the previous state.
         self.non_dynamic_ports: list[str] = None
+        self._entity_type: type = None
 
         self.attributes = attributes if attributes is not None else {}
 
@@ -128,8 +129,12 @@ class EntityInfo:
         )
 
     def _discard_instantiation(self):
+        self.instantiated = None
+        self.instantiated_template = None
+
+    def _discard_dynamic_ports(self):
         if self.non_dynamic_ports is not None:
-            entity_type = type(self.instantiated)
+            entity_type = self._entity_type
 
             for port_name in list(self.ports):
                 if port_name in self.non_dynamic_ports:
@@ -138,8 +143,6 @@ class EntityInfo:
                 del self.ports[port_name]
                 delattr(entity_type, port_name)
 
-        self.instantiated = None
-        self.instantiated_template = None
         self.non_dynamic_ports = None
 
     def add_port(self, name, port):
@@ -193,11 +196,14 @@ class Entity(Block):
             attributes=attributes,
         )
 
+        cls._cohdl_info._entity_type = cls
+
     @_intrinsic
     def __init__(
         self,
         *,
         _cohdl_internal_ctor=False,
+        _cohdl_instantiate_only=False,
         **kwargs,
     ):
         # TODO: check if this check is needed
@@ -209,6 +215,47 @@ class Entity(Block):
         super().__init__(info.name, info.attributes)
 
         if _cohdl_internal_ctor:
+            return
+
+        if not info.extern and info.instantiated is None:
+            # call architecture to collect contained
+            # subinstances and synthesizable contexts
+            assert (
+                info.architecture is not None
+            ), f"entity type {type(self)} has no architecture method"
+
+            # remove possible dynamically added ports
+            # (might have been added by previous builds)
+            # remove them before the build instead of after because
+            # the port info might be inspected after the build.
+            # For example when constructing simulation objects.
+            info._discard_dynamic_ports()
+
+            global _block_stack
+
+            prev_block_stack = _block_stack
+
+            try:
+                # use a clear block stack and an empty instance of the entity
+                # class to create the single instantiated entity
+
+                template_instance = type(self)(_cohdl_internal_ctor=True)
+                _block_stack = [template_instance]
+
+                info.non_dynamic_ports = set(info.ports)
+                info.instantiated = template_instance
+                info.architecture(template_instance)
+
+                for handler in template_instance._cohdl_block_info._exit_handlers[::-1]:
+                    handler()
+
+                if _entity_instantiation_handler is not None:
+                    _entity_instantiation_handler(info)
+            finally:
+                assert len(_block_stack) == 1
+                _block_stack = prev_block_stack
+
+        if _cohdl_instantiate_only:
             return
 
         self._cohdl_port_definitions = {}
@@ -246,37 +293,6 @@ class Entity(Block):
                 assert (
                     name in self._cohdl_generic_definitions
                 ), f"no definition provided for generic '{name}'"
-
-        if not info.extern and info.instantiated is None:
-            # call architecture to collect contained
-            # subinstances and synthesizable contexts
-            assert (
-                info.architecture is not None
-            ), f"entity type {type(self)} has no architecture method"
-
-            global _block_stack
-
-            prev_block_stack = _block_stack
-
-            try:
-                # use a clear block stack and an empty instance of the entity
-                # class to create the single instantiated entity
-
-                template_instance = type(self)(_cohdl_internal_ctor=True)
-                _block_stack = [template_instance]
-
-                info.non_dynamic_ports = set(info.ports)
-                info.architecture(template_instance)
-                info.instantiated = template_instance
-
-                for handler in template_instance._cohdl_block_info._exit_handlers[::-1]:
-                    handler()
-
-                if _entity_instantiation_handler is not None:
-                    _entity_instantiation_handler(info)
-            finally:
-                assert len(_block_stack) == 1
-                _block_stack = prev_block_stack
 
         _register_block(self)
 

@@ -87,6 +87,10 @@ class _EntityConnector:
 
     @_intrinsic
     def _gen_port_args(self, kwargs: dict):
+        # make sure that the entity was instantiated
+        # because new port might be added in the architecture method
+        self.entity_type(_cohdl_instantiate_only=True)
+
         result = {}
 
         entity_name = self.entity_type._cohdl_info.name

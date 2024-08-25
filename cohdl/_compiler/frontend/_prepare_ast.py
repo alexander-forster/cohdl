@@ -2320,7 +2320,7 @@ class ConvertPythonInstance:
                     # the architecture
                     #
 
-                    inp(**inp._cohdl_info.ports, **inp._cohdl_info.generics)
+                    inp(_cohdl_instantiate_only=True)
                     instantiated = inp._cohdl_info.instantiated
                     assert isinstance(instantiated, inp)
 
