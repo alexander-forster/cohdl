@@ -262,11 +262,12 @@ async def testbench_min_max(dut: test_min_max):
         max_4elem = std.max_element(nvals, key=l4)
 
         assert dut.min_4idx == std.min_index(nvals, key=l4).to_int() == min_4idx
-        assert dut.min_4elem_idx == min_4elem[0] == min_4idx
+
+        assert dut.min_4elem_idx.value == min_4idx == min_4elem[0]
         assert to_signed(dut.min_4elem) == min_4elem[1][1] == min_4
 
-        assert dut.max_4idx == std.max_index(nvals, key=l4).to_int() == max_4idx
-        assert dut.max_4elem_idx == max_4elem[0] == max_4idx
+        assert dut.max_4idx == max_4idx == std.max_index(nvals, key=l4).to_int()
+        assert dut.max_4elem_idx == max_4idx == max_4elem[0]
         assert to_signed(dut.max_4elem) == max_4elem[1][1] == max_4
 
         # minmax_5
@@ -304,10 +305,10 @@ async def testbench_min_max(dut: test_min_max):
             == std.min_index(nvals[:-1], key=l4, cmp=l5a).to_int()
             == min_5idx
         )
-        assert dut.min_5elem_idx == min_5elem[0] == min_5idx
+        assert dut.min_5elem_idx == min_5idx == min_5elem[0]
         assert to_signed(dut.min_5elem) == min_5elem[1][1] == min_5
         assert dut.max_5idx == std.max_index(nvals[1:], cmp=l5b).to_int() == max_5idx
-        assert dut.max_5elem_idx == max_5elem[0] == max_5idx
+        assert dut.max_5elem_idx == max_5idx == max_5elem[0]
         assert to_signed(dut.max_5elem) == max_5elem[1][1] == max_5
 
 

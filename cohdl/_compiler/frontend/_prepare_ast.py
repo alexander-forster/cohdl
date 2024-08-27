@@ -517,7 +517,7 @@ class PrepareAst:
             assert (
                 self._context is ContextType.CONCURRENT
             ), "inline entity definition only allowed in concurrent contexts or always expression"
-            _inline_declared_entities.append(result.entity)
+
             return out.Value(None, [])
 
         if result is NotImplemented:
@@ -2259,8 +2259,15 @@ class ConvertPythonInstance:
     def _entity_instantiation_handler(self, entity_info):
         self._entity_infos.append(entity_info)
 
+    def _register_inline_handler(self, block):
+        global _inline_declared_entities
+        _inline_declared_entities.append(block)
+
     def __enter__(self):
-        from cohdl._core._context import _set_entity_instantiation_handler
+        from cohdl._core._context import (
+            _set_entity_instantiation_handler,
+            _on_register_inline_entity,
+        )
 
         global _active_converter_instance
         assert (
@@ -2269,17 +2276,22 @@ class ConvertPythonInstance:
         _active_converter_instance = self
 
         _set_entity_instantiation_handler(self._entity_instantiation_handler)
+        _on_register_inline_entity(self._register_inline_handler)
 
         self._entity_infos = []
         return self
 
     def __exit__(self, *args):
-        from cohdl._core._context import _set_entity_instantiation_handler
+        from cohdl._core._context import (
+            _set_entity_instantiation_handler,
+            _on_register_inline_entity,
+        )
 
         global _active_converter_instance
         assert _active_converter_instance is self, "exit does not match enter"
         _active_converter_instance = None
         _set_entity_instantiation_handler(None)
+        _on_register_inline_entity(None)
 
         for info in self._entity_infos:
             # delete instantiation info from entity after compilation is complete

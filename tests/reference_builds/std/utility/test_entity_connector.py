@@ -7,6 +7,8 @@ from cohdl import std, Bit, BitVector, Unsigned, Port, Signal, Null
 
 from cohdl_testutil import cocotb_util
 
+use_pyeval = False
+
 
 class InnerEntity(cohdl.Entity):
     inp_bit = Port.input(Bit)
@@ -17,6 +19,16 @@ class InnerEntity(cohdl.Entity):
         @std.concurrent
         def logic():
             self.out_bit <<= ~self.inp_bit
+
+
+pyeval_cnt = 0
+
+
+@cohdl.pyeval
+def instantiate_in_pyeval(entity, **kwargs):
+    global pyeval_cnt
+    pyeval_cnt += 1
+    return entity(**kwargs)
 
 
 class OuterEntity(cohdl.Entity):
@@ -39,19 +51,30 @@ class OuterEntity(cohdl.Entity):
 
         InnerEntity(inp_bit=self.inp_a, out_bit=self.out_a)
 
+        def instantiate(entity, **kwargs):
+            if use_pyeval:
+                return instantiate_in_pyeval(entity, **kwargs)
+            else:
+                return entity(**kwargs)
+
         @std.concurrent
         def logic():
             out_b0 = Signal[Bit]()
-            InnerEntity(inp_bit=self.inp_b[0], out_bit=out_b0)
+
+            instantiate(InnerEntity, inp_bit=self.inp_b[0], out_bit=out_b0)
+
             self.out_b[0] <<= out_b0
 
             con_in = Signal[Bit]()
             con_out = Signal[Bit]()
-            InnerEntity(inp_bit=con_in, out_bit=con_out)
+
+            instantiate(InnerEntity, inp_bit=con_in, out_bit=con_out)
+
             con_in <<= self.inp_b[1]
             self.out_b[1] <<= con_out
 
-            open_ent = std.OpenEntity[InnerEntity](inp_bit=self.inp_b[2])
+            open_ent = instantiate(std.OpenEntity[InnerEntity], inp_bit=self.inp_b[2])
+
             self.out_b[2] <<= open_ent.out_bit
 
             connected_ent = std.ConnectedEntity[InnerEntity]()
@@ -76,7 +99,7 @@ class OuterEntity(cohdl.Entity):
         def logic():
             with cohdl.always:
                 out_c0 = Signal[Bit]()
-                InnerEntity(inp_bit=self.inp_c[0], out_bit=out_c0)
+                instantiate(InnerEntity, inp_bit=self.inp_c[0], out_bit=out_c0)
                 self.out_c[0] <<= out_c0
 
                 con_in = Signal[Bit]()
@@ -85,7 +108,9 @@ class OuterEntity(cohdl.Entity):
                 con_in <<= self.inp_c[1]
                 self.out_c[1] <<= con_out
 
-                open_ent = std.OpenEntity[InnerEntity](inp_bit=self.inp_c[2])
+                open_ent = instantiate(
+                    std.OpenEntity[InnerEntity], inp_bit=self.inp_c[2]
+                )
                 self.out_c[2] <<= open_ent.out_bit
 
                 connected_ent = std.ConnectedEntity[InnerEntity]()
@@ -113,16 +138,25 @@ class OuterEntity(cohdl.Entity):
             always = cohdl.always
 
             out_d0 = Signal[Bit]()
-            always(InnerEntity(inp_bit=self.inp_d[0], out_bit=out_d0))
+
+            if not use_pyeval:
+                always(InnerEntity(inp_bit=self.inp_d[0], out_bit=out_d0))
+            else:
+                instantiate_in_pyeval(
+                    InnerEntity, inp_bit=self.inp_d[0], out_bit=out_d0
+                )
+
             self.out_d[0] <<= out_d0
 
             con_in = Signal[Bit]()
             con_out = Signal[Bit]()
-            always(InnerEntity(inp_bit=con_in, out_bit=con_out))
+            always(instantiate(InnerEntity, inp_bit=con_in, out_bit=con_out))
             con_in <<= self.inp_d[1]
             self.out_d[1] <<= con_out
 
-            open_ent = always(std.OpenEntity[InnerEntity](inp_bit=self.inp_d[2]))
+            open_ent = always(
+                instantiate(std.OpenEntity[InnerEntity], inp_bit=self.inp_d[2])
+            )
             self.out_d[2] <<= open_ent.out_bit
 
             connected_ent = always(std.ConnectedEntity[InnerEntity]())
@@ -248,4 +282,19 @@ async def testbench_entity_connector(dut: test_entity_connector):
 
 class Unittest(unittest.TestCase):
     def test_hdl(self):
+        global use_pyeval, pyeval_cnt
+        use_pyeval = False
+        pyeval_cnt = 0
+
         cocotb_util.run_cocotb_tests(test_entity_connector, __file__, self.__module__)
+
+        assert pyeval_cnt == 0
+
+    def test_hdl_pyeval(self):
+        global use_pyeval, pyeval_cnt
+        use_pyeval = True
+        pyeval_cnt = 0
+
+        cocotb_util.run_cocotb_tests(test_entity_connector, __file__, self.__module__)
+
+        assert pyeval_cnt == 8

@@ -13,6 +13,7 @@ from cocotb.triggers import RisingEdge
 
 from cohdl import std
 
+from cocotb.binary import BinaryValue as CocotbBinary
 
 test = cocotb.test
 
@@ -186,8 +187,10 @@ class ConstraindValue:
             return self.value == other
         if isinstance(other, str):
             return ConstraindValue(self.width, other) == self
+        if isinstance(other, CocotbBinary):
+            return self.value == other.integer
 
-        assert isinstance(other, ConstraindValue)
+        assert isinstance(other, ConstraindValue), f"UNEXPECTED TYPE: {type(other)}"
         return self.value == other.value
 
     def __lt__(self, other):

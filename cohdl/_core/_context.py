@@ -38,9 +38,21 @@ def _exit_block():
     return _block_stack.pop()
 
 
+_on_register_inline_entity_handler = None
+
+
+def _on_register_inline_entity(handler):
+    global _on_register_inline_entity_handler
+    _on_register_inline_entity_handler = handler
+
+
 def _register_block(block: Block):
     if len(_block_stack) != 0:
         _block_stack[-1]._cohdl_block_info._subblocks.append(block)
+    else:
+        # The block stack is empty.
+        # This means, we are declaring an inline entity.
+        _on_register_inline_entity_handler(block)
 
 
 def _register_context(ctx: Context):
@@ -263,6 +275,14 @@ class Entity(Block):
 
         for name, value in kwargs.items():
             if name in info.ports:
+                try:
+                    # try assignment to check if types are compatible
+                    info.ports[name] <<= value
+                except:
+                    raise AssertionError(
+                        f"assignment to port '{name}' failed (src={value}, target={info.ports[name]})"
+                    )
+
                 self._cohdl_port_definitions[name] = value
             elif name in info.generics:
                 self._cohdl_generic_definitions[name] = value
