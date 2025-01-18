@@ -96,6 +96,12 @@ from ._core_utility import (
     count_set_bits,
     count_clear_bits,
     clamp,
+    count_elements_while,
+    count_elements_until,
+    count_leading_zeros,
+    count_leading_ones,
+    count_trailing_zeros,
+    count_trailing_ones,
 )
 
 from . import utility

@@ -18,6 +18,11 @@ class Unsigned(BitVector):
     @staticmethod
     @_intrinsic
     def upto(max_value: int):
+        assert max_value >= 0, "max_value of unsigned cannot be negative"
+
+        if max_value == 0:
+            max_value = 1
+
         width = max_value.bit_length()
         return Unsigned[width]
 
@@ -31,7 +36,9 @@ class Unsigned(BitVector):
         if isinstance(value, Integer):
             value = int(value)
 
-        return Unsigned[value.bit_length()](value)
+        assert isinstance(value, int), "expected int or Integer"
+
+        return Unsigned.upto(value)(value)
 
     @staticmethod
     def from_str(default: str, order: BitOrder = BitOrder.DOWNTO) -> Unsigned:

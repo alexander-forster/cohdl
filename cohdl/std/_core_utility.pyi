@@ -844,3 +844,81 @@ def clamp(
     `cmp` takes two positional arguments and should return True
     when the first is smaller than the second.
     """
+
+@overload
+def count_elements_while(seq: Iterable[T], val: T) -> Unsigned:
+    """
+    Returns the index of the first element in `seq` that does not
+    compare equal to `val`. If no such element exists, the length
+    of the sequence is returned.
+    """
+
+@overload
+def count_elements_while(seq: Iterable[T], *, cond: Callable[[T], bool]) -> Unsigned:
+    """
+    Returns the index of the first element in `seq` for which `cond(elem)` returns False.
+    If no such element exists, the length of the sequence is returned.
+    """
+
+@overload
+def count_elements_until(seq: Iterable[T], val: T) -> Unsigned:
+    """
+    Returns the index of the first element in `seq` that
+    compares equal to `val`. If no such element exists, the length
+    of the sequence is returned.
+    """
+
+@overload
+def count_elements_until(seq: Iterable[T], *, cond: Callable[[T], bool]) -> Unsigned:
+    """
+    Returns the index of the first element in `seq` for which `cond(elem)` returns True.
+    If no such element exists, the length of the sequence is returned.
+    """
+
+def count_trailing_zeros(inp: BitVector) -> Unsigned:
+    """
+    Returns the number of '0' Bits before the first '1' starting
+    from the least significant Bit.
+
+    >>> count_trailing_zeros(Unsigned[4]("0001")) == 0
+    >>> count_trailing_zeros(Unsigned[4]("0010")) == 1
+    >>> count_trailing_zeros(Unsigned[4]("1100")) == 2
+    >>> count_trailing_zeros(Unsigned[4]("1000")) == 3
+    >>> count_trailing_zeros(Unsigned[4]("0000")) == 4
+    """
+
+def count_trailing_ones(inp: BitVector) -> Unsigned:
+    """
+    Returns the number of '1' Bits before the first '0' starting
+    from the least significant Bit.
+
+    >>> count_trailing_ones(Unsigned[4]("1110")) == 0
+    >>> count_trailing_ones(Unsigned[4]("1101")) == 1
+    >>> count_trailing_ones(Unsigned[4]("0011")) == 2
+    >>> count_trailing_ones(Unsigned[4]("0111")) == 3
+    >>> count_trailing_ones(Unsigned[4]("1111")) == 4
+    """
+
+def count_leading_zeros(inp: BitVector) -> Unsigned:
+    """
+    Returns the number of '0' Bits before the first '1' starting
+    from the most significant Bit.
+
+    >>> count_leading_zeros(Unsigned[4]("1110")) == 0
+    >>> count_leading_zeros(Unsigned[4]("1101")) == 0
+    >>> count_leading_zeros(Unsigned[4]("0011")) == 2
+    >>> count_leading_zeros(Unsigned[4]("0111")) == 1
+    >>> count_leading_zeros(Unsigned[4]("0000")) == 4
+    """
+
+def count_leading_ones(inp: BitVector) -> Unsigned:
+    """
+    Returns the number of '1' Bits before the first '0' starting
+    from the most significant Bit.
+
+    >>> count_leading_ones(Unsigned[4]("1110")) == 3
+    >>> count_leading_ones(Unsigned[4]("1101")) == 2
+    >>> count_leading_ones(Unsigned[4]("0011")) == 0
+    >>> count_leading_ones(Unsigned[4]("0111")) == 0
+    >>> count_leading_ones(Unsigned[4]("1111")) == 4
+    """

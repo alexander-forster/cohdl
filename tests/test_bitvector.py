@@ -77,15 +77,12 @@ class BitVectorTester(unittest.TestCase):
                 self.assertRaises(AssertionError, b._assign, BitVector[width + 1]())
 
         for w in [1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 37, 128, 1024, 0, -1, -2, -5, -100]:
-            if w < 0:
+            if w <= 0:
                 test(w, expected_assert=AssertionError)
                 test(w, rnd_bit_string(w), expected_assert=AssertionError)
             else:
                 test(w)
                 test(w, rnd_bit_string(w))
-
-                if w != 0:
-                    test(w, " " * w, expected_assert=AssertionError)
 
                 zeros = BitVector[w](Null)
                 ones = BitVector[w](Full)

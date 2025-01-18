@@ -48,7 +48,7 @@ class _BitVector(type):
                 )
         else:
             assert isinstance(size, int)
-            assert size >= 0, "vector width must be positive"
+            assert size > 0, "vector width must be positive"
 
             order = BitOrder.DOWNTO
             width = size

@@ -1016,3 +1016,53 @@ def clamp(val, low, high, cmp=_lt):
         if cmp(val, val_low)
         else (val_high if cmp(val_high, val) else Value[T](val))
     )
+
+
+def count_elements_while(seq, val=_PrivateNone, *, cond=_PrivateNone):
+    length = len(seq)
+
+    R = Unsigned.upto(length)
+
+    if val is not _PrivateNone:
+        assert cond is _PrivateNone, "only one of `val` and `cond` can be specified"
+        bool_seq = [(elem != val, R(nr)) for nr, elem in enumerate(seq)]
+    else:
+        assert cond is not _PrivateNone, "one of `val` or `cond` must be specified"
+        bool_seq = [(not cond(elem), R(nr)) for nr, elem in enumerate(seq)]
+
+    return choose_first(*bool_seq, default=R(length))
+
+
+def count_elements_until(seq, val=_PrivateNone, *, cond=_PrivateNone):
+    length = len(seq)
+
+    R = Unsigned.upto(length)
+
+    if val is not _PrivateNone:
+        assert cond is _PrivateNone, "only one of `val` and `cond` can be specified"
+        bool_seq = [(elem == val, R(nr)) for nr, elem in enumerate(seq)]
+    else:
+        assert cond is not _PrivateNone, "one of `val` or `cond` must be specified"
+        bool_seq = [(cond(elem), R(nr)) for nr, elem in enumerate(seq)]
+
+    return choose_first(*bool_seq, default=R(length))
+
+
+def count_trailing_zeros(inp: BitVector) -> Unsigned:
+    static_assert(instance_check(inp, BitVector), "argument must be BitVector")
+    return count_elements_while(inp, Bit("0"))
+
+
+def count_trailing_ones(inp: BitVector) -> Unsigned:
+    static_assert(instance_check(inp, BitVector), "argument must be BitVector")
+    return count_elements_while(inp, Bit("1"))
+
+
+def count_leading_zeros(inp: BitVector) -> Unsigned:
+    static_assert(instance_check(inp, BitVector), "argument must be BitVector")
+    return count_elements_while(reverse_bits(inp), Bit("0"))
+
+
+def count_leading_ones(inp: BitVector) -> Unsigned:
+    static_assert(instance_check(inp, BitVector), "argument must be BitVector")
+    return count_elements_while(reverse_bits(inp), Bit("1"))
