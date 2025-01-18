@@ -249,7 +249,8 @@ class BinOp(Expression):
         Operator.BIT_XOR: "xor",
         Operator.CONCAT: "&",
         Operator.MOD: "mod",
-        Operator.FLOOR_DIV: "/",
+        Operator.REM: "rem",
+        Operator.TRUNC_DIV: "/",
     }
 
     def __init__(
@@ -1016,7 +1017,7 @@ class VhdlScope:
             if obj.order is BitOrder.DOWNTO:
                 range_ = f"({obj.width - 1} downto 0)"
             else:
-                range_ = f"(0 to {obj.width() - 1})"
+                range_ = f"(0 to {obj.width - 1})"
 
             if isinstance(obj, Unsigned):
                 type_ = "unsigned"
@@ -1452,10 +1453,15 @@ class ModuleScope(VhdlScope):
         "resize",
     }
 
-    def __init__(self):
+    def __init__(self, *, additional_reserved_names: set[str] = None):
         super().__init__()
 
-        self._used_names = self._vhdl_reserved | self._additional_reserved
+        if additional_reserved_names is None:
+            additional_reserved_names = set()
+
+        self._used_names = (
+            self._vhdl_reserved | self._additional_reserved | additional_reserved_names
+        )
 
 
 class EntityScope(VhdlScope): ...

@@ -12,6 +12,7 @@ from cohdl.utility import Span
 
 
 class Unsigned(BitVector):
+    _is_unsigned = True
     _SubTypes = {}
 
     @staticmethod
@@ -26,22 +27,11 @@ class Unsigned(BitVector):
 
     @staticmethod
     @_intrinsic
-    def from_int(
-        value: int | Integer,
-        max: int | None = None,
-        order: BitOrder = BitOrder.DOWNTO,
-    ):
+    def from_int(value: int | Integer):
         if isinstance(value, Integer):
             value = int(value)
 
-        if max is None:
-            max = value
-
-        assert 0 <= value <= max, f"value {value} outside allowed range ({0}-{max})"
-
-        width = len(bin(max)) - 2
-
-        return Unsigned[width](value)
+        return Unsigned[value.bit_length()](value)
 
     @staticmethod
     def from_str(default: str, order: BitOrder = BitOrder.DOWNTO) -> Unsigned:
@@ -52,8 +42,6 @@ class Unsigned(BitVector):
         self,
         val: None | BitVector | str | int = None,
     ):
-        import cohdl
-
         if isinstance(val, Integer):
             val = int(val)
 
@@ -63,7 +51,7 @@ class Unsigned(BitVector):
             ), f"cannot initialize {type(self)} with wider type {type(val)}"
 
             val = val.to_int()
-        elif isinstance(val, cohdl.Signed):
+        elif isinstance(val, BitVector) and hasattr(val, "_is_signed"):
             raise AssertionError(
                 f"cannot initialize unsigned type {type(self)} from signed {type(val)}"
             )
@@ -99,12 +87,6 @@ class Unsigned(BitVector):
         return cls(cls.max_int())
 
     def _assign(self, other):
-        import cohdl
-
-        assert not isinstance(
-            other, cohdl.Signed
-        ), "Signed value cannot be assigned to Unsigned without explicit cast"
-
         if isinstance(other, Integer):
             other = int(other)
 
@@ -125,12 +107,11 @@ class Unsigned(BitVector):
                 lambda bit, other_bit: bit._assign(other_bit),
                 other._value.iter_extend(Bit(0)),
             )
-
-        elif (
-            isinstance(other, (BitVector, str))
-            or other is cohdl.Null
-            or other is cohdl.Full
-        ):
+        elif isinstance(other, BitVector) and hasattr(other, "_is_signed"):
+            raise AssertionError(
+                "Signed value cannot be assigned to Unsigned without explicit cast"
+            )
+        elif isinstance(other, (BitVector, str)) or other is Null or other is Full:
             super()._assign(other)
         else:
             raise AssertionError()
@@ -152,7 +133,7 @@ class Unsigned(BitVector):
     def add(self, rhs: Unsigned | int | Integer, target_width=None) -> Unsigned:
         if isinstance(rhs, (int, Integer)):
             rhs = rhs % 2**self.width
-            rhs = Unsigned.from_int(rhs, order=self._order)
+            rhs = Unsigned.from_int(rhs)
 
             if target_width is None:
                 # adding integer, that cannot be represented
@@ -163,8 +144,10 @@ class Unsigned(BitVector):
                 ), "added integer is not in the representable target range"
                 target_width = self.width
         else:
+            if not isinstance(rhs, Unsigned):
+                return NotImplemented
+
             assert self.order == rhs.order, "bitorder missmatch"
-            assert isinstance(rhs, Unsigned), "expected unsigned argument"
 
             if target_width is None:
                 target_width = max(self.width, rhs.width)
@@ -218,29 +201,88 @@ class Unsigned(BitVector):
         return lhs + -self
 
     @_intrinsic
-    def __mul__(self, rhs: Unsigned | int | Integer) -> Unsigned:
-        result_width = self.width
-
+    def __mul__(self, rhs: Unsigned) -> Unsigned:
         if isinstance(rhs, Unsigned):
             result_width = self.width + rhs.width
+            lhs = self.to_int()
             rhs = rhs.to_int()
-        elif isinstance(rhs, Integer):
-            rhs = rhs.get_value()
-
-        lhs = self.to_int()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = 2 * self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+        else:
+            return NotImplemented
 
         return Unsigned[result_width](lhs * rhs)
 
     @_intrinsic
-    def __floordiv__(self, rhs: Unsigned | int | Integer) -> Unsigned:
-        result_width = self.width
+    def __rmul__(self, lhs: int) -> Unsigned:
+        if isinstance(lhs, Unsigned):
+            result_width = self.width + lhs.width
+            lhs = lhs.to_int()
+            rhs = self.to_int()
+        elif isinstance(lhs, (int, Integer)):
+            result_width = 2 * self.width
+            rhs = self.to_int()
+            lhs = int(rhs)
+        else:
+            return NotImplemented
+
+        return Unsigned[result_width](lhs * rhs)
+
+    @_intrinsic
+    def __floordiv__(self, rhs: Unsigned) -> Unsigned:
+        if isinstance(rhs, (int, Integer)) or (
+            isinstance(rhs, BitVector) and hasattr(rhs, "_is_signed")
+        ):
+            raise AssertionError(
+                f"CoHDL does not support floordiv (the '//' operator) for signed operations. Use cohdl.op.truncdiv instead."
+            )
+
+        return self._cohdl_truncdiv_(rhs)
+
+    @_intrinsic
+    def __rfloordiv__(self, lhs) -> Unsigned:
+        if isinstance(lhs, (int, Integer)) or (
+            isinstance(lhs, BitVector) and hasattr(lhs, "_is_signed")
+        ):
+            raise AssertionError(
+                f"CoHDL does not support floordiv (the '//' operator) for signed operations. Use cohdl.op.truncdiv instead."
+            )
+
+        return self._cohdl_rtruncdiv_(lhs)
+
+    @_intrinsic
+    def _cohdl_truncdiv_(self, rhs: Unsigned) -> Unsigned:
 
         if isinstance(rhs, Unsigned):
+            result_width = self.width
+            lhs = self.to_int()
             rhs = rhs.to_int()
-        elif isinstance(rhs, Integer):
-            rhs = rhs.get_value()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+        else:
+            return NotImplemented
 
-        lhs = self.to_int()
+        if rhs == 0:
+            return Unsigned[result_width]()
+        return Unsigned[result_width](lhs // rhs)
+
+    @_intrinsic
+    def _cohdl_rtruncdiv_(self, lhs: int) -> Unsigned:
+
+        if isinstance(lhs, Unsigned):
+            result_width = lhs.width
+            lhs = lhs.to_int()
+            rhs = self.to_int()
+        elif isinstance(lhs, (int, Integer)):
+            result_width = self.width
+            rhs = self.to_int()
+            lhs = int(lhs)
+        else:
+            return NotImplemented
 
         if rhs == 0:
             return Unsigned[result_width]()
@@ -248,18 +290,71 @@ class Unsigned(BitVector):
 
     @_intrinsic
     def __mod__(self, rhs: Unsigned | int | Integer) -> Unsigned:
-        result_width = self.width
 
         if isinstance(rhs, Unsigned):
+            result_width = rhs.width
+            lhs = self.to_int()
             rhs = rhs.to_int()
-        elif isinstance(rhs, Integer):
-            rhs = rhs.get_value()
-
-        lhs = self.to_int()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+        else:
+            return NotImplemented
 
         if rhs == 0:
             return Unsigned[result_width]()
         return Unsigned[result_width](lhs % rhs)
+
+    @_intrinsic
+    def __rmod__(self, lhs: int | Integer) -> Unsigned:
+
+        if isinstance(lhs, Unsigned):
+            result_width = self.width
+            lhs = lhs.to_int()
+            rhs = self.to_int()
+        elif isinstance(lhs, (int, Integer)):
+            result_width = self.width
+            lhs = int(lhs)
+            rhs = self.to_int()
+        else:
+            return NotImplemented
+
+        if rhs == 0:
+            return Unsigned[result_width]()
+        return Unsigned[result_width](lhs % rhs)
+
+    @_intrinsic
+    def _cohdl_rem_(self, rhs: Unsigned | int | Integer) -> Unsigned:
+        if isinstance(rhs, Unsigned):
+            result_width = rhs.width
+            rhs = rhs.to_int()
+            lhs = self.to_int()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+        else:
+            return NotImplemented
+
+        if rhs == 0:
+            return Unsigned[result_width]()
+
+        return Unsigned[result_width](lhs - rhs * int(lhs / rhs))
+
+    @_intrinsic
+    def _cohdl_rrem_(self, lhs: int | Integer) -> Unsigned:
+        if isinstance(lhs, (int, Integer)):
+            result_width = self.width
+            lhs = int(lhs)
+            rhs = self.to_int()
+        else:
+            return NotImplemented
+
+        if rhs == 0:
+            return Unsigned[result_width]()
+
+        return Unsigned[result_width](lhs - rhs * int(lhs / rhs))
 
     @_intrinsic
     def __lshift__(self, rhs: Unsigned | int | Integer) -> Unsigned:

@@ -634,42 +634,42 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @_intrinsic
     def __and__(self, other):
         result = self._value & _decay(other)
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rand__(self, other):
         result = _decay(other).__and__(self._value)
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __or__(self, other):
         result = self._value.__or__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __ror__(self, other):
         result = _decay(other).__or__(self._value)
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __xor__(self, other):
         result = self._value.__xor__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rxor__(self, other):
         result = _decay(other).__xor__(self._value)
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __matmul__(self, other):
         result = self._value.__matmul__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rmatmul__(self, other):
         result = _decay(other).__matmul__(self._value)
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     #
     # numeric operators
@@ -678,72 +678,92 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @_intrinsic
     def __add__(self, other):
         result = self._value.__add__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __radd__(self, other):
         result = self._value.__radd__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __sub__(self, other):
         result = self._value.__sub__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rsub__(self, other):
         result = self._value.__rsub__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __mul__(self, other):
         result = self._value.__mul__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rmul__(self, other):
         result = self._value.__rmul__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __floordiv__(self, other):
         result = self._value.__floordiv__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rfloordiv__(self, other):
         result = self._value.__rfloordiv__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    @_intrinsic
+    def _cohdl_truncdiv_(self, other):
+        result = self._value._cohdl_truncdiv_(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    @_intrinsic
+    def _cohdl_rtruncdiv_(self, other):
+        result = self._value._cohdl_rtruncdiv_(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __mod__(self, other):
         result = self._value.__mod__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rmod__(self, other):
         result = self._value.__rmod__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    @_intrinsic
+    def _cohdl_rem_(self, other):
+        result = self._value._cohdl_rem_(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
+
+    @_intrinsic
+    def _cohdl_rrem_(self, other):
+        result = self._value._cohdl_rrem_(_decay(other))
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __lshift__(self, rhs):
         result = self._value.__lshift__(_decay(rhs))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rshift__(self, rhs):
         result = self._value.__rshift__(_decay(rhs))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rlshift__(self, lhs):
         result = _decay(lhs).__lshift__(self._value)
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __rrshift__(self, lhs):
         result = _decay(lhs).__rshift__(self._value)
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     #
     # compare
@@ -752,12 +772,12 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @_intrinsic
     def __eq__(self, other):
         result = self._value.__eq__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __ne__(self, other):
         result = self._value.__ne__(_decay(other))
-        return Temporary[type(result)](result)
+        return result if result is NotImplemented else Temporary[type(result)](result)
 
     @_intrinsic
     def __lt__(self, other):
@@ -925,7 +945,7 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
                 result = self.__getitem__(index_temp)
                 return intr_op._IntrinsicElemAccess(result, index, index_temp)
             else:
-                raise NotImplemented()
+                raise NotImplemented()  # TODO: use NotImplementedError
 
     @_intrinsic_replacement(_assign_, assignment_spec=(0, 1))
     def _assign_replacement(self, value, assign_mode: AssignMode):
@@ -962,8 +982,13 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic_replacement(__add__)
     def _add_replacement(self, other):
-        return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.ADD, self.__add__(other), self, other
+        result = self.__add__(other)
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.ADD, result, self, other
+            )
         )
 
     @_intrinsic_replacement(__radd__)
@@ -974,8 +999,13 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic_replacement(__sub__)
     def _sub_replacement(self, other):
-        return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.SUB, self.__sub__(other), self, other
+        result = self.__sub__(other)
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.SUB, result, self, other
+            )
         )
 
     @_intrinsic_replacement(__rsub__)
@@ -986,8 +1016,13 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic_replacement(__mul__)
     def _mul_replacement(self, other):
-        return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.MUL, self.__mul__(other), self, other
+        result = self.__mul__(other)
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.MUL, result, self, other
+            )
         )
 
     @_intrinsic_replacement(__rmul__)
@@ -998,20 +1033,47 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     @_intrinsic_replacement(__floordiv__)
     def _floordiv_replacement(self, other):
-        return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.FLOOR_DIV, self.__floordiv__(other), self, other
+        result = self.__floordiv__(other)
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.TRUNC_DIV, result, self, other
+            )
         )
 
     @_intrinsic_replacement(__rfloordiv__)
     def _rfloordiv_replacement(self, other):
         return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.FLOOR_DIV, self.__rfloordiv__(other), other, self
+            intr_op.BinaryOperator.TRUNC_DIV, self.__rfloordiv__(other), other, self
+        )
+
+    @_intrinsic_replacement(_cohdl_truncdiv_)
+    def _truncdiv_replacement(self, other):
+        result = self._cohdl_truncdiv_(other)
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.TRUNC_DIV, result, self, other
+            )
+        )
+
+    @_intrinsic_replacement(_cohdl_rtruncdiv_)
+    def _rtruncdiv_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.TRUNC_DIV, self._cohdl_rtruncdiv_(other), other, self
         )
 
     @_intrinsic_replacement(__mod__)
     def _mod_replacement(self, other):
-        return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.MOD, self.__mod__(other), self, other
+        result = self.__mod__(other)
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.MOD, result, self, other
+            )
         )
 
     @_intrinsic_replacement(__rmod__)
@@ -1020,26 +1082,56 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
             intr_op.BinaryOperator.MOD, self.__rmod__(other), other, self
         )
 
+    @_intrinsic_replacement(_cohdl_rem_)
+    def _rem_replacement(self, other):
+        result = self._cohdl_rem_(other)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.REM, result, self, other
+            )
+        )
+
+    @_intrinsic_replacement(_cohdl_rrem_)
+    def _rrem_replacement(self, other):
+        return intr_op._IntrinsicBinOp(
+            intr_op.BinaryOperator.REM, self._cohdl_rrem_(other), other, self
+        )
+
     @_intrinsic_replacement(__lshift__)
     def _lshift_replacement(self, rhs):
-        return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.LSHIFT, self.__lshift__(rhs), self, rhs
+        result = self.__lshift__(rhs)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.LSHIFT, result, self, rhs
+            )
         )
 
     @_intrinsic_replacement(__rshift__)
     def _rshift_replacement(self, rhs):
-        return intr_op._IntrinsicBinOp(
-            intr_op.BinaryOperator.RSHIFT, self.__rshift__(rhs), self, rhs
+        result = self.__rshift__(rhs)
+
+        return (
+            result
+            if result is NotImplemented
+            else intr_op._IntrinsicBinOp(
+                intr_op.BinaryOperator.RSHIFT, result, self, rhs
+            )
         )
 
     @_intrinsic_replacement(__rlshift__)
-    def _lshift_replacement(self, lhs):
+    def _rlshift_replacement(self, lhs):
         return intr_op._IntrinsicBinOp(
             intr_op.BinaryOperator.LSHIFT, self.__rlshift__(lhs), lhs, self
         )
 
     @_intrinsic_replacement(__rrshift__)
-    def _rshift_replacement(self, lhs):
+    def _rrshift_replacement(self, lhs):
         return intr_op._IntrinsicBinOp(
             intr_op.BinaryOperator.RSHIFT, self.__rrshift__(lhs), lhs, self
         )

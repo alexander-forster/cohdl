@@ -637,7 +637,7 @@ class PushOnNotify(NotifyBase):
 
     @expr_fn
     def __bool__(self):
-        return self._bit
+        return bool(self._bit)
 
 
 class FlagOnNotify(NotifyBase):

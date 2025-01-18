@@ -9,6 +9,7 @@ from cohdl.utility import Span
 
 
 class Signed(BitVector):
+    _is_signed = True
     _SubTypes = {}
 
     @staticmethod
@@ -18,39 +19,22 @@ class Signed(BitVector):
 
     @staticmethod
     @_intrinsic
-    def from_int(
-        default: int | Integer,
-        max: int | None = None,
-        min: int | None = None,
-        order: BitOrder = BitOrder.DOWNTO,
-    ):
-        if isinstance(default, Integer):
-            default = default.get_value()
+    def from_int(value: int | Integer):
+        if isinstance(value, Integer):
+            value = value.get_value()
 
-        if min is None:
-            min = -abs(default)
+        if value >= 0 or value.bit_count() != 1:
+            width = value.bit_length() + 1
+        else:
+            width = value.bit_length()
 
-        if max is None:
-            max = abs(default)
-
-        assert (
-            min <= default <= max
-        ), f"default value ({default}) outside representable range ({min}-{max})"
-
-        width_neg = len(bin(abs(min) - 1)) - 2 - (min == 0)
-        width_pos = len(bin(max)) - 2
-
-        width = width_pos if width_neg < width_pos else width_neg
-
-        return Signed[width + 1](default)
+        return Signed[width](value)
 
     @_intrinsic
     def __init__(
         self,
         val: None | BitVector | str | int = None,
     ):
-        import cohdl
-
         if isinstance(val, Integer):
             val = int(val)
         elif isinstance(val, Signed):
@@ -59,7 +43,7 @@ class Signed(BitVector):
             ), f"cannot initialize {type(self)} with wider type {type(val)}"
 
             val = val.to_int()
-        elif isinstance(val, cohdl.Unsigned):
+        elif isinstance(val, BitVector) and hasattr(val, "_is_unsigned"):
             assert (
                 val.width < self.width
             ), f"cannot initialize {type(self)} from {type(val)}"
@@ -78,12 +62,12 @@ class Signed(BitVector):
     @_intrinsic
     def pow_2(self, exp: int) -> Signed:
         if exp == 0:
-            return Signed(self.width(), self, self._order)
+            return Signed(self.width, self, self._order)
 
         if exp > 0:
             return (self.as_bitvector() @ BitVector.zeros(exp)).as_signed()
 
-        if exp >= self.width():
+        if exp >= self.width:
             return Signed(1, 0)
 
         return self.msb(self.width - exp).as_signed()
@@ -110,8 +94,6 @@ class Signed(BitVector):
 
     @_intrinsic
     def _assign(self, other) -> None:
-        import cohdl
-
         if isinstance(other, Integer):
             other = int(other)
 
@@ -137,16 +119,12 @@ class Signed(BitVector):
                 self.width >= other.width
             ), "assigned value is wider than the target type"
             self._assign(other.to_int())
-        elif isinstance(other, cohdl.Unsigned):
+        elif isinstance(other, BitVector) and hasattr(other, "_is_unsigned"):
             assert (
                 self.width > other.width
             ), "assigned unsigned value has equal or larger width than the signed target type"
             self._assign(other.to_int())
-        elif (
-            isinstance(other, (BitVector, str))
-            or other is cohdl.Null
-            or other is cohdl.Full
-        ):
+        elif isinstance(other, (BitVector, str)) or other is Null or other is Full:
             super()._assign(other)
         else:
             raise AssertionError("invalid source type for assignment to signed value")
@@ -170,19 +148,21 @@ class Signed(BitVector):
             rhs = rhs.get_value()
 
         if isinstance(rhs, int):
-            rhs = Signed.from_int(rhs, order=self._order)
+            rhs = Signed.from_int(rhs)
 
             if target_width is None:
                 # adding integer, that cannot be represented
                 # without explicit specification of target_width
                 # is probably an error
                 assert (
-                    rhs.width() <= self.width()
+                    rhs.width <= self.width
                 ), "added integer is not in the representable target range"
-                target_width = self.width()
+                target_width = self.width
         else:
+            if not isinstance(rhs, Signed):
+                return NotImplemented
+
             assert self.order == rhs.order, "bitorder missmatch"
-            assert isinstance(rhs, Signed), "expected signed argument"
 
             if target_width is None:
                 target_width = max(self.width, rhs.width)
@@ -208,22 +188,18 @@ class Signed(BitVector):
         return target
 
     @_intrinsic
-    def sub(self, rhs: Signed | int | Integer, target_width=None) -> Signed:
-        if isinstance(rhs, Integer):
-            rhs = rhs.get_value()
+    def sub(self, rhs: Signed | int | Integer) -> Signed:
+        target_width = None
+        if isinstance(rhs, (int, Integer)):
+            rhs = Integer.decay(rhs)
+            target_width = self.width
 
         rhs = -rhs
         return self.add(rhs, target_width)
 
     @_intrinsic
     def __add__(self, rhs: Signed | int | Integer) -> Signed:
-        if isinstance(rhs, Integer):
-            rhs = rhs.get_value()
-
-        if isinstance(rhs, int):
-            rhs = Signed.from_int(rhs)
-
-        if not isinstance(rhs, Signed):
+        if not isinstance(rhs, (Signed, int, Integer)):
             return NotImplemented
 
         return self.add(rhs)
@@ -237,13 +213,7 @@ class Signed(BitVector):
 
     @_intrinsic
     def __sub__(self, rhs: Signed | int | Integer) -> Signed:
-        if isinstance(rhs, Integer):
-            rhs = rhs.get_value()
-
-        if isinstance(rhs, int):
-            rhs = Signed.from_int(rhs)
-
-        if not isinstance(rhs, Signed):
+        if not isinstance(rhs, (Signed, int, Integer)):
             return NotImplemented
 
         return self.sub(rhs)
@@ -256,48 +226,160 @@ class Signed(BitVector):
         return lhs + -self
 
     @_intrinsic
-    def __mul__(self, rhs: Signed | int | Integer) -> Signed:
-        result_width = self.width
-
+    def __mul__(self, rhs: Signed) -> Signed:
         if isinstance(rhs, Signed):
             result_width = self.width + rhs.width
+            lhs = self.to_int()
             rhs = rhs.to_int()
-        elif isinstance(rhs, Integer):
-            rhs = rhs.get_value()
 
-        lhs = self.to_int()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = 2 * self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+        else:
+            return NotImplemented
 
         return Signed[result_width](lhs * rhs)
 
     @_intrinsic
-    def __floordiv__(self, rhs: Signed | int | Integer) -> Signed:
-        result_width = self.width
+    def __rmul__(self, lhs: Signed) -> Signed:
+        if isinstance(lhs, Signed):
+            result_width = self.width + lhs.width
+            lhs = lhs.to_int()
+            rhs = self.to_int()
 
+        elif isinstance(lhs, (int, Integer)):
+            result_width = 2 * self.width
+            lhs = int(lhs)
+            rhs = self.to_int()
+        else:
+            return NotImplemented
+
+        return Signed[result_width](lhs * rhs)
+
+    @_intrinsic
+    def __floordiv__(self, rhs) -> Signed:
+        raise AssertionError(
+            f"CoHDL does not support floordiv (the '//' operator) for signed operations. Use cohdl.op.truncdiv instead."
+        )
+
+    @_intrinsic
+    def __rfloordiv__(self, lhs) -> Signed:
+        raise AssertionError(
+            f"CoHDL does not support floordiv (the '//' operator) for signed operations. Use cohdl.op.truncdiv instead."
+        )
+
+    @_intrinsic
+    def _cohdl_truncdiv_(self, rhs: Signed) -> Signed:
         if isinstance(rhs, Signed):
+            result_width = self.width
+            lhs = self.to_int()
             rhs = rhs.to_int()
-        elif isinstance(rhs, Integer):
-            rhs = rhs.get_value()
-
-        lhs = self.to_int()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+        else:
+            return NotImplemented
 
         if rhs == 0:
             return Signed[result_width]()
-        return Signed[result_width](lhs // rhs)
+        return Signed[result_width](int(lhs / rhs))
 
     @_intrinsic
-    def __mod__(self, rhs: Signed | int | Integer) -> Signed:
-        result_width = self.width
+    def _cohdl_rtruncdiv_(self, lhs: Signed) -> Signed:
+        if isinstance(lhs, Signed):
+            result_width = lhs.width
+            lhs = lhs.to_int()
+            rhs = self.to_int()
+        elif isinstance(lhs, (int, Integer)):
+            result_width = self.width
+            lhs = int(lhs)
+            rhs = self.to_int()
+        else:
+            return NotImplemented
+
+        if rhs == 0:
+            return Signed[result_width]()
+        return Signed[result_width](int(lhs / rhs))
+
+    @_intrinsic
+    def __mod__(self, rhs: Signed) -> Signed:
 
         if isinstance(rhs, Signed):
+            result_width = rhs.width
+            lhs = self.to_int()
             rhs = rhs.to_int()
-        elif isinstance(rhs, Integer):
-            rhs = rhs.get_value()
 
-        lhs = self.to_int()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+        else:
+            return NotImplemented
 
         if rhs == 0:
             return Signed[result_width]()
         return Signed[result_width](lhs % rhs)
+
+    @_intrinsic
+    def __rmod__(self, lhs: Signed) -> Signed:
+
+        if isinstance(lhs, Signed):
+            result_width = self.width
+            lhs = lhs.to_int()
+            rhs = self.to_int()
+
+        elif isinstance(lhs, (int, Integer)):
+            result_width = self.width
+            lhs = int(lhs)
+            rhs = self.to_int()
+        else:
+            return NotImplemented
+
+        if rhs == 0:
+            return Signed[result_width]()
+        return Signed[result_width](lhs % rhs)
+
+    @_intrinsic
+    def _cohdl_rem_(self, rhs: Signed) -> Signed:
+
+        if isinstance(rhs, Signed):
+            result_width = rhs.width
+            lhs = self.to_int()
+            rhs = rhs.to_int()
+        elif isinstance(rhs, (int, Integer)):
+            result_width = self.width
+            lhs = self.to_int()
+            rhs = int(rhs)
+
+        else:
+            return NotImplemented
+
+        if rhs == 0:
+            return Signed[result_width]()
+
+        return Signed[result_width](lhs - rhs * int(lhs / rhs))
+
+    @_intrinsic
+    def _cohdl_rrem_(self, lhs: Signed) -> Signed:
+
+        if isinstance(lhs, Signed):
+            result_width = self.width
+            lhs = lhs.to_int()
+            rhs = self.to_int()
+        elif isinstance(lhs, (int, Integer)):
+            result_width = self.width
+            lhs = int(lhs)
+            rhs = self.to_int()
+
+        else:
+            return NotImplemented
+
+        if rhs == 0:
+            return Signed[result_width]()
+
+        return Signed[result_width](lhs - rhs * int(lhs / rhs))
 
     @_intrinsic
     def __lshift__(self, rhs) -> Signed:
@@ -333,6 +415,8 @@ class Signed(BitVector):
 
     @_intrinsic
     def __neg__(self) -> Signed:
+        if self._width == 1:
+            return self.copy()
         return ~self + 1
 
     @_intrinsic

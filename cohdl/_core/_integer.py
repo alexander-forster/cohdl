@@ -88,51 +88,134 @@ class Integer(_PrimitiveType):
 
     @_intrinsic
     def __add__(self, other: int | Integer) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val + Integer.decay(other))
 
     @_intrinsic
     def __radd__(self, other: int) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(other + self._val)
 
     @_intrinsic
     def __sub__(self, other: int | Integer) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val - Integer.decay(other))
 
     @_intrinsic
     def __rsub__(self, other: int) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(other - self._val)
 
     @_intrinsic
     def __and__(self, other: int | Integer) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val & Integer.decay(other))
 
     @_intrinsic
     def __or__(self, other: int | Integer) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val | Integer.decay(other))
 
     @_intrinsic
     def __xor__(self, other: int | Integer) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val ^ Integer.decay(other))
 
     @_intrinsic
     def __rand__(self, other: int) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val & other)
 
     @_intrinsic
     def __ror__(self, other: int) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val | other)
 
     @_intrinsic
     def __rxor__(self, other: int) -> Integer:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return Integer(self._val ^ other)
 
     @_intrinsic
-    def __floordiv__(self, other: int | Integer) -> Integer:
-        return Integer(self._val // Integer.decay(other))
+    def __mul__(self, rhs: int | Integer) -> Integer:
+        if isinstance(rhs, (int, Integer)):
+            lhs = self._val
+            rhs = Integer.decay(rhs)
+
+            return Integer(lhs * rhs)
+        else:
+            return NotImplemented
 
     @_intrinsic
-    def __rfloordiv__(self, other: int) -> Integer:
-        return Integer(other // self._val)
+    def __floordiv__(self, rhs: int | Integer) -> Integer:
+        raise AssertionError(
+            f"CoHDL does not support floordiv (the '//' operator) for signed operations. Use cohdl.op.truncdiv instead."
+        )
+
+    @_intrinsic
+    def __rfloordiv__(self, lhs: int | Integer) -> Integer:
+        raise AssertionError(
+            f"CoHDL does not support floordiv (the '//' operator) for signed operations. Use cohdl.op.truncdiv instead."
+        )
+
+    @_intrinsic
+    def _cohdl_truncdiv_(self, rhs: int | Integer) -> Integer:
+        if isinstance(rhs, (int, Integer)):
+            lhs = self._val
+            rhs = Integer.decay(rhs)
+
+            if rhs == 0:
+                return Integer()
+            return Integer(int(lhs / rhs))
+        else:
+            return NotImplemented
+
+    @_intrinsic
+    def __mod__(self, rhs: int | Integer) -> Integer:
+
+        if isinstance(rhs, (int, Integer)):
+            lhs = self._val
+            rhs = Integer.decay(rhs)
+
+            if rhs == 0:
+                return Integer()
+            return Integer(lhs % rhs)
+        else:
+            return NotImplemented
+
+    @_intrinsic
+    def _cohdl_rem_(self, rhs: int | Integer) -> Integer:
+
+        if isinstance(rhs, (int, Integer)):
+            lhs = self._val
+            rhs = Integer.decay(rhs)
+
+            if rhs == 0:
+                return Integer()
+
+            return Integer(lhs - rhs * int(lhs / rhs))
+        else:
+            return NotImplemented
 
     @_intrinsic
     def __neg__(self) -> Integer:
@@ -144,14 +227,23 @@ class Integer(_PrimitiveType):
 
     @_intrinsic
     def __eq__(self, other: int | Integer) -> bool:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return bool(self._val == Integer.decay(other))
 
     @_intrinsic
     def __ne__(self, other) -> bool:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         return bool(self._val != Integer.decay(other))
 
     @_intrinsic
     def __gt__(self, other) -> bool:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         other = Integer.decay(other)
         assert self._val is not None, "integer value is not set"
 
@@ -159,6 +251,9 @@ class Integer(_PrimitiveType):
 
     @_intrinsic
     def __lt__(self, other) -> bool:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         other = Integer.decay(other)
         assert self._val is not None, "integer value is not set"
 
@@ -166,6 +261,9 @@ class Integer(_PrimitiveType):
 
     @_intrinsic
     def __ge__(self, other) -> bool:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         other = Integer.decay(other)
         assert self._val is not None, "integer value is not set"
 
@@ -173,6 +271,9 @@ class Integer(_PrimitiveType):
 
     @_intrinsic
     def __le__(self, other) -> bool:
+        if not isinstance(other, (int, Integer)):
+            return NotImplemented
+
         other = Integer.decay(other)
         assert self._val is not None, "integer value is not set"
 

@@ -859,9 +859,6 @@ class IrGenerator:
         if isinstance(inp, out.InlineCode):
             result = inp.result()
 
-            if isinstance(result, out.InlineCode):
-                result = None
-
             for block in open_blocks:
                 code = ir.InlineCode(inp.options, result)
                 block.append(code)

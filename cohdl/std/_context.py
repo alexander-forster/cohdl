@@ -40,7 +40,7 @@ class Reset:
         if self._active_low:
             return not self._signal
         else:
-            return self._signal
+            return bool(self._signal)
 
     def is_async(self) -> bool:
         return self._is_async

@@ -184,19 +184,16 @@ class Assign(Expression):
 
 
 class InlineCode(Expression):
-    def __init__(self, options: list[cohdl._InlineCode]):
+    def __init__(self, options: list[cohdl._InlineCode], expr_type, bound_statements):
         self.options = options
-        self.expr_type = options[0].expr_type
-
-        for option in options:
-            assert (
-                option.expr_type is self.expr_type
-            ), "all languages must return the same type"
+        self.expr_type = expr_type
 
         if self.expr_type is None:
-            super().__init__(self)
+            super().__init__(None, bound_statements=bound_statements)
         else:
-            super().__init__(Temporary[self.expr_type]())
+            super().__init__(
+                Temporary[self.expr_type](), bound_statements=bound_statements
+            )
 
     def dump(self):
         return IndentBlock(title="InlineCode", content=self.dump_bound())

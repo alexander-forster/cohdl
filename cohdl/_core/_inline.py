@@ -6,8 +6,7 @@ from cohdl._core._intrinsic import _intrinsic
 class InlineCode:
     expr_type = None
 
-    class Node:
-        ...
+    class Node: ...
 
     class Text(Node):
         def __init__(self, text: str):
@@ -22,8 +21,9 @@ class InlineCode:
         def __init__(self, options: list[InlineCode]) -> None:
             self.options = options
 
-    def __init__(self, content: list[InlineCode.Node]):
+    def __init__(self, content: list[InlineCode.Node], bound_statements=None):
         self.content = content
+        self.bound = bound_statements
 
     def copy(self):
         return type(self)(self.obj, self.read)
@@ -39,9 +39,7 @@ class InlineCode:
         return _Inline
 
 
-class InlineRaw(InlineCode):
-    ...
+class InlineRaw(InlineCode): ...
 
 
-class InlineVhdl(InlineCode):
-    ...
+class InlineVhdl(InlineCode): ...

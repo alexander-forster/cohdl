@@ -26,7 +26,8 @@ class BinaryOperator(enum.Enum):
     MUL = enum.auto()
     DIV = enum.auto()
     MOD = enum.auto()
-    FLOOR_DIV = enum.auto()
+    REM = enum.auto()
+    TRUNC_DIV = enum.auto()
 
     CONCAT = enum.auto()
 

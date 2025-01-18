@@ -44,6 +44,7 @@ from cohdl._core._intrinsic_definitions import (
 )
 
 from cohdl._core._context import Context, ContextType
+from cohdl._core._context import _block_stack
 from cohdl.utility.virtual_traceback import VirtualFrame
 
 from ._value_branch import _MergedBranch, _ValueBranch, ObjTraits
@@ -225,8 +226,8 @@ class PrepareAst:
 
         if isinstance(subresult, _type_qualifier.TypeQualifier):
             assert issubclass(
-                subresult.type, (_Boolean, cohdl.Bit)
-            ), f"__bool__ should return bool, Bit or TypeQualifier[bool] not {subresult}"
+                subresult.type, _Boolean
+            ), f"__bool__ should return bool or TypeQualifier[bool] not {subresult}"
 
         return out.Value(subresult, bound)
 
@@ -543,6 +544,8 @@ class PrepareAst:
             ):
                 value._root._name = name
 
+        self._inp_stack = []
+
         self._fn_def = fn_def
         self._context = context
         self._parent = parent
@@ -605,6 +608,7 @@ class PrepareAst:
         try:
             frame = out.AstVirtualFrame(inp, self._frame, prev_parent_frame)
 
+            self._inp_stack.append(inp)
             _parent_frame = frame
             result = self.apply_impl(inp)
             result._frame = frame
@@ -636,6 +640,7 @@ class PrepareAst:
                 raise err
         finally:
             _parent_frame = prev_parent_frame
+            self._inp_stack.pop()
 
     def throw_error(self, msg: str, offset: int):
         raise AssertionError(self.error(msg, offset))
@@ -1850,7 +1855,7 @@ class PrepareAst:
 
             is_inline = [is_inline_code(self, val) for val in inp.values]
 
-            def collect_inline_code(node: ast.FormattedValue):
+            def collect_inline_code(node: ast.FormattedValue, bound_statements: list):
                 value_expr = self.apply(node.value)
                 value = value_expr.result()
 
@@ -1864,10 +1869,13 @@ class PrepareAst:
                         elem_value = elem_expr.result()
 
                         if isinstance(elem_value, out.InlineCode):
+                            bound_statements.extend(elem_expr.bound_statements())
                             content.append(
                                 cohdl._InlineCode.SubCode(elem_value.options)
                             )
                         else:
+                            bound_statements.append(elem_expr)
+
                             if isinstance(elem_value, _type_qualifier.TypeQualifier):
                                 if elem.conversion == 114:
                                     is_read = True
@@ -1878,6 +1886,8 @@ class PrepareAst:
                                 content.append(
                                     cohdl._InlineCode.Object(elem_value, is_read)
                                 )
+                            elif isinstance(elem_value, cohdl._InlineCode.SubCode):
+                                content.append(elem_value)
                             else:
                                 content.append(cohdl._InlineCode.Text(str(elem_value)))
                     elif isinstance(elem, ast.Constant):
@@ -1887,13 +1897,32 @@ class PrepareAst:
 
             if any(is_inline):
                 assert all(is_inline)
-                return out.InlineCode(
-                    [
-                        collect_inline_code(val)
-                        for val in inp.values
-                        if not isinstance(val, ast.Constant)
-                    ]
-                )
+
+                bound = []
+                options: list[cohdl._InlineCode] = []
+
+                for val in inp.values:
+                    assert not isinstance(
+                        val, ast.Constant
+                    ), "not sure if this is possible"
+                    options.append(collect_inline_code(val, bound))
+
+                expr_type = options[0].expr_type
+
+                for option in options:
+                    assert (
+                        option.expr_type is expr_type
+                    ), "all inline options must return the same type"
+
+                if expr_type is not None or isinstance(self._inp_stack[-2], ast.Expr):
+                    # Inline expressions must be synthesized so their return value is available.
+                    # Inline statements that are not passed to a function or assigned to
+                    # a variable are synthesized at their declaration location.
+                    return out.InlineCode(options, expr_type, bound)
+                else:
+                    # other inline statements are treated as values and
+                    # only synthesized when they are expanded in another inline code
+                    return out.Value(cohdl._InlineCode.SubCode(options), bound)
             else:
                 raise AssertionError("not implemented")
 
@@ -2336,17 +2365,29 @@ class ConvertPythonInstance:
                     instantiated = inp._cohdl_info.instantiated
                     assert isinstance(instantiated, inp)
 
-                    #
+                    current_block_info = instantiated._cohdl_block_info
 
-                    converted_blocks = [
-                        self.apply(block)
-                        for block in instantiated._cohdl_block_info._subblocks
-                    ]
+                    current_contexts = current_block_info._subcontext
+                    current_blocks = current_block_info._subblocks
 
-                    converted_contexts = [
-                        self.apply(ctx)
-                        for ctx in instantiated._cohdl_block_info._subcontext
-                    ]
+                    converted_contexts = []
+                    converted_blocks = []
+
+                    while len(current_contexts) != 0 or len(current_blocks) != 0:
+                        dummy_block = Block(
+                            current_block_info._name, current_block_info._attributes
+                        )
+                        _block_stack.append(dummy_block)
+
+                        for block in current_blocks:
+                            converted_blocks.append(self.apply(block))
+
+                        for ctx in current_contexts:
+                            converted_contexts.append(self.apply(ctx))
+
+                        _block_stack.pop()
+                        current_contexts = dummy_block._cohdl_block_info._subcontext
+                        current_blocks = dummy_block._cohdl_block_info._subblocks
 
                     global _inline_declared_entities
                     while len(_inline_declared_entities) != 0:

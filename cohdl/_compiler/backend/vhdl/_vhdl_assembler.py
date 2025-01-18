@@ -242,9 +242,14 @@ class Context(enum.Enum):
 
 
 class VhdlAssembler:
-    def __init__(self):
+    def __init__(self, additional_reserved_names: set[str] = None):
         self._known_templates: IdMap[ir.EntityTemplate, vhdl.Entity] = IdMap()
         self._stmt_assembler = _StmtAssembler()
+
+        if additional_reserved_names is None:
+            self._additional_reserved_names = None
+        else:
+            self._additional_reserved_names = set(additional_reserved_names)
 
     def convert_stmt(self, stmt, **kwargs):
         return self._stmt_assembler.apply(stmt, **kwargs)
@@ -278,7 +283,9 @@ class VhdlAssembler:
             if inp in self._get_known_templates():
                 return self._get_known_templates()[inp]
 
-            module_scope = vhdl.ModuleScope()
+            module_scope = vhdl.ModuleScope(
+                additional_reserved_names=self._additional_reserved_names
+            )
             entity_scope = vhdl.EntityScope(module_scope)
             arch_scope = vhdl.ArchScope(entity_scope)
 

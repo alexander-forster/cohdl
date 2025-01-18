@@ -13,6 +13,7 @@ from cohdl import (
 )
 
 from cohdl import std
+from cohdl import op
 from cohdl_testutil import cocotb_util
 
 
@@ -71,7 +72,7 @@ class test_operations(cohdl.Entity):
             self.op_add <<= self.a + self.b
             self.op_sub <<= self.a - self.b
             self.op_mul <<= self.a * self.b
-            self.op_div <<= self.a // self.b_div
+            self.op_div <<= op.truncdiv(self.a, self.b_div)
             self.op_mod <<= self.a % self.b_div
 
             self.cast_a.signed <<= self.a

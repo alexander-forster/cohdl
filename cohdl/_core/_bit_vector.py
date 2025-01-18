@@ -404,18 +404,6 @@ class BitVector(_PrimitiveType, metaclass=_BitVector):
         return len(self._value)
 
     @_intrinsic
-    def subvector(self, offset: int, width: int | None = None):
-        if width is None:
-            width = self.width() - offset
-
-        assert offset >= 0 and offset + width <= self.width()
-
-        if width == 0:
-            return BitVector[0]()
-
-        return BitVector[width](self._value)
-
-    @_intrinsic
     def __getitem__(self, key: int | Integer | slice) -> BitVector | Bit:
         if isinstance(key, (tuple, list)):
             first, *rest = key
