@@ -572,10 +572,12 @@ class FunctionDefinition:
                 if arg in self._defaults:
                     add_arg(arg, self._defaults[arg])
                 else:
-                    raise AssertionError(f"missing paramerter `{arg}`")
+                    raise AssertionError(f"missing parameter `{arg}`")
 
         if self._vararg is None:
-            assert len(args) == 0, f"to many arguments passed to function `{args}`"
+            assert (
+                len(args) == 0
+            ), f"to many arguments passed to function '{self._name}' {args=}"
         else:
             # function has a *vararg parameter, assign remaining
             # non-keyword arguments to this value, undo reversing of arguments from

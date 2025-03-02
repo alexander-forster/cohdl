@@ -167,8 +167,6 @@ class BitTester(unittest.TestCase):
         helper(h ^ h, False)
 
     def test_cmp(self):
-        l = Bit(False)
-
         self.assertTrue(Bit(False) == Bit(False))
         self.assertTrue(Bit(True) == Bit(True))
         self.assertFalse(Bit(False) == Bit(True))
@@ -198,3 +196,29 @@ class BitTester(unittest.TestCase):
         self.assertFalse(BitState.HIGH != Bit(True))
         self.assertTrue(BitState.LOW != Bit(True))
         self.assertTrue(BitState.HIGH != Bit(False))
+
+        for invalid in (
+            True,
+            False,
+            "0",
+            "1",
+            "Z",
+            "",
+            " ",
+            "    ",
+            "aasdfsadsf",
+            "!",
+            0,
+            1,
+            -1,
+            1000223,
+        ):
+            self.assertRaises(AssertionError, lambda: invalid == Bit(True))
+            self.assertRaises(AssertionError, lambda: invalid != Bit(True))
+            self.assertRaises(AssertionError, lambda: invalid == Bit(False))
+            self.assertRaises(AssertionError, lambda: invalid != Bit(False))
+
+            self.assertRaises(AssertionError, lambda: Bit(True) == invalid)
+            self.assertRaises(AssertionError, lambda: Bit(True) != invalid)
+            self.assertRaises(AssertionError, lambda: Bit(False) == invalid)
+            self.assertRaises(AssertionError, lambda: Bit(False) != invalid)

@@ -396,7 +396,7 @@ equivalent to:
 
 choose_first = _ChooseFirst()
 """
-`std.coose_first[T](...)` takes an arbitrary number of arguments each of which is a
+`std.choose_first[T](...)` takes an arbitrary number of arguments each of which is a
 tuple with two elements (CONDITION, VALUE). The function returns the first
 VALUE with a truthy CONDITION or default if no such CONDITION exists.
 """
@@ -409,6 +409,23 @@ an if expression equivalent to:
 >>> std.check_type[T](
 >>>     on_true if cond else on_false
 >>> )
+"""
+
+cond_call = _Cond()
+"""
+`std.cond_call[T](cond, on_true, on_false)` returns the result
+of `on_true()` if cond is true and `on_false()` otherwise.
+It can only be used in sequential contexts. The main purpose
+of this callable is to provide short circuiting behavior
+for conditional expressions. This is needed because the
+CoHDL compiler does NOT implement this for if-expr or boolean statements.
+
+>>>
+>>> fifo = std.Fifo[Bit, 16]()
+>>>
+>>> # take top value from fifo if it is non-empty
+>>> # return Bit(Null) otherwise
+>>> value = cond_call[Bit](fifo.empty(), lambda: Null, fifo.pop)
 """
 
 #

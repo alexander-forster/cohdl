@@ -469,10 +469,23 @@ class _Cond(_TypeCheckedExpression):
         return self._checked(on_true if cond else on_false)
 
 
+def _cond_call(cond, on_true, on_false):
+    if cond:
+        return on_true()
+    else:
+        return on_false()
+
+
+class _CondCall(_TypeCheckedExpression):
+    def __call__(self, cond: bool, on_true, on_false):
+        return self._checked(_cond_call(cond, on_true, on_false))
+
+
 check_type = _CheckType()
 select = _Select()
 choose_first = _ChooseFirst()
 cond = _Cond()
+cond_call = _CondCall()
 
 #
 #

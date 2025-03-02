@@ -5,6 +5,7 @@
 from .reg import *
 from .reg import _primitive_as_int
 from cohdl.utility.code_writer import TextBlock
+import enum
 
 
 class Content:
@@ -86,13 +87,13 @@ class ComponentBlock(TextBlock):
         super().__init__(title=title, content=content.to_list(), trailer=trailer)
 
 
-def _find_enums(root: RegFile, result_set: set):
+def _find_enums(root: RegisterTools.RegFile, result_set: set):
     for subtype in root._member_types_.values():
-        if issubclass(subtype, RegFile):
+        if issubclass(subtype, RegisterTools.RegFile):
             _find_enums(subtype, result_set)
-        elif issubclass(subtype, Register):
+        elif issubclass(subtype, RegisterTools.Register):
             for fieldtype in subtype._field_types_.values():
-                assert issubclass(fieldtype, FieldBase)
+                assert issubclass(fieldtype, RegisterTools.FieldBase)
                 arg = fieldtype._field_arg
 
                 if arg.is_enum():
@@ -143,7 +144,7 @@ def _add_meta_args(metadata: type, content: list):
 def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
     escape = _systemrdl_escape
 
-    if issubclass(input, RegFile):
+    if issubclass(input, RegisterTools.RegFile):
         content = Content()
 
         member_metadata = input._metadata_
@@ -155,7 +156,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
 
         content.add_description(input, metadata)
 
-        if issubclass(input, AddrMap):
+        if issubclass(input, RegisterTools.AddrMap):
             content.append(f"default regwidth = {input._register_tools_._word_width_};")
             content.append("")
 
@@ -178,7 +179,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             content.append("")
 
         return ComponentBlock("addrmap", content.name, content=content, trailer=trailer)
-    elif issubclass(input, Register):
+    elif issubclass(input, RegisterTools.Register):
         content = Content()
         content.add_description(input, metadata)
 
@@ -195,7 +196,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             content=content,
             trailer="}" + f" {escape(name)} @ 0x{input._parent_offset_:0x};",
         )
-    elif issubclass(input, Field):
+    elif issubclass(input, RegisterTools.Field):
         content = Content()
         content.add_meta(metadata)
 
@@ -212,7 +213,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             underlying = input._cohdlstd_underlying()
             default = underlying(arg.default)
 
-            if issubclass(underlying, StdEnum):
+            if issubclass(underlying, enum.Enum):
                 default = _primitive_as_int(default.raw)
             else:
                 default = _primitive_as_int(default)
@@ -224,7 +225,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             content=content,
             trailer="}" + f" {escape(name)} {trailer_loc}{trailer_default};",
         )
-    elif issubclass(input, FlagField):
+    elif issubclass(input, RegisterTools.FlagField):
         content = Content()
         content.add_meta(metadata)
 
@@ -236,7 +237,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             content=content,
             trailer="}" + f" {escape(name)} {trailer_loc} = 0;",
         )
-    elif issubclass(input, StdEnum):
+    elif issubclass(input, enum.Enum):
         content = Content()
         enum_name = input.__name__.split("[")[0]
 
@@ -253,13 +254,16 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             content.append(enum_def)
 
         return ComponentBlock("enum", _systemrdl_escape(enum_name), content=content)
-    elif issubclass(input, (Input, Output, GenericRegister)):
+    elif issubclass(
+        input,
+        (RegisterTools.Input, RegisterTools.Output, RegisterTools.GenericRegister),
+    ):
         content = Content()
 
         content.add_description(input, metadata)
         content.add_meta(metadata)
 
-        if issubclass(input, Input):
+        if issubclass(input, RegisterTools.Input):
             access = f"sw = r;"
         else:
             access = f"sw = w;"
@@ -271,7 +275,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
             content=content,
             trailer="}" + f" {escape(name)} @ 0x{input._parent_offset_:0x};",
         )
-    elif issubclass(input, Memory):
+    elif issubclass(input, RegisterTools.Memory):
         content = Content()
         content.add_description(input, metadata)
         content.add_meta(metadata)
@@ -291,7 +295,7 @@ def _impl_to_system_rdl(input, name: str | None = None, metadata=None):
     raise AssertionError(f"invalid input {input}")
 
 
-def to_system_rdl(input: AddrMap | type[AddrMap]):
+def to_system_rdl(input: RegisterTools.AddrMap | type[RegisterTools.AddrMap]):
     if not isinstance(input, type):
         input = type(input)
 

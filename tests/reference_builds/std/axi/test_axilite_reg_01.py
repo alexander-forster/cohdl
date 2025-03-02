@@ -3,7 +3,7 @@ from __future__ import annotations
 from cocotbext.axi import AxiLiteBus, AxiLiteMaster
 
 import cohdl
-from cohdl import Port, Bit, BitVector, Signal, Unsigned, Null
+from cohdl import Port, Bit, BitVector, Unsigned, Null
 from cohdl import std
 
 from cohdl.std.axi import axi4_light as axi

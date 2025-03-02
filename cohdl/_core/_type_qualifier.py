@@ -272,10 +272,11 @@ class TypeQualifierBase:
             return val._value
         elif isinstance(val, TypeQualifierBase):
             return val.decay()
+        elif hasattr(type(val), "_cohdl_is_merged_branch"):
+            return val.type_qualifier_decay()
+
         return val
 
-
-class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
     @property
     def type(cls):
         return cls._Wrapped
@@ -289,6 +290,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         return self._Wrapped.width
 
     _intrinsic(width.fget)
+
+
+class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
     #
     #

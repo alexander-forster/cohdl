@@ -204,7 +204,7 @@ class Signal(typing.Generic[T], TypeQualifier[T]):
         When `delayed_init` is set to true initialization behaves like a signal assignment
         and takes one clock cycle.
 
-        CoHDL perform some basic checks to ensure, that all locally declared objects
+        CoHDL performs some basic checks, to ensure that all locally declared objects
         are initialized before they are used. Set `maybe_uninitialized` to True to
         opt out of these checks.
 

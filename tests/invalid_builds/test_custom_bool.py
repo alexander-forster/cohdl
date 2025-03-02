@@ -110,7 +110,7 @@ class SynthesizableTester(unittest.TestCase):
         # The compiler must enforce that __bool__ returns
         # a possibly type qualified boolean and nothing else.
         # Other return types like Bit can case issues even if
-        # then are convertible to bool (example when passed
+        # they are convertible to bool (example when passed
         # to formal verification functions or inline HDL).
 
         for inp_select in VALID_LIST:

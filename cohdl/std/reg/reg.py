@@ -23,8 +23,18 @@ from cohdl.utility import TextBlock
 
 from .._context import SequentialContext, concurrent
 from ..enum import Enum as StdEnum
-from .._core_utility import to_bits, NoresetSignal, zeros, ones, concat, base_type
+from .._core_utility import (
+    to_bits,
+    NoresetSignal,
+    zeros,
+    ones,
+    concat,
+    base_type,
+    Value,
+    Ref,
+)
 from ..utility import is_pow_two, int_log_2
+from .._template import Template as StdTemplate
 
 
 class Access(enum.Enum):
@@ -163,7 +173,7 @@ class _RegisterToolsArg:
         )
 
 
-class RegisterTools(std.Template[_RegisterToolsArg]):
+class RegisterTools(StdTemplate[_RegisterToolsArg]):
     _word_width_: _RegisterToolsArg.word_width
     _addr_unit_width_: _RegisterToolsArg.unit_width
     _word_stride_: _RegisterToolsArg.word_stride
@@ -216,7 +226,7 @@ class RegisterTools(std.Template[_RegisterToolsArg]):
         cls.AddrMap = type("AddrMap", (AddrMap, cls.RegFile[0]), {})
 
 
-class RegisterObject(std.Template[GenericArg]):
+class RegisterObject(StdTemplate[GenericArg]):
     # _register_tools_: type[RegisterTools] = None
     _generic_arg_: GenericArg
     _global_offset_: int
@@ -618,7 +628,7 @@ class NotifyArg:
         return "on_write"
 
 
-class NotifyBase(std.Template[NotifyArg], metaclass=MetaNotifyBase):
+class NotifyBase(StdTemplate[NotifyArg], metaclass=MetaNotifyBase):
     _cohdlstd_notify_mode: NotifyArg.arg
 
     def notify(self):
@@ -811,7 +821,7 @@ class FieldBase:
     pass
 
 
-class Field(std.Template[_FieldArg], FieldBase):
+class Field(StdTemplate[_FieldArg], FieldBase):
     _field_arg: _FieldArg
 
     @classmethod
@@ -941,7 +951,9 @@ class SField(Field):
     pass
 
 
-class MemField(Field): ...
+class MemField(Field):
+    def set_default(self, value):
+        self._value
 
 
 class MemUField(UField): ...
@@ -950,7 +962,7 @@ class MemUField(UField): ...
 class MemSField(SField): ...
 
 
-class FlagField(std.Template[_FlagArg], FieldBase):
+class FlagField(StdTemplate[_FlagArg], FieldBase):
     _field_arg: _FlagArg
 
     @classmethod
@@ -958,7 +970,7 @@ class FlagField(std.Template[_FlagArg], FieldBase):
         return 1
 
     @classmethod
-    def _from_bits_(cls, val: BitVector, qualifier=std.Value):
+    def _from_bits_(cls, val: BitVector, qualifier=Value):
         assert val.width == 1, "FlagField._from_bits_ expects a single bit BitVector"
         return cls(qualifier[Bit](val[0]))
 
@@ -1043,16 +1055,11 @@ class Register(GenericRegister):
         self._init_from_config()
 
     # from user code
-    def _init_from_config(self, **kwargs):
+    def _init_from_config(self):
         self._fields_ = {}
         for name, field_type in self._field_types_.items():
             setattr(self, name, field_type())
             self._fields_[name] = getattr(self, name)
-
-        for name, default_val in kwargs:
-            member = getattr(self, name)
-            assert isinstance(member, (MemField, MemUField, MemSField))
-            member._set_default_(default_val)
 
     # from members
     @_intrinsic
@@ -1065,7 +1072,7 @@ class Register(GenericRegister):
             setattr(self, name, value)
             self._fields_[name] = value
 
-    def _init_from_user(self, raw=None, _qualifier_=std.Ref, **kwargs):
+    def _init_from_user(self, raw=None, _qualifier_=Ref, **kwargs):
         if raw is not None:
             assert len(kwargs) == 0
             self._fields_ = {}
@@ -1106,7 +1113,7 @@ class Register(GenericRegister):
     def __call__(self, **kwargs):
         all_fields = {**self._fields_, **kwargs}
         tmp_fields = {
-            name: std.Value[self._field_types_[name]](field_val)
+            name: Value[self._field_types_[name]](field_val)
             for name, field_val in all_fields.items()
         }
 
@@ -1117,7 +1124,7 @@ class Register(GenericRegister):
         return cls._register_tools_._word_width_
 
     @classmethod
-    def _from_bits_(cls, bits: BitVector, qualifier=std.Ref):
+    def _from_bits_(cls, bits: BitVector, qualifier=Ref):
         return cls(
             {
                 name: qualifier[field_type](bits, extract=True)
@@ -1143,7 +1150,13 @@ class Register(GenericRegister):
             if value._cohdlstd_notify_mode is _NotifyOnRead:
                 value.notify()
 
-        return (await std.as_awaitable(self._on_read_))._to_bits_()
+        read_result = await std.as_awaitable(self._on_read_)
+
+        assert isinstance(
+            read_result, type(self)
+        ), "_on_read_ must return an instance of Self"
+
+        return read_result._to_bits_()
 
     async def _basic_write_(self, addr, data, mask, meta):
         for value in self._notifications_.values():
@@ -1159,8 +1172,12 @@ class Register(GenericRegister):
                     isinstance(field, (MemField, MemUField, MemSField, FlagField))
                     for field in self._fields_.values()
                 ]
-            )
+            ), "method _on_write_ of Register containing MemField must return a value"
         else:
+            assert isinstance(
+                result, type(self)
+            ), "return value of _on_write_ must be an instance of Self"
+
             for name, field in self._fields_.items():
                 if isinstance(field, (MemField, MemUField, MemSField)):
                     field <<= getattr(result, name)
@@ -1714,6 +1731,7 @@ RegisterTools.MemSWord = MemSWord
 
 RegisterTools.Access = Access
 RegisterTools.HwAccess = HwAccess
+RegisterTools.FieldBase = FieldBase
 RegisterTools.Field = Field
 RegisterTools.UField = UField
 RegisterTools.SField = SField

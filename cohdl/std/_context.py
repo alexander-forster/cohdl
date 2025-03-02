@@ -19,7 +19,6 @@ from cohdl import (
 from cohdl.utility.source_location import SourceLocation
 
 from ._prefix import _Prefix
-from ._core_utility import as_awaitable
 
 
 class Reset:
@@ -29,7 +28,6 @@ class Reset:
         active_low: bool = False,
         is_async: bool = False,
     ):
-        assert isinstance(signal, cohdl.Signal)
         assert issubclass(signal.type, cohdl.Bit)
 
         self._signal = signal
@@ -242,7 +240,6 @@ class Clock:
         duty: float = 0.5,
         phase: float = 0.0,
     ):
-        assert isinstance(clk_signal, cohdl.Signal)
         assert issubclass(clk_signal.type, cohdl.Bit)
         assert (
             frequency is None or period is None

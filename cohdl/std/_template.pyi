@@ -79,7 +79,7 @@ class Template(Generic[TempArg]):
         Use to customize the generated types similar to __init_subclass__
         """
 
-    def __class_getitem__(cls: Self, args) -> Self: ...
+    def __class_getitem__(cls, args) -> Self: ...
 
 class TemplateArg:
     Type = T
@@ -87,7 +87,7 @@ class TemplateArg:
     def __new__(cls, arg: type[T]) -> type[T]:
         """
         Decorator that adds __init__, __hash__ and __eq__
-        Use new instead of __call__ because TemplateArg is a class.
-
         to a class so it can be used as an argument for std.Template.
+
+        Use __new__ instead of __call__ because TemplateArg is a class.
         """

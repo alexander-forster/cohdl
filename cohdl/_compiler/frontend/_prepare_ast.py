@@ -1265,7 +1265,7 @@ class PrepareAst:
 
                     assert (
                         result.result() is not NotImplemented
-                    ), f"operation '{operator}' not implemented for operands '{val_lhs}' and '{val_rhs}'"
+                    ), f"operator '{normal_name}' not implemented for operands '{val_lhs}' and '{val_rhs}'"
 
                     result.add_bound_statement(lhs)
                     result.add_bound_statement(rhs)

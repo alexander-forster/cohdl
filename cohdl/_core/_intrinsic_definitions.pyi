@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-T = TypeVar(T)
+T = TypeVar("T")
 
 class _Always:
     def __call__(self, expr: T, /) -> T: ...

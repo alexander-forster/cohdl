@@ -197,15 +197,25 @@ class Bit(_PrimitiveType, metaclass=_MetaBit):
     def __eq__(self, other: Bit | BitState) -> bool:
         if isinstance(other, Bit):
             return self._val is other._val
+        elif isinstance(other, BitState):
+            return self._val is other
         else:
-            return self._val is BitState.construct(other)
+            assert not isinstance(
+                other, (bool, int, str)
+            ), f"value '{other}' must be converted to Bit before comparison to Bit"
+            return NotImplemented
 
     @_intrinsic
     def __ne__(self, other: Bit | BitState) -> bool:
         if isinstance(other, Bit):
             return self._val is not other._val
+        elif isinstance(other, BitState):
+            return self._val is not other
         else:
-            return self._val is not BitState.construct(other)
+            assert not isinstance(
+                other, (bool, int, str)
+            ), f"value '{other}' must be converted to Bit before comparison to Bit"
+            return NotImplemented
 
     @_intrinsic
     def __len__(self):

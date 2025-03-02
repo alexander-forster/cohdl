@@ -65,6 +65,7 @@ from ._core_utility import (
     select,
     choose_first,
     cond,
+    cond_call,
     to_bits,
     from_bits,
     count_bits,

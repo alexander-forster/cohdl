@@ -40,16 +40,27 @@ class VirtualFrame:
         # user code. As a workaround we create a fake by constructing a string of python code
         # that contains a function with the same name. The fake function raises an assertion
         # so we can extract the frame object after a call to `exec`.
-        code_str = f"def {function_name}():\n\traise AssertionError('dummy')\n{function_name}()\n"
+        _cohdl_traceback_exception_cell = []
+
+        code_str = f"""
+def {function_name}():
+    try:
+        raise AssertionError('dummy')
+    except AssertionError as e:
+        _cohdl_traceback_exception_cell.append(e)
+        return e
+{function_name}()
+"""
 
         compiled_fn = compile(code_str, filename=loc.file, mode="exec")
 
         try:
             # Use the fake function of create a frame object with the correct
             # function name, line number, filename and local/global variables
-            exec(compiled_fn, self._scope)
-        except BaseException as dummy_err:
-            new_frame = dummy_err.__traceback__.tb_next.tb_next.tb_frame
+            exec(compiled_fn, {"_cohdl_traceback_exception_cell": _cohdl_traceback_exception_cell})
+        finally:
+            dummy_err = _cohdl_traceback_exception_cell[0]
+            new_frame = dummy_err.__traceback__.tb_frame
 
             for name, val in self._scope.items():
                 new_frame.f_locals[name] = val

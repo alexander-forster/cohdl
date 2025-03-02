@@ -12,12 +12,7 @@ from cohdl_testutil import cocotb_util
 
 
 def choose_first(options: list[Tuple[Any, Any]], default):
-    if len(options) == 0:
-        return default
-    else:
-        value, cond = options[0]
-        rest = options[1:]
-        return value if cond else choose_first(rest, default)
+    return std.choose_first(*[(cond, val) for val, cond in options], default=default)
 
 
 class test_if_expr(cohdl.Entity):
@@ -43,6 +38,12 @@ class test_if_expr(cohdl.Entity):
     choose_pos_a = Port.output(Unsigned[4])
     choose_option = Port.output(BitVector[2])
 
+    cond_call_bit = Port.output(Bit)
+    cond_call_bitvector = Port.output(BitVector[4])
+    cond_call_signed = Port.output(Signed[4])
+    cond_call_unsigned = Port.output(Unsigned[4])
+    cond_call_bitvector_signal = Port.output(BitVector[4])
+
     def architecture(self):
         @std.concurrent
         def logic_ifexpr():
@@ -50,17 +51,13 @@ class test_if_expr(cohdl.Entity):
             self.ifexpr_bitvector <<= (
                 "1000"
                 if self.sw[0] == self.sw[1]
-                else "0001"
-                if self.sw[1] == self.sw[2]
-                else Null
+                else "0001" if self.sw[1] == self.sw[2] else Null
             )
 
             self.ifexpr_bitvector_signal <<= (
                 self.sw
                 if self.sw[0] == self.sw[1]
-                else ~self.sw
-                if self.sw[1] == self.sw[2]
-                else Full
+                else ~self.sw if self.sw[1] == self.sw[2] else Full
             )
 
             self.ifexpr_unsigned <<= (
@@ -70,11 +67,11 @@ class test_if_expr(cohdl.Entity):
             self.ifexpr_signed <<= (
                 -1
                 if self.sw[0] == self.sw[1]
-                else -2
-                if self.sw[1] == self.sw[2]
-                else -3
-                if self.sw[2] == self.sw[3]
-                else 0
+                else (
+                    -2
+                    if self.sw[1] == self.sw[2]
+                    else -3 if self.sw[2] == self.sw[3] else 0
+                )
             )
 
         @std.concurrent
@@ -136,6 +133,48 @@ class test_if_expr(cohdl.Entity):
                 Null,
             )
 
+        @std.sequential
+        def logic_ifexpr():
+            self.cond_call_bit <<= std.cond_call(
+                self.sw[0] == self.sw[1], lambda: "1", lambda: "0"
+            )
+
+            self.cond_call_bitvector <<= std.cond_call(
+                self.sw[0] == self.sw[1],
+                lambda: "1000",
+                lambda: std.cond_call(
+                    self.sw[1] == self.sw[2], lambda: "0001", lambda: Null
+                ),
+            )
+
+            self.cond_call_bitvector_signal <<= std.cond_call(
+                self.sw[0] == self.sw[1],
+                lambda: self.sw,
+                lambda: std.cond_call(
+                    self.sw[1] == self.sw[2], lambda: ~self.sw, lambda: Full
+                ),
+            )
+
+            self.cond_call_unsigned <<= std.cond_call(
+                self.sw[0] == self.sw[1],
+                lambda: 1,
+                lambda: std.cond_call[int](
+                    self.sw[1] == self.sw[2], lambda: 2, lambda: 0
+                ),
+            )
+
+            self.cond_call_signed <<= std.cond_call[int](
+                self.sw[0] == self.sw[1],
+                lambda: -1,
+                lambda: std.cond_call[int](
+                    self.sw[1] == self.sw[2],
+                    lambda: -2,
+                    lambda: std.cond_call(
+                        self.sw[2] == self.sw[3], lambda: -3, lambda: 0
+                    ),
+                ),
+            )
+
 
 #
 # test code
@@ -156,6 +195,12 @@ async def testbench_ifexpr(dut: test_if_expr):
             (dut.ifexpr_bitvector_signal, "0000"),
             (dut.ifexpr_unsigned, 1),
             (dut.ifexpr_signed, -1),
+            #
+            (dut.cond_call_bit, 1),
+            (dut.cond_call_bitvector, "1000"),
+            (dut.cond_call_bitvector_signal, "0000"),
+            (dut.cond_call_unsigned, 1),
+            (dut.cond_call_signed, -1),
         ],
     )
 
@@ -167,6 +212,12 @@ async def testbench_ifexpr(dut: test_if_expr):
             (dut.ifexpr_bitvector_signal, "1110"),
             (dut.ifexpr_unsigned, 2),
             (dut.ifexpr_signed, -2),
+            #
+            (dut.cond_call_bit, 0),
+            (dut.cond_call_bitvector, "0001"),
+            (dut.cond_call_bitvector_signal, "1110"),
+            (dut.cond_call_unsigned, 2),
+            (dut.cond_call_signed, -2),
         ],
     )
 
@@ -178,6 +229,12 @@ async def testbench_ifexpr(dut: test_if_expr):
             (dut.ifexpr_bitvector_signal, "1111"),
             (dut.ifexpr_unsigned, 0),
             (dut.ifexpr_signed, -3),
+            #
+            (dut.cond_call_bit, 0),
+            (dut.cond_call_bitvector, "0000"),
+            (dut.cond_call_bitvector_signal, "1111"),
+            (dut.cond_call_unsigned, 0),
+            (dut.cond_call_signed, -3),
         ],
     )
 
@@ -189,6 +246,12 @@ async def testbench_ifexpr(dut: test_if_expr):
             (dut.ifexpr_bitvector_signal, "0011"),
             (dut.ifexpr_unsigned, 1),
             (dut.ifexpr_signed, -1),
+            #
+            (dut.cond_call_bit, 1),
+            (dut.cond_call_bitvector, "1000"),
+            (dut.cond_call_bitvector_signal, "0011"),
+            (dut.cond_call_unsigned, 1),
+            (dut.cond_call_signed, -1),
         ],
     )
 
@@ -200,6 +263,12 @@ async def testbench_ifexpr(dut: test_if_expr):
             (dut.ifexpr_bitvector_signal, "0100"),
             (dut.ifexpr_unsigned, 1),
             (dut.ifexpr_signed, -1),
+            #
+            (dut.cond_call_bit, 1),
+            (dut.cond_call_bitvector, "1000"),
+            (dut.cond_call_bitvector_signal, "0100"),
+            (dut.cond_call_unsigned, 1),
+            (dut.cond_call_signed, -1),
         ],
     )
 
@@ -233,66 +302,52 @@ async def testbench_choose(dut: test_if_expr):
                         ),
                         (
                             dut.choose_bit_3,
-                            1
-                            if sw[0:1] == a
-                            else 0
-                            if sw[0:1] == b
-                            else 1
-                            if sw[1:2] == a
-                            else sw[2],
+                            (
+                                1
+                                if sw[0:1] == a
+                                else 0 if sw[0:1] == b else 1 if sw[1:2] == a else sw[2]
+                            ),
                             f"dut.choose_bit_3 ::   {msg}",
                         ),
                         (
                             # find first '1'
                             dut.choose_unsigned,
-                            1
-                            if sw[0]
-                            else 2
-                            if sw[1]
-                            else 3
-                            if sw[2]
-                            else 4
-                            if sw[3]
-                            else 0,
+                            (
+                                1
+                                if sw[0]
+                                else 2 if sw[1] else 3 if sw[2] else 4 if sw[3] else 0
+                            ),
                             f"dut.choose_unsigned ::   {msg}",
                         ),
                         (
                             # find first '1'
                             dut.choose_unsigned_2,
-                            1
-                            if sw[0]
-                            else 2
-                            if sw[1]
-                            else 3
-                            if sw[2]
-                            else 4
-                            if sw[3]
-                            else 0,
+                            (
+                                1
+                                if sw[0]
+                                else 2 if sw[1] else 3 if sw[2] else 4 if sw[3] else 0
+                            ),
                             f"dut.choose_unsigned_2 ::   {msg}",
                         ),
                         (
                             # find first '0'
                             dut.choose_unsigned_3,
-                            1
-                            if ~sw[0]
-                            else 2
-                            if ~sw[1]
-                            else 3
-                            if ~sw[2]
-                            else 4
-                            if ~sw[3]
-                            else 0,
+                            (
+                                1
+                                if ~sw[0]
+                                else (
+                                    2 if ~sw[1] else 3 if ~sw[2] else 4 if ~sw[3] else 0
+                                )
+                            ),
                             f"dut.choose_unsigned_3 ::   {msg}",
                         ),
                         (
                             dut.choose_pos_a,
-                            1
-                            if sw[0:1] == a
-                            else 2
-                            if sw[1:2] == a
-                            else 3
-                            if sw[2:3] == a
-                            else 0,
+                            (
+                                1
+                                if sw[0:1] == a
+                                else 2 if sw[1:2] == a else 3 if sw[2:3] == a else 0
+                            ),
                             f"dut.choose_pos_a ::   {msg}",
                         ),
                         (
@@ -305,6 +360,9 @@ async def testbench_choose(dut: test_if_expr):
                         ),
                     ],
                 )
+
+
+print(std.VhdlCompiler.to_string(test_if_expr))
 
 
 class Unittest(unittest.TestCase):

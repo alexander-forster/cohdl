@@ -64,6 +64,9 @@ class _ValueBranch:
     def _id(self):
         return _ValueBranch(self.hook, id(self.obj))
 
+    def _tq_decay(self):
+        return _ValueBranch(self.hook, TypeQualifier.decay(self.obj))
+
     def __getitem__(self, args):
         return _ValueBranch(self.hook, self.obj.__getitem__(args))
 
@@ -164,6 +167,8 @@ def _try_join(options):
 
 
 class _MergedBranch:
+    _cohdl_is_merged_branch = True
+
     def __new__(cls, branches: list[_ValueBranch]):
         if len(branches) == 0:
             return None
@@ -229,6 +234,20 @@ class _MergedBranch:
 
     def id(self):
         return _MergedBranch([branch._id() for branch in self.branches])
+
+    def _type_qualifier_decay(self):
+        result = []
+
+        for branch in self.branches:
+            if isinstance(branch.obj, _MergedBranch):
+                result.extend(branch.obj._type_qualifier_decay())
+            else:
+                result.append(branch._tq_decay())
+
+        return result
+
+    def type_qualifier_decay(self):
+        return _MergedBranch(self._type_qualifier_decay())
 
     def _is(self, other):
         if not isinstance(other, _MergedBranch):

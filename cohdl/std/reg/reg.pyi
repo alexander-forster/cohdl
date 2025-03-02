@@ -19,6 +19,15 @@ T = TypeVar("T")
 # default
 D = TypeVar("D")
 
+class RegisterObject:
+    """
+    Base class of all register objects.
+    Should only be instantiated when associated with a
+    specialization of RegisterTools.
+
+    Can be used for isinstance/issubclass checks.
+    """
+
 class GenericArg:
     offset: int
     end: int
@@ -302,15 +311,12 @@ class RegisterTools(Generic[W]):
         >>> # Defines a register that performs a bitwise or operation
         >>> # of its two low bytes and returns the result via the high byte.
         >>> class OrField(reg32.Register):
-        >>>     inp_a: reg32.MemField[7:0]      # MemFields store written values
-        >>>     inp_b: reg32.MemField[15:8]     #
-        >>>     out:   reg32.Field[31:24]       # Fields to not automatically hold values
-        >>>                                     # but can be assigned like signals
+        >>>     inp_a: reg32.MemField[7:0]         # MemFields store written values.
+        >>>     inp_b: reg32.MemField[15:8, Full]  # The optional default value
+        >>>                                        # is set by the second argument.
         >>>
-        >>>     def _config_(self):
-        >>>         # optional _config_ method used to
-        >>>         # set default value of inp_b to '11111111'
-        >>>         self.inp_b._config_(cohdl.Full)
+        >>>     out:   reg32.Field[31:24]   # Fields to not automatically hold values
+        >>>                                 # but can be assigned like signals
         >>>
         >>>     def _impl_concurrent_(self):
         >>>         self.out <<= self.inp_a.val() | self.inp_b.val()
@@ -381,7 +387,7 @@ class RegisterTools(Generic[W]):
 
         def _config_(self, default=Null):
             """
-            Used provide default values for `MemFields`.
+            Use provided default values for `MemFields`.
             """
 
         def __init_subclass__(cls, readonly=None, writeonly=None): ...
