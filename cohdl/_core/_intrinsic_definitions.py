@@ -9,17 +9,6 @@ from types import NoneType
 #
 #
 
-_intrinsic(getattr)
-_intrinsic(hasattr)
-
-_intrinsic(setattr)
-
-
-@_intrinsic_replacement(setattr, special_case=False)
-def setattr_replacement(__obj, __name, __value):
-    assert hasattr(__obj, "_cohdl_init_active")
-    setattr(__obj, __name, __value)
-
 
 _intrinsic(min)
 _intrinsic(max)

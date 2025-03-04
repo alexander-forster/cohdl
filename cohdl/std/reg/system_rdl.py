@@ -304,7 +304,7 @@ def to_system_rdl(input: RegisterTools.AddrMap | type[RegisterTools.AddrMap]):
 
 def _systemrdl_escape(inp: str):
     if inp in systemrdl_reserved:
-        return f"\{inp}"
+        return f"\\{inp}"
     return inp
 
 

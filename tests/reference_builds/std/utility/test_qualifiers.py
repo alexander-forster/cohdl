@@ -106,9 +106,6 @@ class test_qualifiers(cohdl.Entity):
             self.chosen_c <<= c
 
 
-# print(std.VhdlCompiler.to_string(test_qualifiers))
-# exit()
-
 #
 # test code
 #

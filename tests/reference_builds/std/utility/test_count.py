@@ -46,8 +46,6 @@ class test_count(cohdl.Entity):
             self.count_one <<= std.count((self.val_d,), check=lambda x: x[5] @ x[3])
 
 
-# print(std.VhdlCompiler.to_string(test_count))
-
 #
 # test code
 #

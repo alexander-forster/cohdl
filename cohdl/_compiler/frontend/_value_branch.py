@@ -6,7 +6,12 @@ from typing import Tuple
 from cohdl._core._type_qualifier import TypeQualifier, Signal, Variable, Temporary
 from cohdl._core._primitive_type import is_primitive
 
-from cohdl._core._intrinsic import _BitSignalEvent, _BitSignalEventGroup
+from cohdl._core._intrinsic import (
+    _BitSignalEvent,
+    _BitSignalEventGroup,
+    _intrinsic,
+    _intrinsic_replacement,
+)
 from cohdl._core._bit import Bit
 from cohdl._core._boolean import _Boolean, _BooleanLiteral, _NullFullType
 from cohdl._core._bit_vector import BitVector
@@ -354,3 +359,26 @@ class ObjTraits:
         return (ObjTraits.isinstance(obj, (Signal, Variable, Temporary))) or isinstance(
             obj, (_BitSignalEvent, _BitSignalEventGroup)
         )
+
+
+_intrinsic(getattr)
+_intrinsic(hasattr)
+_intrinsic(setattr)
+
+
+@_intrinsic_replacement(getattr, special_case=False)
+def getattr_replacement(o, name):
+    return ObjTraits.getattr(o, name)
+
+
+@_intrinsic_replacement(hasattr, special_case=False)
+def getattr_replacement(o, name):
+    return ObjTraits.hasattr(o, name)
+
+
+@_intrinsic_replacement(setattr, special_case=False)
+def setattr_replacement(__obj, __name, __value):
+    assert hasattr(
+        __obj, "_cohdl_init_active"
+    ), "in evaluated contexts, members cannot be added to objects after __init__ is done"
+    setattr(__obj, __name, __value)

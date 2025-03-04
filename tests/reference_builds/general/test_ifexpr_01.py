@@ -362,9 +362,6 @@ async def testbench_choose(dut: test_if_expr):
                 )
 
 
-print(std.VhdlCompiler.to_string(test_if_expr))
-
-
 class Unittest(unittest.TestCase):
     def test_if_expr(self):
         cocotb_util.run_cocotb_tests(test_if_expr, __file__, self.__module__)
