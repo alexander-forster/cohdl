@@ -57,7 +57,7 @@ class test_enum_02(cohdl.Entity):
 
 
 @cocotb_util.test()
-async def testbench_enum_01(dut: test_enum_02):
+async def testbench_enum_02(dut: test_enum_02):
     inp_gen = cocotb_util.ConstrainedGenerator(2)
 
     for inp in inp_gen.all():
@@ -70,6 +70,3 @@ async def testbench_enum_01(dut: test_enum_02):
 class Unittest(unittest.TestCase):
     def test_base(self):
         cocotb_util.run_cocotb_tests(test_enum_02, __file__, self.__module__)
-
-
-std.VhdlCompiler.to_string(test_enum_02)

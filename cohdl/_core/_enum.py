@@ -4,6 +4,7 @@ import enum
 from enum import auto
 
 from ._primitive_type import _PrimitiveType
+from ._intrinsic import _intrinsic
 
 
 class Enum(_PrimitiveType, enum.Enum):
@@ -25,6 +26,24 @@ class Enum(_PrimitiveType, enum.Enum):
     def _assign(self, value):
         assert type(self) is type(value)
         return self
+
+    @_intrinsic
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+
+        return self is other
+
+    @_intrinsic
+    def __ne__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+
+        return self is not other
+
+    @_intrinsic
+    def __hash__(self):
+        return id(self)
 
 
 class EnumFlag(_PrimitiveType, enum.Flag):
