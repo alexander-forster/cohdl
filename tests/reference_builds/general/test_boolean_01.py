@@ -21,6 +21,21 @@ class test_booleans_01(cohdl.Entity):
     inp_bv_a = Port.input(BitVector[3])
     inp_bv_b = Port.input(BitVector[3])
 
+    output_bool_eq_self = Port.output(bool)
+    output_bool_ne_self = Port.output(bool)
+    output_bool_eq_nself = Port.output(bool)
+    output_bool_ne_selfn = Port.output(bool)
+
+    output_bool_eq_true = Port.output(bool)
+    output_bool_ne_true = Port.output(bool)
+    output_bool_eq_false = Port.output(bool)
+    output_bool_ne_false = Port.output(bool)
+
+    output_bool_eq_true_literal = Port.output(bool)
+    output_bool_ne_true_literal = Port.output(bool)
+    output_bool_eq_false_literal = Port.output(bool)
+    output_bool_ne_false_literal = Port.output(bool)
+
     output_bit = Port.output(Bit)
     output_bool = Port.output(bool)
 
@@ -70,6 +85,21 @@ class test_booleans_01(cohdl.Entity):
             # check assignment of bool/bit to self type
             self.output_bit <<= self.input_bit
             self.output_bool <<= self.input_bool
+
+            self.output_bool_eq_self <<= self.input_bool == self.input_bool
+            self.output_bool_ne_self <<= self.input_bool != self.input_bool
+            self.output_bool_eq_nself <<= (not self.input_bool) == self.input_bool
+            self.output_bool_ne_selfn <<= self.input_bool != (not self.input_bool)
+
+            self.output_bool_eq_true <<= self.input_bool == True
+            self.output_bool_ne_true <<= True != self.input_bool
+            self.output_bool_eq_false <<= False == self.input_bool
+            self.output_bool_ne_false <<= self.input_bool != False
+
+            self.output_bool_eq_true_literal <<= self.input_bool == true
+            self.output_bool_ne_true_literal <<= true != self.input_bool
+            self.output_bool_eq_false_literal <<= false == self.input_bool
+            self.output_bool_ne_false_literal <<= self.input_bool != false
 
             # check assignment of bool/bit to other type
             self.output_bit_2 <<= self.input_bool
@@ -168,6 +198,19 @@ async def testbench_functions(dut: test_booleans_01):
                         (dut.output_bool, inp_bool),
                         (dut.output_bit_2, inp_bool),
                         (dut.output_bool_2, inp_bit),
+                        # boolean equality operators
+                        (dut.output_bool_eq_self, True),
+                        (dut.output_bool_ne_self, False),
+                        (dut.output_bool_eq_nself, False),
+                        (dut.output_bool_ne_selfn, True),
+                        (dut.output_bool_eq_true, inp_bool),
+                        (dut.output_bool_ne_true, not inp_bool),
+                        (dut.output_bool_eq_false, not inp_bool),
+                        (dut.output_bool_ne_false, inp_bool),
+                        (dut.output_bool_eq_true_literal, inp_bool),
+                        (dut.output_bool_ne_true_literal, not inp_bool),
+                        (dut.output_bool_eq_false_literal, not inp_bool),
+                        (dut.output_bool_ne_false_literal, inp_bool),
                         # constant assignments
                         (dut.output_bit_true, 1),
                         (dut.output_bool_true, 1),

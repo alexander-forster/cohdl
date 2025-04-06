@@ -22,6 +22,26 @@ class _BooleanLiteral:
     def __bool__(self) -> bool:
         return self._value
 
+    @_intrinsic
+    def __eq__(self, other) -> bool:
+
+        if isinstance(other, (_BooleanLiteral, _Boolean)):
+            return self._value is other._value
+        elif isinstance(other, bool):
+            return self._value == other
+        else:
+            return NotImplemented
+
+    @_intrinsic
+    def __ne__(self, other) -> bool:
+
+        if isinstance(other, (_BooleanLiteral, _Boolean)):
+            return self._value is not other._value
+        elif isinstance(other, bool):
+            return self._value != other
+        else:
+            return NotImplemented
+
     def __await__(self):
         def coro():
             while not self._value:
@@ -70,6 +90,38 @@ class _Boolean(_PrimitiveType, metaclass=MetaBoolean):
     @_intrinsic
     def __bool__(self) -> bool:
         return self._value
+
+    @_intrinsic
+    def __eq__(self, other) -> bool:
+        if isinstance(other, (_Boolean, _BooleanLiteral)):
+            return self._value is other._value
+        elif isinstance(other, bool):
+            return self._value == other
+        else:
+            from ._bit import Bit
+
+            if isinstance(other, Bit):
+                raise AssertionError(
+                    "cannot directly compare bool with Bit, cast required"
+                )
+
+            return NotImplemented
+
+    @_intrinsic
+    def __ne__(self, other) -> bool:
+        if isinstance(other, (_Boolean, _BooleanLiteral)):
+            return self._value is not other._value
+        elif isinstance(other, bool):
+            return self._value != other
+        else:
+            from ._bit import Bit
+
+            if isinstance(other, Bit):
+                raise AssertionError(
+                    "cannot directly compare bool with Bit, cast required"
+                )
+
+            return NotImplemented
 
     def __await__(self):
         def coro():

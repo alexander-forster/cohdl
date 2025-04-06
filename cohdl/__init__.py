@@ -16,6 +16,7 @@ from ._core import (
     Temporary,
     Attribute,
     Block,
+    current_entity,
     on_block_exit,
     Entity,
     Port,

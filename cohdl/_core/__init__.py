@@ -21,6 +21,7 @@ from ._type_qualifier import (
 from ._context import (
     sequential_context,
     concurrent_context,
+    current_entity,
     on_block_exit,
     Block,
     Entity,

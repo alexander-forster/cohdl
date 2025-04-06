@@ -16,6 +16,12 @@ def on_block_exit(callable):
     Register a callable that takes no arguments to be run once the compiler exits the current Block.
     """
 
+def current_entity() -> Entity | None:
+    """
+    Return the entity object that is currently compiled
+    or None if the compiler is not active.
+    """
+
 class Block:
     def __init__(self, name, attributes: dict): ...
     def __enter__(self) -> None: ...

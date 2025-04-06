@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from cohdl._core._intrinsic import _intrinsic
-from cohdl._core import TypeQualifierBase, is_primitive_type
+from cohdl._core import TypeQualifierBase, is_primitive_type, current_entity
 
 
 class _Prefix:
     _existing_prefix: dict[str, int] = {}
     _prefix_scope: list[_Prefix] = []
+    _current_entity = None
 
     @staticmethod
     def _parent_prefix():
@@ -16,6 +17,13 @@ class _Prefix:
 
     @_intrinsic
     def __init__(self, prefix: str, subprefix=False):
+        compiled_entity = current_entity()
+
+        # clear static variables when inside a new entity
+        if compiled_entity is not _Prefix._current_entity:
+            _Prefix._current_entity = compiled_entity
+            _Prefix._existing_prefix = {}
+
         if not subprefix and len(_Prefix._prefix_scope) != 0:
             prefix = _Prefix._prefix_scope[-1].name(prefix)
 

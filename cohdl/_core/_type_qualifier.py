@@ -12,7 +12,7 @@ from cohdl._core._intrinsic_operations import AssignMode
 
 from cohdl._core._primitive_type import is_primitive, is_primitive_type
 from cohdl._core._integer import Integer
-from cohdl._core._boolean import _Boolean, Null, Full
+from cohdl._core._boolean import _Boolean, Null, Full, true, false
 from cohdl._core._bit_vector import BitVector
 from cohdl._core._signed import Signed
 from cohdl._core._unsigned import Unsigned
@@ -1151,6 +1151,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
         if other is Null or other is Full:
             other = self.type(other)
 
+        if other is true or other is false:
+            other = bool(other)
+
         return (
             result
             if result is NotImplemented
@@ -1165,6 +1168,9 @@ class TypeQualifier(TypeQualifierBase, metaclass=_TypeQualifier):
 
         if other is Null or other is Full:
             other = self.type(other)
+
+        if other is true or other is false:
+            other = bool(other)
 
         return (
             result

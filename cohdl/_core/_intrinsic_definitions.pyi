@@ -27,7 +27,7 @@ context.
 >>>     sig <<= 2
 >>>     await std.tick()
 >>>     # incremented_sig always follows changes in sig
->>>     assert incremented_sig == 2
+>>>     assert incremented_sig == 3
 
 To implement more than one concurrent statement, `cohdl.always` is passed
 to a Python context manager (with statement).

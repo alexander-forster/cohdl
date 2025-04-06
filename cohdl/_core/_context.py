@@ -17,6 +17,12 @@ _block_stack: list[Block] = []
 _entity_instantiation_handler = None
 
 
+def current_entity():
+    if len(_block_stack) is None:
+        return None
+    return _block_stack[0]
+
+
 def _set_entity_instantiation_handler(fn):
     global _entity_instantiation_handler
     _entity_instantiation_handler = fn
