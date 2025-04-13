@@ -44,9 +44,7 @@ from ._core import (
 )
 from ._core import rising_edge, falling_edge, high_level, low_level
 from ._core import Array
-from ._core._intrinsic import _intrinsic as constexpr
-from ._core._intrinsic import _intrinsic as consteval
-from ._core._intrinsic import _intrinsic as pyeval
+from ._core._intrinsic import pyeval
 from ._core import AssignMode
 from ._core import _BitSignalEvent as BitSignalEvent
 from ._core import sequential_context, concurrent_context

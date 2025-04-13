@@ -41,6 +41,9 @@ def _intrinsic(fn):
     return fn
 
 
+pyeval = _intrinsic
+
+
 def _intrinsic_replacement(
     default_implementation,
     *,

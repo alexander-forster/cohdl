@@ -2,7 +2,29 @@ from __future__ import annotations
 
 from typing import TypeVar, Coroutine
 
-def _intrinsic(fn):
+def pyeval(fn):
+    """
+    When the cohdl compiler encounters a call to a function declared as pyeval,
+    it does not attempt to inspect it and instead invokes it as a normal Python function.
+    Inside a pyeval function, arbitrary Python code can be used.
+
+    pyeval works by adding the function to an internal lookup table.
+    The given argument is returned unchanged.
+
+    pyeval is typically used as a decorator.
+
+    >>> @cohdl.pyeval
+    >>> def load_some_config(path):
+    >>>     # Opening files is not a synthesizable operation.
+    >>>     # Using a pyeval function we can do it during
+    >>>     # compilation and then use the result.
+    >>>     with open(path) as file:
+    >>>         # parse configuration file
+    >>>         ...
+    >>>
+    >>>     return result
+    """
+
     return fn
 
 def comment(*lines: str) -> None:
@@ -53,6 +75,7 @@ class sensitivity:
         the compiler adds the arguments (which have to be
         signals) to the sensitivity list of the generated hdl process
         """
+
     @staticmethod
     def all() -> None:
         """

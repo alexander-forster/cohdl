@@ -582,7 +582,7 @@ class InShiftRegister:
         and may not be mixed with `shift_all`.
         """
 
-    def data(self):
+    def data(self) -> BitVector:
         """
         Returns the deserialized data.
         This call is only valid when the register is full.
