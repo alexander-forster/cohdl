@@ -60,7 +60,7 @@ For a working example of this checkout [cohdl_xil](https://github.com/alexander-
 ---
 ## getting started
 
-CoHDL requires Python3.10 or higher and has no further dependencies. You can install it by running
+CoHDL requires Python3.11 or higher and has no further dependencies. You can install it by running
 
 ```shell
 python3 -m pip install cohdl
