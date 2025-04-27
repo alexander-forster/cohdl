@@ -1919,14 +1919,18 @@ class Library(Instance):
         def collect_subenties(parent_entity):
             for entity_inst in parent_entity.sub_entities():
                 entity = entity_inst._entity
-                entities.add(entity)
                 collect_subenties(entity)
+
+            # add parent entity after sub entites so
+            # tools that depend on the order can
+            # analyze dependencies first
+            entities.add(parent_entity)
 
         collect_subenties(top_entity)
 
         return Library(
             top_entity,
-            [top_entity, *entities],
+            [*entities],
             parent_scope=VhdlScope(),
         )
 
